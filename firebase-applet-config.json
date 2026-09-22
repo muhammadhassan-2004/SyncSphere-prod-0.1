@@ -1,0 +1,12 @@
+{
+  "projectId": "syncsphere-prod",
+  "appId": "1:187599155941:web:cb2d445621517aeef95a0c",
+  "apiKey": "AIzaSyAaNJkT6SElP4zUfoFowHkDkOrUY8b8AFw",
+  "authDomain": "syncsphere-prod.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "syncsphere-prod.firebasestorage.app",
+  "messagingSenderId": "187599155941",
+  "measurementId": "",
+  "oAuthClientId": "187599155941-2mf06i6e397r9748mp13ghs5570sf8r6.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

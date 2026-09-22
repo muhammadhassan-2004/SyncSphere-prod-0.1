@@ -1,0 +1,282 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUserDocOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.keys().contains('admin') && request.auth.token.admin == true) ||
+        (request.auth.token.keys().contains('role') && request.auth.token.role == 'admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+      );
+    }
+
+    function isProjectParticipant(projectId) {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/projects/$(projectId)) && (
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.clientId ||
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId ||
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.clientUid ||
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.creatorId ||
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.assignedSymbioteId ||
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.symbioteId ||
+          (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().contains('teamMemberUids') && 
+           request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.teamMemberUids)
+        ))
+      );
+    }
+
+    // 1. Users Collection - Publicly readable for marketplace discovery, talent directory, and client profile lookups
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if isUserDocOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 2. Verifications Collection (Server Admin SDK exclusive; blocked from Client SDK)
+    match /verifications/{userId} {
+      allow read, write: if false;
+    }
+
+    // 3. Password Resets Collection (Server Admin SDK exclusive; blocked from Client SDK)
+    match /password_resets/{resetId} {
+      allow read, write: if false;
+    }
+
+    // 4. Projects Collection - Publicly readable for job browsing, detail view, matching, and oversight
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.ownerId ||
+        request.auth.uid == resource.data.creatorId ||
+        request.auth.uid == resource.data.clientUid ||
+        request.auth.uid == resource.data.assignedSymbioteId ||
+        request.auth.uid == resource.data.symbioteId ||
+        (resource.data.keys().contains('teamMemberUids') && request.auth.uid in resource.data.teamMemberUids) ||
+        // Allow sync of progress & status metrics and team assignment by authenticated users working on workspace deliverables
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['progressPct', 'progressPercent', 'status', 'updatedAt', 'completedAt', 'assignedSymbioteId', 'teamMembers']) ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.ownerId ||
+        isAdmin()
+      );
+
+      match /matches/{matchId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /activity/{activityId} {
+        allow read: if true;
+        allow write: if isSignedIn();
+      }
+    }
+
+    // 5. Project Activities Collection
+    match /project_activities/{activityId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // 6. Applications Collection - Visible ONLY to the applicant symbiote, project client/owner, or platform admin
+    match /applications/{applicationId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.ownerId ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && (
+        request.auth.uid == request.resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.ownerId ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.ownerId ||
+        isAdmin()
+      );
+    }
+
+    // 7. Project Files Collection - Scoped to project owner, uploader, project participants, or admin
+    match /project_files/{fileId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.uploadedBy ||
+        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.uploadedBy ||
+        request.auth.uid == resource.data.clientId ||
+        isAdmin()
+      );
+    }
+
+    // 7b. Contracts Collection - Strictly restricted to contracting client, hired symbiote, or admin
+    match /contracts/{contractId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+    }
+
+    // 8. Workspaces Subcollections - Strictly restricted to verified project participants and admins
+    match /workspaces/{projectId} {
+      allow read, write: if isSignedIn() && isProjectParticipant(projectId);
+
+      match /{subcollection=**} {
+        allow read, write: if isSignedIn() && isProjectParticipant(projectId);
+      }
+    }
+
+    // 9. Conversations Collection & Messages Subcollection
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participantIds ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && (
+        request.auth.uid in request.resource.data.participantIds ||
+        isAdmin()
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participantIds ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && (
+          request.auth.uid == request.resource.data.senderId ||
+          isAdmin()
+        );
+        allow update, delete: if isSignedIn() && (
+          request.auth.uid == resource.data.senderId ||
+          isAdmin()
+        );
+      }
+    }
+
+    // 10. Time Entries Collection - Restricted to specialist, client, or admin
+    match /time_entries/{entryId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
+        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        request.auth.uid == resource.data.symbioteId ||
+        ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
+        isAdmin()
+      );
+    }
+
+    // 11. Invoices Collection
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 12. Invitations Collection
+    match /invitations/{invitationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() || isAdmin();
+    }
+
+    // 13. Reviews Collection - Publicly readable for verified performance ratings
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (
+        ('reviewerId' in resource.data && request.auth.uid == resource.data.reviewerId) ||
+        ('fromUserId' in resource.data && request.auth.uid == resource.data.fromUserId) ||
+        ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
+        isAdmin()
+      );
+    }
+
+    // 14. Notifications Collection
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.userId ||
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+    }
+
+    // 15. Reports Collection
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // 16. Audit Logs Collection
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // 17. Platform Settings Document
+    match /platform_settings/{settingDoc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 18. Admin Roles Collection
+    match /admin_roles/{roleId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

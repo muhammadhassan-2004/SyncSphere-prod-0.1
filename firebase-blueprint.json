@@ -1,0 +1,281 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile details and role preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["client", "symbiote", "admin", "owner", "freelancer"] },
+        "avatarInitials": { "type": "string" },
+        "companyName": { "type": "string" },
+        "hourlyRate": { "type": "number" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "B2B Project posted by Business Owner or Client",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "ownerId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in_progress", "completed"] },
+        "budget": { "type": "number" },
+        "timeline": { "type": "string" },
+        "techTags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "description", "ownerId", "status"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Application submitted by Symbiote/Freelancer",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "symbioteId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "aiMatchScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["shortlisted", "interview", "hired", "rejected", "pending"] },
+        "appliedAt": { "type": "string" },
+        "rate": { "type": "number" },
+        "experience": { "type": "string" }
+      },
+      "required": ["projectId", "symbioteId", "clientId", "status"]
+    },
+    "Invitation": {
+      "title": "Invitation",
+      "description": "Invitation sent by client to symbiote",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "symbioteId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "budgetRange": { "type": "string" },
+        "timeline": { "type": "string" },
+        "techTags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["projectId", "symbioteId", "clientId", "status"]
+    },
+    "WorkspaceTask": {
+      "title": "WorkspaceTask",
+      "description": "Task item inside workspace",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "review", "completed"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "category": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "status", "priority", "category"]
+    },
+    "WorkspaceMilestone": {
+      "title": "WorkspaceMilestone",
+      "description": "Milestone item inside workspace",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "completed": { "type": "boolean" }
+      },
+      "required": ["name", "dueDate", "completed"]
+    },
+    "WorkspaceUpdate": {
+      "title": "WorkspaceUpdate",
+      "description": "Status update log item inside workspace",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "content", "authorName", "createdAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Chat conversation thread",
+      "type": "object",
+      "properties": {
+        "participantIds": { "type": "array", "items": { "type": "string" } },
+        "projectId": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["participantIds", "lastMessage", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message inside conversation",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["conversationId", "senderId", "text", "sentAt", "read"]
+    },
+    "TimeEntry": {
+      "title": "TimeEntry",
+      "description": "Time logging entry by symbiote",
+      "type": "object",
+      "properties": {
+        "symbioteId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "date": { "type": "string" },
+        "hours": { "type": "number" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["symbioteId", "projectId", "date", "hours", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Billing invoice",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "symbioteId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "paid", "overdue"] }
+      },
+      "required": ["invoiceNumber", "clientId", "symbioteId", "projectId", "amount", "status"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Performance review and rating",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "feedback": { "type": "string" },
+        "recommend": { "type": "boolean" }
+      },
+      "required": ["projectId", "fromUserId", "toUserId", "feedback"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "User notification alert",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "read": { "type": "boolean" },
+        "relatedItemId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "description", "read"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Admin security and audit log",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "result": { "type": "string", "enum": ["success", "failed"] }
+      },
+      "required": ["timestamp", "userId", "action", "module", "result"]
+    },
+    "PlatformSettings": {
+      "title": "PlatformSettings",
+      "description": "Platform global configuration settings",
+      "type": "object",
+      "properties": {
+        "general": { "type": "object" },
+        "branding": { "type": "object" },
+        "security": { "type": "object" },
+        "notifications": { "type": "object" },
+        "platformConfig": { "type": "object" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles collection"
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Projects collection"
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "Job/Project applications collection"
+    },
+    "/invitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/Invitation" },
+      "description": "Direct invitations collection"
+    },
+    "/workspaces/{projectId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/WorkspaceTask" },
+      "description": "Workspace tasks subcollection"
+    },
+    "/workspaces/{projectId}/milestones/{milestoneId}": {
+      "schema": { "$ref": "#/entities/WorkspaceMilestone" },
+      "description": "Workspace milestones subcollection"
+    },
+    "/workspaces/{projectId}/updates/{updateId}": {
+      "schema": { "$ref": "#/entities/WorkspaceUpdate" },
+      "description": "Workspace updates subcollection"
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "Chat conversations collection"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages subcollection"
+    },
+    "/time_entries/{entryId}": {
+      "schema": { "$ref": "#/entities/TimeEntry" },
+      "description": "Time tracking log entries"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Billing invoices collection"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Reviews and ratings collection"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "User notifications collection"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Admin security audit logs collection"
+    },
+    "/platform_settings/global": {
+      "schema": { "$ref": "#/entities/PlatformSettings" },
+      "description": "Global platform configuration settings document"
+    }
+  }
+}

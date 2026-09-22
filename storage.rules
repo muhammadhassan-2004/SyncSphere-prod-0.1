@@ -1,0 +1,52 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isLessThan25MB() {
+      return request.resource.size < 25 * 1024 * 1024;
+    }
+
+    function isAllowedFileType() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    }
+
+    // Avatar folder: /avatars/{userId}/{fileName} and /avatars/{userId}
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isLessThan25MB() && request.resource.contentType.matches('image/.*');
+    }
+    match /avatars/{userId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isLessThan25MB() && request.resource.contentType.matches('image/.*');
+    }
+
+    // Project files: /project-files/{projectId}/{fileName}
+    match /project-files/{projectId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isLessThan25MB() && isAllowedFileType();
+    }
+
+    // Portfolio files: /portfolio/{symbioteId}/{fileName}
+    match /portfolio/{symbioteId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(symbioteId) && isLessThan25MB() && isAllowedFileType();
+    }
+
+    // Invoice attachments: /invoices/{invoiceId}/{fileName}
+    match /invoices/{invoiceId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isLessThan25MB() && isAllowedFileType();
+    }
+  }
+}

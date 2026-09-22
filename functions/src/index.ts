@@ -1,0 +1,1 @@
+export { adminDeleteUser } from './adminDeleteUser';

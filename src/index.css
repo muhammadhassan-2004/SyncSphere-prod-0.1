@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@layer base {
+  :root,
+  html,
+  body {
+    color-scheme: dark;
+    background-color: #0A0E14;
+    color: #FFFFFF;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+
+  :root {
+    /* HSL raw variables */
+    --background: 216 33% 6%;
+    --surface: 220 39% 11%;
+    --border: 215 28% 17%;
+    --text-primary: 0 0% 100%;
+    --text-secondary: 215 25% 65%;
+
+    --accent-cyan: 187 85% 53%;
+    --accent-green: 158 64% 52%;
+    --info-blue: 217 91% 60%;
+    --success-green: 142 71% 45%;
+    --warning-amber: 38 92% 50%;
+    --review-purple: 271 91% 65%;
+    --danger-red: 0 84% 60%;
+
+    /* Direct hex & color references */
+    --color-background: #0A0E14;
+    --color-surface: #111827;
+    --color-surface-elevated: #1E293B;
+    --color-border: #1F2937;
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: #94A3B8;
+    --color-accent-cyan: #22D3EE;
+    --color-accent-green: #34D399;
+    --accent-gradient: linear-gradient(90deg, #22D3EE, #34D399);
+    --color-info-blue: #3B82F6;
+    --color-success-green: #22C55E;
+    --color-warning-amber: #F59E0B;
+    --color-review-purple: #A855F7;
+    --color-danger-red: #EF4444;
+
+    /* Global tokens */
+    --radius: 10px;
+    --radius-pill: 9999px;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+  }
+
+  h1, .text-h1 {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--color-text-primary);
+  }
+
+  h2, .text-h2 {
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-text-primary);
+  }
+
+  body, .text-body {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+  }
+
+  .text-caption {
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+  }
+
+  .text-stat {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-text-primary);
+  }
+}
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --color-background: #0A0E14;
+  --color-surface: #111827;
+  --color-surface-elevated: #1E293B;
+  --color-border: #1F2937;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #94A3B8;
+
+  --color-accent-cyan: #22D3EE;
+  --color-accent-green: #34D399;
+  --color-info-blue: #3B82F6;
+  --color-success-green: #22C55E;
+  --color-warning-amber: #F59E0B;
+  --color-review-purple: #A855F7;
+  --color-danger-red: #EF4444;
+
+  --background-image-accent-gradient: linear-gradient(90deg, #22D3EE, #34D399);
+  --accent-gradient: linear-gradient(90deg, #22D3EE, #34D399);
+}
+
+.bg-surface {
+  background-color: var(--color-surface);
+}
+
+.bg-accent-gradient {
+  background: var(--accent-gradient);
+  background-image: var(--accent-gradient);
+}
+
+.text-accent-gradient {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.border-subtle {
+  border: 1px solid var(--color-border);
+}
+
+.btn-primary-gradient {
+  background: var(--accent-gradient);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-primary-gradient:hover {
+  opacity: 0.9;
+}
+.btn-primary-gradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-field {
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: #ffffff;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input-field:focus {
+  border-color: rgba(34, 211, 238, 0.5);
+}
+
+/* Flat UI - default surfaces to zero elevation while retaining focus rings */
+div, header, aside, section, article {
+  box-shadow: none;
+}

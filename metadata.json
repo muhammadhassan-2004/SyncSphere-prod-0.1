@@ -1,0 +1,6 @@
+{
+  "name": "SyncSphere",
+  "description": "SyncSphere project foundation with custom dark mode theme, typography, CSS variables, and Tailwind setup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
