@@ -41,8 +41,21 @@ service cloud.firestore {
     // 1. Users Collection - Publicly readable for marketplace discovery, talent directory, and client profile lookups
     match /users/{userId} {
       allow read: if true;
-      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow update: if isUserDocOwner(userId) || isAdmin();
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          ('role' in request.resource.data) &&
+          request.resource.data.role in ['client', 'symbiote', 'freelancer']
+        )
+      );
+      allow update: if isAdmin() || (
+        isUserDocOwner(userId) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
+          request.resource.data.role == resource.data.role
+        )
+      );
       allow delete: if isAdmin();
     }
 
@@ -68,8 +81,6 @@ service cloud.firestore {
         request.auth.uid == resource.data.assignedSymbioteId ||
         request.auth.uid == resource.data.symbioteId ||
         (resource.data.keys().contains('teamMemberUids') && request.auth.uid in resource.data.teamMemberUids) ||
-        // Allow sync of progress & status metrics and team assignment by authenticated users working on workspace deliverables
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['progressPct', 'progressPercent', 'status', 'updatedAt', 'completedAt', 'assignedSymbioteId', 'teamMembers']) ||
         isAdmin()
       );
       allow delete: if isSignedIn() && (
@@ -177,7 +188,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /messages/{messageId} {
-        allow read: if isSignedIn();
+        // Only conversation participants may read messages — not all signed-in users
+        allow read: if isSignedIn() && (
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds ||
+          isAdmin()
+        );
         allow create: if isSignedIn() && (
           request.auth.uid == request.resource.data.senderId ||
           isAdmin()
@@ -225,12 +240,30 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 12. Invitations Collection
+    // 12. Invitations Collection — restricted to relevant parties only
     match /invitations/{invitationId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.inviteeId ||
+        request.auth.uid == resource.data.inviterId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
       allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() || isAdmin();
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.inviteeId ||
+        request.auth.uid == resource.data.inviterId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        request.auth.uid == resource.data.inviteeId ||
+        request.auth.uid == resource.data.inviterId ||
+        request.auth.uid == resource.data.clientId ||
+        request.auth.uid == resource.data.symbioteId ||
+        isAdmin()
+      );
     }
 
     // 13. Reviews Collection - Publicly readable for verified performance ratings
