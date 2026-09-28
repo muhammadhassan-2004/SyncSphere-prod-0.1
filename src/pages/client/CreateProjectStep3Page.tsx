@@ -31,7 +31,7 @@ import {
 
 const WIZARD_STEPS = [
   { id: '1', label: 'Basic Info', description: 'Title, category & skills' },
-  { id: '2', label: 'Scope & Budget', description: 'Milestones & deliverables' },
+  { id: '2', label: 'Timeline & Schedule', description: 'Dates & work arrangement' },
   { id: '3', label: 'AI Matching', description: 'Preferences & criteria' },
   { id: '4', label: 'Review & Publish', description: 'Final audit & launch' },
 ];
@@ -158,8 +158,14 @@ To synthesize a high-precision executive brief for our matching engine, please s
         aiConversation: updatedMessages,
         aiBrief: updatedBrief || undefined,
         aiBriefAttached: attached,
-        // Also sync description with AI brief if attached
-        ...(attached && updatedBrief ? { description: updatedBrief.description } : {}),
+        // Also sync title, description, and skills with AI brief if attached
+        ...(attached && updatedBrief ? {
+          description: updatedBrief.description,
+          ...(updatedBrief.title ? { title: updatedBrief.title } : {}),
+          ...(updatedBrief.recommendedSkills && updatedBrief.recommendedSkills.length > 0
+            ? { skills: updatedBrief.recommendedSkills }
+            : {}),
+        } : {}),
       });
     } catch (err) {
       console.error('Failed to sync Step 3 state to Firestore:', err);
@@ -301,6 +307,13 @@ To synthesize a high-precision executive brief for our matching engine, please s
         aiBrief: aiBrief || undefined,
         aiBriefAttached: isBriefAttached,
         status: 'draft',
+        ...(isBriefAttached && aiBrief ? {
+          description: aiBrief.description,
+          ...(aiBrief.title ? { title: aiBrief.title } : {}),
+          ...(aiBrief.recommendedSkills && aiBrief.recommendedSkills.length > 0
+            ? { skills: aiBrief.recommendedSkills }
+            : {}),
+        } : {}),
       });
       setToastMessage({ type: 'success', text: 'Step 3 session saved successfully.' });
     } catch (err) {

@@ -114,7 +114,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     if (!projectId) return;
     try {
       await approveTaskByClient(projectId, taskId);
-      setToastMessage('Task approved! Verified hours added to milestone invoicing.');
+      setToastMessage('Task approved! Direct settlement invoice generated.');
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err) {
       console.error('Failed to approve task:', err);
@@ -161,9 +161,17 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     };
   }, [projectId]);
 
-  // Filter tasks based on search & dropdowns
+  // Filter tasks based on search & dropdowns (Freelancers only see their assigned tasks)
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
+      // Freelancer visibility: show only tasks assigned to the current freelancer
+      if (!isClientOrAdmin && currentUid) {
+        const isAssigned =
+          task.assigneeId === currentUid ||
+          (task.assignees && task.assignees.some((a) => a.uid === currentUid));
+        if (!isAssigned) return false;
+      }
+
       const matchesSearch =
         !searchQuery ||
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -177,7 +185,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
 
       return matchesSearch && matchesMilestone && matchesPriority;
     });
-  }, [tasks, searchQuery, selectedMilestoneFilter, selectedPriorityFilter]);
+  }, [tasks, searchQuery, selectedMilestoneFilter, selectedPriorityFilter, isClientOrAdmin, currentUid]);
 
   // Handle Drag Start
   const handleDragStart = (event: DragStartEvent) => {
@@ -322,26 +330,28 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
               <span>Board</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode('approvals')}
-              className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'approvals'
-                  ? 'bg-[var(--color-surface)] text-amber-400 shadow-xs border border-[var(--color-border)]'
-                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Approvals Queue</span>
-              {reviewTasksCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                  {reviewTasksCount}
-                </span>
-              )}
-            </button>
+            {isClientOrAdmin && (
+              <button
+                type="button"
+                onClick={() => setViewMode('approvals')}
+                className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'approvals'
+                    ? 'bg-[var(--color-surface)] text-amber-400 shadow-xs border border-[var(--color-border)]'
+                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Approvals Queue</span>
+                {reviewTasksCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                    {reviewTasksCount}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
-          {!isProjectCompleted && (
+          {!isProjectCompleted && isClientOrAdmin && (
             <Button
               variant="primary"
               size="sm"
@@ -466,6 +476,8 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
                       column={col}
                       tasks={colTasks}
                       milestones={milestones}
+                      isClientOrAdmin={isClientOrAdmin}
+                      isProjectCompleted={isProjectCompleted}
                       onOpenReviewQueue={() => setViewMode('approvals')}
                       onAddTask={() => {
                         setEditingTask(null);
@@ -526,6 +538,8 @@ interface KanbanColumnProps {
   column: ColumnConfig;
   tasks: WorkspaceTask[];
   milestones?: WorkspaceMilestone[];
+  isClientOrAdmin?: boolean;
+  isProjectCompleted?: boolean;
   onOpenReviewQueue?: () => void;
   onAddTask: () => void;
   onEditTask: (task: WorkspaceTask) => void;
@@ -536,6 +550,8 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   column,
   tasks,
   milestones = [],
+  isClientOrAdmin = true,
+  isProjectCompleted = false,
   onOpenReviewQueue,
   onAddTask,
   onEditTask,
@@ -564,7 +580,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {column.id === 'review' && tasks.length > 0 && onOpenReviewQueue && (
+          {isClientOrAdmin && column.id === 'review' && tasks.length > 0 && onOpenReviewQueue && (
             <button
               type="button"
               onClick={onOpenReviewQueue}
@@ -574,14 +590,16 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onAddTask}
-            title={`Add task to ${column.title}`}
-            className="p-1 rounded hover:bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {isClientOrAdmin && !isProjectCompleted && (
+            <button
+              type="button"
+              onClick={onAddTask}
+              title={`Add task to ${column.title}`}
+              className="p-1 rounded hover:bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -593,6 +611,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
               key={task.id}
               task={task}
               milestones={milestones}
+              isClientOrAdmin={isClientOrAdmin}
               onOpenReviewQueue={onOpenReviewQueue}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
@@ -602,13 +621,15 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
           {tasks.length === 0 && (
             <div className="py-12 text-center text-[11px] font-mono text-[var(--color-text-secondary)] opacity-60 border border-dashed border-[var(--color-border)] rounded-[10px] flex flex-col items-center gap-1">
               <span>No tasks in {column.title}</span>
-              <button
-                type="button"
-                onClick={onAddTask}
-                className="text-[var(--color-accent-cyan)] hover:underline font-semibold text-[10.5px] cursor-pointer mt-1"
-              >
-                Add Task
-              </button>
+              {isClientOrAdmin && !isProjectCompleted && (
+                <button
+                  type="button"
+                  onClick={onAddTask}
+                  className="text-[var(--color-accent-cyan)] hover:underline font-semibold text-[10.5px] cursor-pointer mt-1"
+                >
+                  Add Task
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -623,6 +644,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
 interface KanbanCardItemProps {
   task: WorkspaceTask;
   milestones?: WorkspaceMilestone[];
+  isClientOrAdmin?: boolean;
   onOpenReviewQueue?: () => void;
   onEdit: (task: WorkspaceTask) => void;
   onDelete: (id: string) => void;
@@ -631,6 +653,7 @@ interface KanbanCardItemProps {
 const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
   task,
   milestones = [],
+  isClientOrAdmin = true,
   onOpenReviewQueue,
   onEdit,
   onDelete,
@@ -726,13 +749,13 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
             <span className="text-slate-200 font-medium">{Number(task.actualHours || task.actualTotalHours || 0).toFixed(1)}h</span>
           </span>
           <span className="text-slate-400 text-[10.5px]">
-            of {Number(task.estimatedHours || 8).toFixed(1)}h est
+            of {Number(task.maxHours || task.estimatedHours || 8).toFixed(1)}h {task.maxHours ? 'cap' : 'est'}
           </span>
         </div>
         <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-300 ${
-              (Number(task.actualHours || task.actualTotalHours || 0) / (Number(task.estimatedHours) || 8)) > 1
+              (Number(task.actualHours || task.actualTotalHours || 0) / (Number(task.maxHours || task.estimatedHours) || 8)) > 1
                 ? 'bg-rose-500'
                 : 'bg-gradient-to-r from-[var(--color-accent-cyan)] to-emerald-400'
             }`}
@@ -740,7 +763,7 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
               width: `${Math.min(
                 100,
                 Math.round(
-                  ((Number(task.actualHours || task.actualTotalHours) || 0) / (Number(task.estimatedHours) || 8)) * 100
+                  ((Number(task.actualHours || task.actualTotalHours) || 0) / (Number(task.maxHours || task.estimatedHours) || 8)) * 100
                 )
               )}%`,
             }}
@@ -770,22 +793,29 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
               Submit for Review →
             </button>
           ) : task.status === 'review' ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onOpenReviewQueue) {
-                  onOpenReviewQueue();
-                } else {
-                  onEdit(task);
-                }
-              }}
-              title="Open Approvals Queue to review deliverables & approve"
-              className="px-2.5 py-1 rounded-[6px] bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-medium text-[10.5px] transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Clock className="w-3 h-3 text-amber-400" />
-              <span>Review & Approve →</span>
-            </button>
+            isClientOrAdmin ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenReviewQueue) {
+                    onOpenReviewQueue();
+                  } else {
+                    onEdit(task);
+                  }
+                }}
+                title="Open Approvals Queue to review deliverables & approve"
+                className="px-2.5 py-1 rounded-[6px] bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-medium text-[10.5px] transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Clock className="w-3 h-3 text-amber-400" />
+                <span>Review & Approve →</span>
+              </button>
+            ) : (
+              <span className="px-2 py-0.5 rounded-[6px] bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium text-[10.5px] flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-amber-400" />
+                <span>Awaiting Review</span>
+              </span>
+            )
           ) : task.status === 'completed' ? (
             <span className="text-emerald-400 font-medium text-[11px] flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Approved

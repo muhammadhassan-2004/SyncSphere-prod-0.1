@@ -65,15 +65,13 @@ export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
     };
 
     return (
-      <div className="relative inline-block select-none shrink-0">
+      <div
+        className={cn('relative inline-flex items-center justify-center select-none shrink-0', sizeClasses[size], className)}
+        {...props}
+      >
         <div
           ref={ref}
-          className={cn(
-            'rounded-full bg-[var(--accent-gradient)] text-white flex items-center justify-center font-bold tracking-wider shadow-none aspect-square overflow-hidden',
-            sizeClasses[size],
-            className
-          )}
-          {...props}
+          className="w-full h-full rounded-full bg-gradient-to-br from-cyan-400 via-cyan-300 to-emerald-400 text-slate-950 flex items-center justify-center font-extrabold tracking-wider shadow-none aspect-square overflow-hidden"
         >
           {imageSource && !imgError ? (
             <img

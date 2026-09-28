@@ -481,15 +481,22 @@ export const SymbioteDashboardPage: React.FC = () => {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h4 className="text-body font-semibold text-[var(--color-text-primary)]">
-                          {(inv.projectTitle && inv.projectTitle !== 'Project Invitation') ? inv.projectTitle : 'Privacy app'}
+                          {inv.projectTitle || 'AI Engineering Project'}
                         </h4>
                         <p className="text-caption text-[var(--color-text-secondary)] mt-0.5">
                           {inv.clientName ? `Client: ${inv.clientName} · ` : ''}
-                          {inv.budgetRange ? `Budget: ${inv.budgetRange}` : 'Budget Negotiable'}
+                          {inv.budgetRange ? `Rate: ${inv.budgetRange}` : 'Agreed Rate'}
                           {inv.timeline ? ` · ${inv.timeline}` : ''}
                         </p>
                       </div>
-                      <StatusPill variant="purple" label={`${inv.matchScore || inv.aiMatchScore || 95}% Match`} />
+                      <StatusPill
+                        variant="purple"
+                        label={
+                          (inv.aiMatchScore || inv.matchScore)
+                            ? `${inv.aiMatchScore || inv.matchScore}% Match`
+                            : 'Match Pending'
+                        }
+                      />
                     </div>
 
                     {inv.techTags && inv.techTags.length > 0 && (

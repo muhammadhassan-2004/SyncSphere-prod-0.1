@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
+import { Avatar } from '@/src/components/ui/avatar';
 import {
   getAuditLogsPage,
   type AuditLogItem,
@@ -35,10 +36,11 @@ const moduleOptions = [
   'System',
 ];
 
-interface ResolvedTarget {
+interface ResolvedUser {
   name: string;
   email: string;
   role: string;
+  avatarUrl?: string;
 }
 
 function formatActionBadge(action: string) {
@@ -69,7 +71,7 @@ export function AuditLogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [userMap, setUserMap] = useState<Record<string, ResolvedTarget>>({});
+  const [userMap, setUserMap] = useState<Record<string, ResolvedUser>>({});
 
   // Filters state
   const [search, setSearch] = useState('');
@@ -122,31 +124,38 @@ export function AuditLogsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Resolve target users automatically from Firestore
+  // Resolve actor and target users automatically from Firestore
   useEffect(() => {
-    const targetIds: string[] = Array.from(
+    const userIds: string[] = Array.from(
       new Set(
         rows
-          .map((r) => r.targetId)
-          .filter((id): id is string => Boolean(id && typeof id === 'string' && id.length > 10))
+          .flatMap((r) => [r.targetId, r.userId])
+          .filter((id): id is string => Boolean(id && typeof id === 'string' && id.length > 5))
       )
     );
 
-    const missingIds: string[] = targetIds.filter((id) => !userMap[id]);
+    const missingIds: string[] = userIds.filter((id) => !userMap[id]);
     if (missingIds.length === 0) return;
 
     let isMounted = true;
     Promise.all(
-      missingIds.map(async (id: string): Promise<ResolvedTarget & { id: string } | null> => {
+      missingIds.map(async (id: string): Promise<(ResolvedUser & { id: string }) | null> => {
         try {
           const snap = await getDoc(doc(db, 'users', id));
           if (snap.exists()) {
             const d = snap.data();
+            const fullName =
+              d.displayName ||
+              d.name ||
+              (d.firstName ? `${d.firstName} ${d.lastName || ''}`.trim() : null) ||
+              d.email?.split('@')[0] ||
+              'User';
             return {
               id,
-              name: d.displayName || d.name || d.email?.split('@')[0] || 'User',
+              name: fullName,
               email: d.email || '',
               role: d.role === 'symbiote' ? 'freelancer' : d.role || 'client',
+              avatarUrl: d.avatarUrl || d.photoURL || undefined,
             };
           }
         } catch {
@@ -156,9 +165,16 @@ export function AuditLogsPage() {
       })
     ).then((results) => {
       if (!isMounted) return;
-      const updates: Record<string, ResolvedTarget> = {};
+      const updates: Record<string, ResolvedUser> = {};
       results.forEach((r) => {
-        if (r) updates[r.id] = { name: r.name, email: r.email, role: r.role };
+        if (r) {
+          updates[r.id] = {
+            name: r.name,
+            email: r.email,
+            role: r.role,
+            avatarUrl: r.avatarUrl,
+          };
+        }
       });
       if (Object.keys(updates).length > 0) {
         setUserMap((prev) => ({ ...prev, ...updates }));
@@ -398,8 +414,9 @@ export function AuditLogsPage() {
 
                 const actionBadge = formatActionBadge(log.action);
                 const targetUser = log.targetId ? userMap[log.targetId] : undefined;
-                const actorName = log.actorName || (log.userEmail ? log.userEmail.split('@')[0] : 'Platform Admin');
-                const actorInitials = actorName.slice(0, 2).toUpperCase();
+                const actorProfile = log.userId ? userMap[log.userId] : undefined;
+                const actorName = log.actorName || actorProfile?.name || (log.userEmail ? log.userEmail.split('@')[0] : 'Platform Admin');
+                const actorAvatar = actorProfile?.avatarUrl;
 
                 return (
                   <React.Fragment key={log.id}>
@@ -422,18 +439,21 @@ export function AuditLogsPage() {
                         </div>
                       </td>
 
-                      {/* Column 2: Actor (Name + Email, No raw UID) */}
+                      {/* Column 2: Actor (Name + Email + Avatar) */}
                       <td className="p-3.5 align-top">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-300 font-bold text-[10px] shrink-0">
-                            {actorInitials}
-                          </div>
+                          <Avatar
+                            name={actorName}
+                            src={actorAvatar}
+                            size="sm"
+                            className="w-7 h-7 text-[10px] shrink-0"
+                          />
                           <div className="space-y-0.5 min-w-0">
                             <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">
                               {actorName}
                             </p>
                             <p className="text-[11px] text-[var(--color-text-secondary)] truncate">
-                              {log.userEmail || 'admin@syncsphere.com'}
+                              {log.userEmail || actorProfile?.email || 'admin@syncsphere.com'}
                             </p>
                           </div>
                         </div>
@@ -449,16 +469,21 @@ export function AuditLogsPage() {
                         </div>
                       </td>
 
-                      {/* Column 4: Target / Description (Real Name + Profile Link) */}
+                      {/* Column 4: Target / Description (Real Name + Profile Link + Avatar) */}
                       <td className="p-3.5 align-top">
                         <div className="space-y-1">
                           {log.targetId && targetUser ? (
                             <Link
                               to={`/admin/users/${log.targetId}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 hover:underline group"
+                              className="inline-flex items-center gap-2 text-xs font-semibold text-cyan-400 hover:text-cyan-300 hover:underline group"
                             >
-                              <User className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <Avatar
+                                name={targetUser.name}
+                                src={targetUser.avatarUrl}
+                                size="xs"
+                                className="w-5 h-5 text-[8.5px] shrink-0"
+                              />
                               <span>{targetUser.name}</span>
                               <span className="text-[10px] text-[var(--color-text-tertiary)] font-normal capitalize">
                                 ({targetUser.role === 'symbiote' ? 'Freelancer' : targetUser.role === 'client' ? 'Client' : 'Admin'})
@@ -539,23 +564,33 @@ export function AuditLogsPage() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-[11px] pt-1">
                               <div>
-                                <span className="text-[var(--color-text-tertiary)] block mb-0.5">Actor:</span>
-                                <span className="text-white font-medium">{actorName}</span>
-                                <span className="text-[10px] text-[var(--color-text-secondary)] font-mono block">
-                                  UID: {log.userId}
-                                </span>
+                                <span className="text-[var(--color-text-tertiary)] block mb-1">Actor:</span>
+                                <div className="flex items-center gap-2">
+                                  <Avatar name={actorName} src={actorAvatar} size="xs" className="w-5 h-5 text-[8.5px] shrink-0" />
+                                  <div className="min-w-0">
+                                    <span className="text-white font-medium block truncate">{actorName}</span>
+                                    <span className="text-[10px] text-[var(--color-text-secondary)] font-mono block">
+                                      UID: {log.userId}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                               <div>
-                                <span className="text-[var(--color-text-tertiary)] block mb-0.5">Target Resource:</span>
+                                <span className="text-[var(--color-text-tertiary)] block mb-1">Target Resource:</span>
                                 {log.targetId ? (
-                                  <>
-                                    <span className="text-cyan-400 font-medium block">
-                                      {targetUser ? targetUser.name : log.targetName || 'Resource'}
-                                    </span>
-                                    <span className="text-[10px] text-[var(--color-text-tertiary)] font-mono block truncate">
-                                      ID: {log.targetId}
-                                    </span>
-                                  </>
+                                  <div className="flex items-center gap-2">
+                                    {targetUser && (
+                                      <Avatar name={targetUser.name} src={targetUser.avatarUrl} size="xs" className="w-5 h-5 text-[8.5px] shrink-0" />
+                                    )}
+                                    <div className="min-w-0">
+                                      <span className="text-cyan-400 font-medium block truncate">
+                                        {targetUser ? targetUser.name : log.targetName || 'Resource'}
+                                      </span>
+                                      <span className="text-[10px] text-[var(--color-text-tertiary)] font-mono block truncate">
+                                        ID: {log.targetId}
+                                      </span>
+                                    </div>
+                                  </div>
                                 ) : (
                                   <span className="text-white font-mono">None</span>
                                 )}

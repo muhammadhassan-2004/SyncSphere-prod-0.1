@@ -8,6 +8,7 @@ import { subscribeToSymbiotesFromFirestore } from '@/src/lib/firestore/users';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   Star,
   CheckCircle2,
@@ -221,7 +222,7 @@ export const ClientReviewsPage: React.FC = () => {
                         initials={symbioteInitials}
                         src={symbioteAvatar}
                         size="md"
-                        statusDot="online"
+                        statusDot={getUserStatusDot(sInfo)}
                         className="shrink-0 ring-1 ring-[var(--color-accent-cyan)]/30"
                       />
                       <div className="truncate">

@@ -307,7 +307,8 @@ export const OnboardingPage: React.FC = () => {
           if (activeRole === 'client') {
             const normalizedSize = normalizeCompanySize(companySize);
             const normalizedInd = normalizeIndustry(industry);
-            const normalizedCtry = normalizeCountry(location);
+            const rawLocation = location.trim();
+            const normalizedCtry = normalizeCountry(rawLocation);
             const detectedTz = getDetectedTimezone();
             const resolvedBio = projectDescription.trim() || 'Enterprise technology organization delivering high-scale digital solutions.';
 
@@ -316,7 +317,7 @@ export const OnboardingPage: React.FC = () => {
               companyName: companyName.trim() || 'Card Private Limited',
               industry: normalizedInd,
               companySize: normalizedSize,
-              location: normalizedCtry,
+              location: rawLocation || normalizedCtry,
               country: normalizedCtry,
               timeZone: detectedTz,
               ...(website.trim() ? { websiteUrl: website.trim() } : {}),
@@ -335,8 +336,10 @@ export const OnboardingPage: React.FC = () => {
             };
           } else if (activeRole === 'symbiote') {
             const parsedRate = typeof hourlyRate === 'string' ? parseFloat(hourlyRate) : hourlyRate;
+            const rawLocation = location.trim();
             updates = {
               ...updates,
+              ...(rawLocation ? { location: rawLocation, country: normalizeCountry(rawLocation) } : {}),
               ...(jobTitle.trim() ? { title: jobTitle.trim(), jobTitle: jobTitle.trim() } : {}),
               ...(!isNaN(parsedRate) && parsedRate > 0 ? { hourlyRate: parsedRate } : {}),
               ...(skills.length > 0 ? { skills } : {}),

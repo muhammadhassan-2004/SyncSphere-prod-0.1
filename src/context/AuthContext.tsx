@@ -100,6 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear any leftover demo mode on real user authentication
           localStorage.removeItem('syncsphere_demo_mode');
 
+          let heartbeatTimer: any = null;
           // Record active login/session timestamp
           const touchActive = async () => {
             try {
@@ -108,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 {
                   lastActiveAt: serverTimestamp(),
                   updatedAt: new Date().toISOString(),
+                  isOnline: true,
                 },
                 { merge: true }
               );
@@ -117,6 +119,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
 
           touchActive();
+          heartbeatTimer = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+              touchActive();
+            }
+          }, 150000); // Heartbeat every 2.5 minutes
 
           if (unSubProfile) {
             unSubProfile();
@@ -230,6 +237,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setRole]);
 
   const logout = useCallback(async () => {
+    if (firebaseUser?.uid) {
+      try {
+        await setDoc(doc(db, 'users', firebaseUser.uid), { isOnline: false, lastActiveAt: serverTimestamp() }, { merge: true });
+      } catch {
+        // Silently ignore if network drops
+      }
+    }
     try {
       await auth.signOut();
     } catch (e) {

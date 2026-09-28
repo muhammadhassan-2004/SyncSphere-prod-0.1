@@ -33,15 +33,11 @@ import {
   AlertCircle,
   Search,
   Filter,
-  Play,
-  Pause,
-  RotateCcw,
-  Square,
   Trash2,
-  Timer,
-  Zap,
   Edit2,
   X,
+  AlertTriangle,
+  Shield,
 } from 'lucide-react';
 
 // Helper to get local date string YYYY-MM-DD
@@ -114,10 +110,7 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
   const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Active Logging Mode: 'timer' (Live Stopwatch) or 'manual' (Manual Hours Entry)
-  const [loggingMode, setLoggingMode] = useState<'timer' | 'manual'>('timer');
-
-  // Form Inputs (Manual Mode)
+  // Form Inputs
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
@@ -125,95 +118,30 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
   const [entryHours, setEntryHours] = useState<string>('3');
   const [entryDescription, setEntryDescription] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'error' | 'warning' } | null>(null);
 
   // Edit Description Modal State
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [editDescription, setEditDescription] = useState<string>('');
   const [editSaving, setEditSaving] = useState<boolean>(false);
 
-  // Live Stopwatch State
-  const [timerRunning, setTimerRunning] = useState<boolean>(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
-  const [timerNotes, setTimerNotes] = useState<string>('');
-  const [timerTaskTitle, setTimerTaskTitle] = useState<string>('');
-
   // Table Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const STORAGE_KEY = `syncsphere_timer_${uid}`;
-
-  // Restore Stopwatch from localStorage on initial load
-  useEffect(() => {
-    if (!uid) return;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.projectId) setSelectedProjectId(data.projectId);
-        if (data.milestoneId) setSelectedMilestoneId(data.milestoneId);
-        if (data.taskId) setSelectedTaskId(data.taskId);
-        if (data.notes) setTimerNotes(data.notes);
-
-        if (data.isRunning && data.lastTick) {
-          const delta = Math.floor((Date.now() - data.lastTick) / 1000);
-          setElapsedSeconds((data.elapsedSeconds || 0) + (delta > 0 ? delta : 0));
-          setTimerRunning(true);
-        } else {
-          setElapsedSeconds(data.elapsedSeconds || 0);
-          setTimerRunning(false);
-        }
-      }
-    } catch (e) {
-      console.warn('Could not restore timer state from storage:', e);
+  // Format decimal hours to human-friendly text: e.g. "5 mins", "1h 30m", "2h"
+  const formatHoursToHuman = (hrs: number): string => {
+    if (!hrs || isNaN(hrs)) return '0m';
+    const totalMinutes = Math.round(hrs * 60);
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min${totalMinutes === 1 ? '' : 's'}`;
     }
-  }, [uid]);
-
-  // Persist Stopwatch state to localStorage on update
-  useEffect(() => {
-    if (!uid) return;
-    try {
-      if (elapsedSeconds > 0 || timerRunning || timerNotes || selectedTaskId) {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            isRunning: timerRunning,
-            elapsedSeconds,
-            lastTick: Date.now(),
-            projectId: selectedProjectId,
-            milestoneId: selectedMilestoneId,
-            taskId: selectedTaskId,
-            notes: timerNotes,
-          })
-        );
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch (e) {
-      console.warn('Could not save timer to storage:', e);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (m === 0) {
+      return `${h}h`;
     }
-  }, [uid, timerRunning, elapsedSeconds, selectedProjectId, selectedMilestoneId, selectedTaskId, timerNotes]);
-
-  // Stopwatch ticking interval
-  useEffect(() => {
-    let interval: any = null;
-    if (timerRunning) {
-      interval = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timerRunning]);
-
-  // Format seconds to HH:MM:SS
-  const formatStopwatch = (totalSeconds: number): string => {
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${h}h ${m}m`;
   };
 
   // 1. Subscribe to Projects (Symbiote Assigned Projects ONLY)
@@ -289,107 +217,9 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
   }, [uid]);
 
   // Helper toast notification
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Stopwatch Controls
-  const handleStartTimer = () => {
-    if (!selectedProjectId) {
-      showToast('Please select a project before starting the timer.');
-      return;
-    }
-    if (tasks.length > 0 && !selectedTaskId) {
-      showToast('Please select a Workspace Task to track time against.');
-      return;
-    }
-    setTimerRunning(true);
-    showToast('Stopwatch started. Timer is running in real-time!');
-  };
-
-  const handlePauseTimer = () => {
-    setTimerRunning(false);
-    showToast('Stopwatch paused.');
-  };
-
-  const handleResetTimer = () => {
-    setTimerRunning(false);
-    setElapsedSeconds(0);
-    localStorage.removeItem(STORAGE_KEY);
-    showToast('Stopwatch reset.');
-  };
-
-  const handleStopAndLogTimer = async () => {
-    if (elapsedSeconds < 10 && !timerNotes.trim()) {
-      showToast('Stopwatch session too short to log (minimum 10 seconds).');
-      return;
-    }
-    if (!selectedProjectId) {
-      showToast('Please select a project to log time against.');
-      return;
-    }
-    if (tasks.length > 0 && !selectedTaskId) {
-      showToast('Please select a Workspace Task for this work session.');
-      return;
-    }
-
-    // Calculate hours with minimum 0.05h (3 mins) for small sessions
-    const calculatedHours = Math.max(0.05, +(elapsedSeconds / 3600).toFixed(2));
-
-    setSubmitting(true);
-    let projectObj = projects.find((p) => p.id === selectedProjectId);
-    if (!projectObj && selectedProjectId) {
-      try {
-        const fetched = await getProjectById(selectedProjectId);
-        if (fetched) projectObj = fetched;
-      } catch (e) {
-        console.warn('Could not fetch project info:', e);
-      }
-    }
-    const projectName = projectObj?.title || 'Project';
-    const clientOwnerId = projectObj?.clientId || projectObj?.ownerId || (projectObj as any)?.clientUid || undefined;
-
-    const milestoneObj = milestones.find((m) => m.id === selectedMilestoneId);
-    const milestoneTitle = milestoneObj?.title || (milestoneObj as any)?.name || undefined;
-
-    const taskObj = tasks.find((t) => t.id === selectedTaskId);
-    const taskTitle = taskObj?.title || undefined;
-
-    const sessionDesc =
-      timerNotes.trim() ||
-      (taskTitle ? `Live tracked session on task: ${taskTitle}` : `Live work session on ${projectName}`);
-
-    const newEntry: Omit<TimeEntry, 'id'> = {
-      symbioteId: uid,
-      symbioteName,
-      projectId: selectedProjectId,
-      projectName,
-      clientId: clientOwnerId,
-      date: getLocalDateString(),
-      hours: calculatedHours,
-      description: sessionDesc,
-      status: 'pending',
-    };
-    if (userProfile?.avatarUrl) newEntry.symbioteAvatarUrl = userProfile.avatarUrl;
-    if (selectedMilestoneId) newEntry.milestoneId = selectedMilestoneId;
-    if (milestoneTitle) newEntry.milestoneTitle = milestoneTitle;
-    if (selectedTaskId) newEntry.taskId = selectedTaskId;
-    if (taskTitle) newEntry.taskTitle = taskTitle;
-
-    try {
-      await createTimeEntry(newEntry);
-      showToast(`Logged ${calculatedHours}h for "${projectName}" via Stopwatch!`);
-      setTimerRunning(false);
-      setElapsedSeconds(0);
-      setTimerNotes('');
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (err) {
-      console.error('Error logging stopwatch time:', err);
-      showToast('Failed to log stopwatch time entry.');
-    } finally {
-      setSubmitting(false);
-    }
+  const showToast = (msg: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToastMessage({ text: msg, type });
+    setTimeout(() => setToastMessage(null), 4500);
   };
 
   // Delete logged entry and roll back task hours
@@ -446,7 +276,6 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
         setSelectedMilestoneId(taskObj.milestoneId);
       }
       setEntryDescription(taskObj.title);
-      setTimerNotes(`Working on: ${taskObj.title}`);
     }
   };
 
@@ -472,6 +301,25 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
       return;
     }
 
+    const taskObj = tasks.find((t) => t.id === selectedTaskId);
+    const taskTitle = taskObj?.title || undefined;
+
+    // Strict Task Time Cap Protection Check
+    if (taskObj) {
+      const taskCap = Number(taskObj.maxHours || taskObj.estimatedHours || 0);
+      const currentLogged = Number(taskObj.actualHours || taskObj.actualTotalHours || 0);
+      if (taskCap > 0 && +(currentLogged + parsedHours).toFixed(2) > taskCap) {
+        const remaining = Math.max(0, +(taskCap - currentLogged).toFixed(2));
+        showToast(
+          remaining > 0
+            ? `⚠️ Time Cap Exceeded: Client has set a maximum limit of ${taskCap.toFixed(1)}h for this task (Current logged: ${currentLogged.toFixed(1)}h). You cannot log more than ${remaining.toFixed(1)} remaining hours without client approval.`
+            : `⚠️ Time Cap Exceeded: Client has set a maximum limit of ${taskCap.toFixed(1)}h for this task, and it is already fully logged (${currentLogged.toFixed(1)}h). You cannot log additional hours without client approval.`,
+          'error'
+        );
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     let projectObj = projects.find((p) => p.id === selectedProjectId);
@@ -488,9 +336,6 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
 
     const milestoneObj = milestones.find((m) => m.id === selectedMilestoneId);
     const milestoneTitle = milestoneObj?.title || (milestoneObj as any)?.name || undefined;
-
-    const taskObj = tasks.find((t) => t.id === selectedTaskId);
-    const taskTitle = taskObj?.title || undefined;
 
     const newEntry: Omit<TimeEntry, 'id'> = {
       symbioteId: uid,
@@ -635,9 +480,21 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
     <div className="space-y-6 pb-12">
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4">
-          <CheckCheck className="w-4 h-4 shrink-0" />
-          <span>{toastMessage}</span>
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 text-white font-semibold text-xs rounded-xl shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 border max-w-md ${
+            toastMessage.type === 'error'
+              ? 'bg-rose-600 border-rose-500 shadow-rose-950/50'
+              : toastMessage.type === 'warning'
+              ? 'bg-amber-600 border-amber-500 shadow-amber-950/50'
+              : 'bg-emerald-600 border-emerald-500 shadow-emerald-950/50'
+          }`}
+        >
+          {toastMessage.type === 'error' || toastMessage.type === 'warning' ? (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-white" />
+          ) : (
+            <CheckCheck className="w-4 h-4 shrink-0 text-white" />
+          )}
+          <span className="leading-snug">{toastMessage.text}</span>
         </div>
       )}
 
@@ -708,39 +565,18 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
 
       {/* MAIN CONTENT GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* LEFT COLUMN: LIVE STOPWATCH & LOG TIME */}
+        {/* LEFT COLUMN: LOG TIME (MANUAL ENTRY) */}
         <div className="lg:col-span-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 shadow-sm space-y-4">
-          {/* TAB MODE SWITCHER */}
-          <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border)]">
-            <div className="flex items-center p-1 bg-[var(--color-background)] rounded-lg border border-[var(--color-border)] gap-1">
-              <button
-                type="button"
-                onClick={() => setLoggingMode('timer')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  loggingMode === 'timer'
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-sm'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <Timer className="w-3.5 h-3.5" />
-                <span>Live Stopwatch</span>
-                {timerRunning && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping ml-0.5" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setLoggingMode('manual')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  loggingMode === 'manual'
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-sm'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Manual Entry</span>
-              </button>
+          {/* CARD HEADER */}
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-[var(--color-text-primary)]">Log Time</h2>
+                <p className="text-[11px] text-[var(--color-text-secondary)]">Manual Hours Entry</p>
+              </div>
             </div>
 
             <span className="text-[11px] font-mono text-[var(--color-text-secondary)]">
@@ -748,292 +584,186 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
             </span>
           </div>
 
-          {/* MODE 1: LIVE STOPWATCH TIMER */}
-          {loggingMode === 'timer' && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              {/* DIGITAL STOPWATCH CLOCK DISPLAY */}
-              <div className="p-6 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] flex flex-col items-center justify-center space-y-3 relative overflow-hidden">
-                {timerRunning && (
-                  <div className="absolute top-2.5 right-3 flex items-center gap-1.5 text-[10.5px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>RECORDING</span>
-                  </div>
+          {/* MANUAL ENTRY FORM */}
+          <form onSubmit={handleLogTime} className="space-y-3.5">
+            {/* 1. PROJECT DROPDOWN */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                Project <span className="text-cyan-400">*</span>
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => {
+                  setSelectedProjectId(e.target.value);
+                  setSelectedMilestoneId('');
+                  setSelectedTaskId('');
+                }}
+                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
+                required
+              >
+                {projects.length === 0 ? (
+                  <option value="">No active assigned projects</option>
+                ) : (
+                  projects.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                      {p.title}
+                    </option>
+                  ))
                 )}
-
-                <div className="text-4xl sm:text-5xl font-mono font-bold tracking-wider text-[var(--color-text-primary)]">
-                  {formatStopwatch(elapsedSeconds)}
-                </div>
-
-                <div className="text-xs font-mono text-[var(--color-text-secondary)] flex items-center gap-2">
-                  <span>Equivalent:</span>
-                  <span className="font-bold text-cyan-400">
-                    {Math.max(0, +(elapsedSeconds / 3600).toFixed(2))} hours
-                  </span>
-                </div>
-
-                {/* STOPWATCH ACTION BUTTONS */}
-                <div className="flex items-center gap-2 pt-2 w-full justify-center flex-wrap">
-                  {!timerRunning ? (
-                    <button
-                      type="button"
-                      onClick={handleStartTimer}
-                      disabled={submitting}
-                      className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer active:scale-95"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>{elapsedSeconds > 0 ? 'Resume Timer' : 'Start Timer'}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handlePauseTimer}
-                      className="px-4 py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95"
-                    >
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pause Timer</span>
-                    </button>
-                  )}
-
-                  {elapsedSeconds > 0 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleStopAndLogTimer}
-                        disabled={submitting}
-                        className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer active:scale-95"
-                      >
-                        <CheckCheck className="w-4 h-4" />
-                        <span>{submitting ? 'Logging...' : 'Stop & Log Time'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleResetTimer}
-                        disabled={submitting || timerRunning}
-                        title="Reset stopwatch"
-                        className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-rose-400 hover:border-rose-500/40 transition-colors cursor-pointer disabled:opacity-40"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* PROJECT & TASK SELECTOR FOR TIMER */}
-              <div className="space-y-3">
-                {/* PROJECT */}
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-                    Project <span className="text-cyan-400">*</span>
-                  </label>
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => {
-                      setSelectedProjectId(e.target.value);
-                      setSelectedMilestoneId('');
-                      setSelectedTaskId('');
-                    }}
-                    className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] transition-all cursor-pointer"
-                  >
-                    {projects.length === 0 ? (
-                      <option value="">No active assigned projects</option>
-                    ) : (
-                      projects.map((p) => (
-                        <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                          {p.title}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-
-                {/* TASK DROPDOWN */}
-                <div>
-                  <label className="flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-                    <span className="flex items-center gap-1.5">
-                      <CheckSquare className="w-3 h-3 text-cyan-400" />
-                      Workspace Task
-                    </span>
-                    <span className="text-[10px] text-[var(--color-text-secondary)]">Auto-sync actual hours</span>
-                  </label>
-                  <select
-                    value={selectedTaskId}
-                    onChange={(e) => handleTaskSelect(e.target.value)}
-                    className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] transition-all cursor-pointer"
-                  >
-                    <option value="" className="bg-slate-900 text-slate-400">
-                      {tasks.length > 0 ? '-- Select Workspace Task --' : '-- No workspace tasks --'}
-                    </option>
-                    {tasks.map((t) => (
-                      <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                        {t.title} [{Number(t.actualHours || t.actualTotalHours || 0).toFixed(1)}h logged / {Number(t.estimatedHours || 8).toFixed(1)}h est]
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* SESSION NOTES */}
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-                    Work Notes / Summary
-                  </label>
-                  <input
-                    type="text"
-                    value={timerNotes}
-                    onChange={(e) => setTimerNotes(e.target.value)}
-                    placeholder="e.g. Developing authentication endpoints..."
-                    className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent-cyan)] transition-all"
-                  />
-                </div>
-              </div>
+              </select>
             </div>
-          )}
 
-          {/* MODE 2: MANUAL ENTRY FORM */}
-          {loggingMode === 'manual' && (
-            <form onSubmit={handleLogTime} className="space-y-3.5 animate-in fade-in duration-200">
-              {/* 1. PROJECT DROPDOWN */}
-              <div>
-                <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                  Project <span className="text-cyan-400">*</span>
-                </label>
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => {
-                    setSelectedProjectId(e.target.value);
-                    setSelectedMilestoneId('');
-                    setSelectedTaskId('');
-                  }}
-                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
-                  required
-                >
-                  {projects.length === 0 ? (
-                    <option value="">No active assigned projects</option>
-                  ) : (
-                    projects.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                        {p.title}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {/* 2. MILESTONE DROPDOWN (DYNAMIC) */}
-              <div>
-                <label className="flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <Layers className="w-3 h-3 text-cyan-400" />
-                    Milestone
-                  </span>
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">Optional</span>
-                </label>
-                <select
-                  value={selectedMilestoneId}
-                  onChange={(e) => {
-                    setSelectedMilestoneId(e.target.value);
-                    setSelectedTaskId('');
-                  }}
-                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
-                >
-                  <option value="" className="bg-slate-900 text-slate-400">
-                    {milestones.length > 0 ? '-- General / All Milestones --' : '-- No milestones defined --'}
+            {/* 2. MILESTONE DROPDOWN (DYNAMIC) */}
+            <div>
+              <label className="flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  Milestone
+                </span>
+                <span className="text-[10px] text-[var(--color-text-secondary)]">Optional</span>
+              </label>
+              <select
+                value={selectedMilestoneId}
+                onChange={(e) => {
+                  setSelectedMilestoneId(e.target.value);
+                  setSelectedTaskId('');
+                }}
+                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
+              >
+                <option value="" className="bg-slate-900 text-slate-400">
+                  {milestones.length > 0 ? '-- General / All Milestones --' : '-- No milestones defined --'}
+                </option>
+                {milestones.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                    {m.title || (m as any).name || 'Milestone'} {m.completed ? '✓' : ''}
                   </option>
-                  {milestones.map((m) => (
-                    <option key={m.id} value={m.id} className="bg-slate-900 text-white">
-                      {m.title || (m as any).name || 'Milestone'} {m.completed ? '✓' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                ))}
+              </select>
+            </div>
 
-              {/* 3. TASK DROPDOWN (DYNAMIC) */}
-              <div>
-                <label className="flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <CheckSquare className="w-3 h-3 text-cyan-400" />
-                    Workspace Task
-                  </span>
-                  <span className="text-[10px] text-[var(--color-text-secondary)]">Optional</span>
-                </label>
-                <select
-                  value={selectedTaskId}
-                  onChange={(e) => handleTaskSelect(e.target.value)}
-                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
-                >
-                  <option value="" className="bg-slate-900 text-slate-400">
-                    {tasks.length > 0 ? '-- Select Task or Type Custom Below --' : '-- No workspace tasks --'}
-                  </option>
-                  {tasks
-                    .filter((t) => !selectedMilestoneId || t.milestoneId === selectedMilestoneId)
-                    .map((t) => (
+            {/* 3. TASK DROPDOWN (DYNAMIC) */}
+            <div>
+              <label className="flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <CheckSquare className="w-3 h-3 text-cyan-400" />
+                  Workspace Task
+                </span>
+                <span className="text-[10px] text-[var(--color-text-secondary)]">Optional</span>
+              </label>
+              <select
+                value={selectedTaskId}
+                onChange={(e) => handleTaskSelect(e.target.value)}
+                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
+              >
+                <option value="" className="bg-slate-900 text-slate-400">
+                  {tasks.length > 0 ? '-- Select Task or Type Custom Below --' : '-- No workspace tasks --'}
+                </option>
+                {tasks
+                  .filter((t) => !selectedMilestoneId || t.milestoneId === selectedMilestoneId)
+                  .map((t) => {
+                    const cap = Number(t.maxHours || t.estimatedHours || 0);
+                    const logged = Number(t.actualHours || t.actualTotalHours || 0);
+                    return (
                       <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                        {t.title} [{Number(t.actualHours || 0).toFixed(1)}h logged / {Number(t.estimatedHours || 8).toFixed(1)}h est]
+                        {t.title} [{logged.toFixed(1)}h logged / {cap > 0 ? `${cap.toFixed(1)}h max cap` : 'flexible'}]
                       </option>
-                    ))}
-                </select>
-              </div>
+                    );
+                  })}
+              </select>
 
-              {/* 4. DATE AND HOURS ROW */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    Date <span className="text-cyan-400">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={entryDate}
-                    onChange={(e) => setEntryDate(e.target.value)}
-                    required
-                    className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all font-mono"
-                  />
-                </div>
+              {/* Task Cap & Limit Protection Badge */}
+              {selectedTaskId && (() => {
+                const currentTask = tasks.find((t) => t.id === selectedTaskId);
+                if (!currentTask) return null;
+                const cap = Number(currentTask.maxHours || currentTask.estimatedHours || 0);
+                const logged = Number(currentTask.actualHours || currentTask.actualTotalHours || 0);
+                const remaining = cap > 0 ? Math.max(0, +(cap - logged).toFixed(2)) : null;
+                const isCapReached = cap > 0 && logged >= cap;
 
-                <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                    Hours <span className="text-cyan-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0.01"
-                    max="24"
-                    value={entryHours}
-                    onChange={(e) => setEntryHours(e.target.value)}
-                    placeholder="3"
-                    required
-                    className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all font-mono"
-                  />
-                </div>
-              </div>
+                return (
+                  <div className={`mt-2 p-2 rounded-lg border text-[11px] flex items-center justify-between font-mono ${
+                    isCapReached
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                      : cap > 0
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+                  }`}>
+                    <div className="flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {cap > 0 ? `Max Cap: ${cap.toFixed(1)}h | Logged: ${logged.toFixed(1)}h` : `Logged: ${logged.toFixed(1)}h (No limit)`}
+                      </span>
+                    </div>
+                    {cap > 0 && (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        isCapReached ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {isCapReached ? 'Cap Reached 🚫' : `${remaining}h remaining`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
 
-              {/* 5. DESCRIPTION */}
+            {/* 4. DATE AND HOURS ROW */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-                  Description / Work Notes <span className="text-cyan-400">*</span>
+                  Date <span className="text-cyan-400">*</span>
                 </label>
-                <textarea
-                  rows={3}
-                  value={entryDescription}
-                  onChange={(e) => setEntryDescription(e.target.value)}
-                  placeholder="What did you work on?"
+                <input
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
                   required
-                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg p-3 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all resize-none"
+                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all font-mono"
                 />
               </div>
 
-              {/* 6. SUBMIT BUTTON */}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-[#22D3EE] to-[#34D399] hover:opacity-90 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{submitting ? 'Logging Time...' : 'Log Time Entry'}</span>
-              </button>
-            </form>
-          )}
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                  Hours <span className="text-cyan-400">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max="24"
+                  value={entryHours}
+                  onChange={(e) => setEntryHours(e.target.value)}
+                  placeholder="3"
+                  required
+                  className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            {/* 5. DESCRIPTION */}
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
+                Description / Work Notes <span className="text-cyan-400">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={entryDescription}
+                onChange={(e) => setEntryDescription(e.target.value)}
+                placeholder="What did you work on?"
+                required
+                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg p-3 text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all resize-none"
+              />
+            </div>
+
+            {/* 6. SUBMIT BUTTON */}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-[#22D3EE] to-[#34D399] hover:opacity-90 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{submitting ? 'Logging Time...' : 'Log Time Entry'}</span>
+            </button>
+          </form>
         </div>
 
         {/* RIGHT COLUMN: WEEKLY HOURS CHART & TIME LOGS */}
@@ -1194,7 +924,10 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3.5 pr-4 font-semibold text-cyan-400 whitespace-nowrap font-mono">
-                            {entry.hours}h
+                            <span>{formatHoursToHuman(entry.hours)}</span>
+                            <span className="text-[10.5px] text-[var(--color-text-secondary)] font-normal ml-1.5 opacity-75">
+                              ({Number(entry.hours).toFixed(2)}h)
+                            </span>
                           </td>
                           <td className="py-3.5 pr-4 whitespace-nowrap">
                             {isApproved ? (

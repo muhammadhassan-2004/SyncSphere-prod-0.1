@@ -3,6 +3,8 @@
  * Proxies file uploads to /api/upload to securely persist documents, media, and attachments to Cloudinary.
  */
 
+import { auth } from '../firebase';
+
 export interface CloudinaryUploadResponse {
   success: boolean;
   url: string;
@@ -34,8 +36,15 @@ export async function uploadFileToCloudinary(
   const targetFolder = options.folder || (options.projectId ? `syncsphere/projects/${options.projectId}` : 'syncsphere/uploads');
   formData.append('folder', targetFolder);
 
+  const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch('/api/upload', {
     method: 'POST',
+    headers,
     body: formData,
   });
 
@@ -73,11 +82,17 @@ export async function uploadBase64ToCloudinary(
     fileName?: string;
   } = {}
 ): Promise<CloudinaryUploadResponse> {
+  const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch('/api/upload-base64', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       base64Data,
       fileName: options.fileName || 'upload',

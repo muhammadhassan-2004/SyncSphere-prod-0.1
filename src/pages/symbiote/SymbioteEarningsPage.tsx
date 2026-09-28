@@ -163,11 +163,12 @@ export const SymbioteEarningsPage: React.FC = () => {
     });
 
     // Map Approved Time Entries as Hourly Earnings
-    const hourlyRate = (userProfile as any)?.hourlyRate || 120;
+    const defaultHourlyRate = Number((userProfile as any)?.hourlyRate) || 0;
     timeEntries.forEach((te) => {
       const teStatus = (te.status || 'pending').toLowerCase();
+      const rate = Number(te.hourlyRate) || defaultHourlyRate;
       if (teStatus === 'approved') {
-        const estEarnings = (te.hours || 0) * hourlyRate;
+        const estEarnings = (te.hours || 0) * rate;
         list.push({
           id: te.id || `te-${Math.random()}`,
           date: te.date || new Date().toISOString().slice(0, 10),
@@ -179,7 +180,7 @@ export const SymbioteEarningsPage: React.FC = () => {
           status: 'paid',
         });
       } else if (teStatus === 'pending') {
-        const estEarnings = (te.hours || 0) * hourlyRate;
+        const estEarnings = (te.hours || 0) * rate;
         list.push({
           id: te.id || `te-${Math.random()}`,
           date: te.date || new Date().toISOString().slice(0, 10),

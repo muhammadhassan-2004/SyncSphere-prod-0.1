@@ -12,8 +12,9 @@ import {
   subscribeToProjectsByOwner,
   subscribeToClientApplications,
   subscribeToInvoices,
+  subscribeToTimeEntriesForClient,
 } from '@/src/lib/firestore';
-import { Project, Application, Invoice } from '@/src/types/firestore';
+import { Project, Application, Invoice, TimeEntry } from '@/src/types/firestore';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -65,6 +66,7 @@ export const ClientDashboardPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [dashboardSearch, setDashboardSearch] = useState<string>('');
 
@@ -75,6 +77,7 @@ export const ClientDashboardPage: React.FC = () => {
       setProjects([]);
       setApplications([]);
       setInvoices([]);
+      setTimeEntries([]);
       setLoading(false);
       return;
     }
@@ -93,10 +96,15 @@ export const ClientDashboardPage: React.FC = () => {
       setInvoices(data);
     });
 
+    const unSubTime = subscribeToTimeEntriesForClient(clientId, (entries) => {
+      setTimeEntries(entries || []);
+    });
+
     return () => {
       if (unSubProjects) unSubProjects();
       if (unSubApps) unSubApps();
       if (unSubInvoices) unSubInvoices();
+      if (unSubTime) unSubTime();
     };
   }, [firebaseUser?.uid]);
 
@@ -106,7 +114,7 @@ export const ClientDashboardPage: React.FC = () => {
   }, [projects]);
 
   const totalSpend = useMemo(() => {
-    const sum = projects.reduce((acc, p) => acc + (p.budget?.total || 0), 0);
+    const sum = projects.reduce((acc, p) => acc + (p.totalSpent || 0), 0);
     return `$${sum.toLocaleString()}`;
   }, [projects]);
 
@@ -120,9 +128,13 @@ export const ClientDashboardPage: React.FC = () => {
 
   const avgMatchScore = useMemo(() => {
     if (applications.length > 0) {
-      const scores = applications.map((a) => a.matchScore || 90);
-      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-      return `${avg}%`;
+      const scores = applications
+        .map((a) => (typeof a.aiMatchScore === 'number' ? a.aiMatchScore : (typeof a.matchScore === 'number' ? a.matchScore : 0)))
+        .filter((s) => s > 0);
+      if (scores.length > 0) {
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        return `${avg}%`;
+      }
     }
     return '0%';
   }, [applications]);
@@ -136,63 +148,112 @@ export const ClientDashboardPage: React.FC = () => {
     return '0 ($0)';
   }, [invoices]);
 
-  // Chart Data Preparation (Real aggregated data or empty)
+  // Chart Data Preparation: Dynamic rolling 6-month spend from real paid invoices
   const spendChartData = useMemo(() => {
-    if (invoices.length === 0) {
-      return [
-        { month: 'Mar', spend: 0 },
-        { month: 'Apr', spend: 0 },
-        { month: 'May', spend: 0 },
-        { month: 'Jun', spend: 0 },
-        { month: 'Jul', spend: 0 },
-        { month: 'Aug', spend: 0 },
-      ];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const last6Months: { month: string; year: number; monthIdx: number; spend: number }[] = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      last6Months.push({
+        month: monthNames[d.getMonth()],
+        year: d.getFullYear(),
+        monthIdx: d.getMonth(),
+        spend: 0,
+      });
     }
-    return [
-      { month: 'Mar', spend: 0 },
-      { month: 'Apr', spend: 0 },
-      { month: 'May', spend: 0 },
-      { month: 'Jun', spend: 0 },
-      { month: 'Jul', spend: 0 },
-      { month: 'Aug', spend: invoices.reduce((acc, i) => acc + i.amount, 0) },
-    ];
+
+    invoices.forEach((inv) => {
+      if (inv.status === 'paid') {
+        const dateStr = inv.paidAt || inv.createdAt;
+        if (dateStr) {
+          const invDate = new Date(dateStr);
+          if (!isNaN(invDate.getTime())) {
+            const match = last6Months.find(
+              (m) => m.monthIdx === invDate.getMonth() && m.year === invDate.getFullYear()
+            );
+            if (match) {
+              match.spend += inv.amount || 0;
+            }
+          }
+        }
+      }
+    });
+
+    return last6Months.map(({ month, spend }) => ({ month, spend }));
   }, [invoices]);
 
-  const teamActivityData = useMemo(
-    () => [
-      { day: 'Mon', hours: 0, tasks: 0 },
-      { day: 'Tue', hours: 0, tasks: 0 },
-      { day: 'Wed', hours: 0, tasks: 0 },
-      { day: 'Thu', hours: 0, tasks: 0 },
-      { day: 'Fri', hours: 0, tasks: 0 },
-      { day: 'Sat', hours: 0, tasks: 0 },
-      { day: 'Sun', hours: 0, tasks: 0 },
-    ],
-    []
-  );
+  // Team Activity Chart: Aggregated real hours and tasks by day for current week
+  const teamActivityData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayMap: Record<string, { hours: number; tasks: number }> = {
+      Mon: { hours: 0, tasks: 0 },
+      Tue: { hours: 0, tasks: 0 },
+      Wed: { hours: 0, tasks: 0 },
+      Thu: { hours: 0, tasks: 0 },
+      Fri: { hours: 0, tasks: 0 },
+      Sat: { hours: 0, tasks: 0 },
+      Sun: { hours: 0, tasks: 0 },
+    };
+
+    const now = new Date();
+    const currentDay = now.getDay(); // 0 = Sun, 1 = Mon ...
+    const distanceToMonday = (currentDay + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - distanceToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    timeEntries.forEach((entry) => {
+      const entryDate = new Date(entry.date || entry.createdAt || '');
+      if (!isNaN(entryDate.getTime()) && entryDate >= monday) {
+        const dayIdx = (entryDate.getDay() + 6) % 7;
+        const dayName = days[dayIdx];
+        if (dayMap[dayName]) {
+          dayMap[dayName].hours += Number(entry.hours) || 0;
+          if (entry.taskId) {
+            dayMap[dayName].tasks += 1;
+          }
+        }
+      }
+    });
+
+    return days.map((day) => ({
+      day,
+      hours: Math.round(dayMap[day].hours * 10) / 10,
+      tasks: dayMap[day].tasks,
+    }));
+  }, [timeEntries]);
 
   // Recent Projects Table Display List (Filtered by dashboardSearch)
   const recentProjectsList = useMemo(() => {
     const q = dashboardSearch.toLowerCase().trim();
-    const list = projects.map((p) => ({
-      id: p.id || '',
-      title: p.title,
-      category: p.category || 'AI Engineering',
-      status: p.status || 'in_progress',
-      budget: `$${(p.budget?.total || p.budget?.max || 0).toLocaleString()}`,
-      pros: p.assignedSymbioteId ? ['SP'] : [],
-      deadline: p.deadline || 'TBD',
-      progress:
-        p.status === 'completed'
-          ? 100
-          : typeof p.progressPct === 'number'
-          ? p.progressPct
-          : typeof p.progressPercent === 'number'
-          ? p.progressPercent
-          : p.status === 'in_progress'
-          ? 25
-          : 0,
-    }));
+    const list = projects.map((p) => {
+      const initials = p.assignedSymbioteName
+        ? p.assignedSymbioteName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+        : p.assignedSymbioteId
+        ? ['SP']
+        : [];
+      return {
+        id: p.id || '',
+        title: p.title,
+        category: p.category || 'AI Engineering',
+        status: p.status || 'in_progress',
+        budget: `$${(p.totalSpent || 0).toLocaleString()}`,
+        pros: Array.isArray(initials) ? initials : (initials ? [initials] : []),
+        deadline: p.deadline || 'TBD',
+        progress:
+          p.status === 'completed'
+            ? 100
+            : typeof p.progressPct === 'number'
+            ? p.progressPct
+            : typeof p.progressPercent === 'number'
+            ? p.progressPercent
+            : p.status === 'in_progress'
+            ? 25
+            : 0,
+      };
+    });
 
     if (!q) return list.slice(0, 6);
 
@@ -224,6 +285,7 @@ export const ClientDashboardPage: React.FC = () => {
         project: a.projectTitle || matchedProj?.title || 'Target Project',
         matchScore: a.aiMatchScore ?? a.matchScore ?? 90,
         appliedTime: formatRelativeTime(a.appliedAt),
+        avatarUrl: a.symbioteAvatarUrl,
       };
     });
 
@@ -480,7 +542,7 @@ export const ClientDashboardPage: React.FC = () => {
                   <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] font-medium">
                     <th className="py-2.5 px-3.5">Project Name</th>
                     <th className="py-2.5 px-3.5">Status</th>
-                    <th className="py-2.5 px-3.5">Budget</th>
+                    <th className="py-2.5 px-3.5">Spent So Far</th>
                     <th className="py-2.5 px-3.5">Team</th>
                     <th className="py-2.5 px-3.5">Deadline</th>
                     <th className="py-2.5 px-3.5">Progress</th>
@@ -589,7 +651,7 @@ export const ClientDashboardPage: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={app.name} size="sm" />
+                      <Avatar name={app.name} src={app.avatarUrl} size="sm" />
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate">
                           {app.name}

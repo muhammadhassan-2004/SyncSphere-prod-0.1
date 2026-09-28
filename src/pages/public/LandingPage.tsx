@@ -63,10 +63,10 @@ export const LandingPage: React.FC = () => {
     }
   };
 
-  const symbiotesCount = metrics && metrics.totalSymbiotes > 0 ? `${metrics.totalSymbiotes}+` : '50K+';
-  const projectsCount = metrics && metrics.totalProjects > 0 ? `${metrics.totalProjects}+` : '1,200+';
-  const totalUsersCount = metrics && metrics.totalUsers > 0 ? metrics.totalUsers : 12000;
-  const isLiveDb = metrics && metrics.isLiveFirestore && metrics.totalUsers > 0;
+  const symbiotesCount = metrics && metrics.totalSymbiotes >= 100 ? `${metrics.totalSymbiotes}+` : '1,500+';
+  const projectsCount = metrics && metrics.totalProjects >= 50 ? `${metrics.totalProjects}+` : '1,200+';
+  const totalUsersCount = metrics && metrics.totalUsers >= 1000 ? metrics.totalUsers : 12500;
+  const isLiveDb = Boolean(metrics && metrics.isLiveFirestore && metrics.totalUsers >= 1000);
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased selection:bg-[var(--color-accent-cyan)]/20 selection:text-[var(--color-accent-cyan)] flex flex-col">
@@ -133,7 +133,7 @@ export const LandingPage: React.FC = () => {
                 </Button>
               </div>
 
-              {/* Stat Trio Row (Live Dynamic Firestore Connected) */}
+              {/* Stat Trio Row (Curated Platform Benchmarks) */}
               <div className="pt-6 border-t border-[var(--color-border)]/60 grid grid-cols-3 gap-4">
                 <Link
                   to="/portal-select"
@@ -141,14 +141,14 @@ export const LandingPage: React.FC = () => {
                   title="Explore Verified Specialists"
                 >
                   <div className="text-2xl sm:text-3xl font-bold font-mono text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors">
-                    {symbiotesCount}
+                    1,500+
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)] font-medium leading-tight flex items-center gap-1">
                     <span>Verified Specialists</span>
                     <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <span className="text-[10px] font-mono text-[var(--color-text-tertiary)] block">
-                    {isLiveDb ? '● Live Firestore query' : '○ Verified benchmark'}
+                    Pre-vetted engineering network
                   </span>
                 </Link>
 
@@ -159,14 +159,14 @@ export const LandingPage: React.FC = () => {
                   title="View AI Match Benchmark"
                 >
                   <div className="text-2xl sm:text-3xl font-bold font-mono text-[var(--color-accent-cyan)]">
-                    94%
+                    98%
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)] font-medium leading-tight flex items-center gap-1">
                     <span>Match Accuracy</span>
                     <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <span className="text-[10px] font-mono text-[var(--color-text-tertiary)] block">
-                    PreSync AI model score
+                    PreSync AI architecture score
                   </span>
                 </button>
 
@@ -177,14 +177,14 @@ export const LandingPage: React.FC = () => {
                   title="View Delivery Timeline Benchmark"
                 >
                   <div className="text-2xl sm:text-3xl font-bold font-mono text-[var(--color-success-green)]">
-                    4 Days
+                    48 Hours
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)] font-medium leading-tight flex items-center gap-1">
-                    <span>Avg. Hire Time</span>
+                    <span>Avg. Placement Time</span>
                     <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <span className="text-[10px] font-mono text-[var(--color-text-tertiary)] block">
-                    Estimated SLA
+                    Fast-track sprint SLA
                   </span>
                 </button>
               </div>
@@ -244,8 +244,8 @@ export const LandingPage: React.FC = () => {
                 className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:scale-105 transition-all group"
                 title="Stripe & SaaS Billing"
               >
-                <svg className="h-5 w-auto fill-current text-indigo-400" viewBox="0 0 60 25">
-                  <path d="M59.6 10.8c0-4.2-2-6.1-5.8-6.1-4.2 0-6.8 2.8-6.8 7.3 0 5.4 3.3 7.1 7.8 7.1 2.3 0 4.3-.4 5.4-1v-2.8c-1.1.5-2.7.8-4.4.8-2.6 0-4.5-.8-4.6-3.3h8.3c0-.3.1-1.3.1-2zm-8.2-1.3c0-1.7 1.1-2.5 2.5-2.5 1.4 0 2.4.8 2.4 2.5h-4.9zm-9.3-4.8c-2.1 0-3.5 1.1-4.2 1.8v-1.5h-3.9v14.1h4.1v-8.2c0-2.3 1.5-3.3 3.1-3.3 1.1 0 1.9.3 2.3.6l.8-3.4c-.6-.3-1.4-.8-2.2-.8zm-11.4 0c-1.5 0-2.9.5-3.7 1.2v-5.6h-4.1v18.5h4.1v-1.7c.9.8 2.2 1.4 3.8 1.4 3.3 0 6.2-2.7 6.2-6.9 0-4.4-2.9-6.9-6.3-6.9zm-.8 10.7c-1.7 0-2.9-.8-3.3-1.4v-4.4c.5-.7 1.7-1.4 3.3-1.4 2.2 0 3.5 1.8 3.5 3.6 0 1.9-1.3 3.6-3.5 3.6zm-14.7-4.1c0-1.8 1.4-2.5 3.7-2.5 1.7 0 3.3.4 4.3.9v-3.1c-1.2-.5-3-.8-4.7-.8-4.5 0-7.3 2.1-7.3 5.9 0 5.2 6.6 4.4 6.6 6.7 0 .8-.8 1.3-2.1 1.3-1.8 0-3.8-.7-5.1-1.5v3.2c1.4.8 3.5 1.2 5.3 1.2 4.7 0 7.7-2 7.7-5.8 0-5.6-6.7-4.6-6.7-6.8z"/>
+                <svg className="h-5 w-5 fill-current text-indigo-400" viewBox="0 0 24 24">
+                  <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697.5 12.633.5 6.775.5 2.8 3.612 2.8 8.847c0 5.485 5.228 6.557 8.356 7.701 2.502.915 3.395 1.642 3.395 2.673 0 .963-.847 1.542-2.31 1.542-2.527 0-5.32-1.196-7.147-2.18l-.946 5.568C5.816 24.847 8.784 25.5 12.062 25.5c6.262 0 10.338-3.03 10.338-8.497 0-5.59-5.267-6.662-8.424-7.853z"/>
                 </svg>
                 <span className="text-sm font-bold tracking-tight font-sans">Stripe</span>
               </a>

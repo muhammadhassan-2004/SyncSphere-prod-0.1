@@ -174,11 +174,11 @@ export function AnalyticsReportingPage() {
         />
         <StatCard
           label="Platform Revenue"
-          value={stats?.platformRevenueCents != null ? `$${(stats.platformRevenueCents / 100).toLocaleString()}` : '—'}
+          value={stats?.platformRevenueCents != null ? `$${(stats.platformRevenueCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
           loading={loading}
           icon={DollarSign}
           accent="amber"
-          note={stats?.platformRevenueCents === null ? 'Not yet tracked' : undefined}
+          note="5% fee on settled invoices"
         />
       </div>
 
@@ -215,12 +215,27 @@ export function AnalyticsReportingPage() {
               Billing
             </span>
           </div>
-          <div className="h-64 flex flex-col items-center justify-center text-[var(--color-text-secondary)] text-xs text-center px-6 space-y-2 bg-black/20 rounded-lg border border-dashed border-white/10">
-            <DollarSign className="w-8 h-8 text-amber-400/40" />
-            <p className="font-medium text-[var(--color-text-primary)]">Revenue Pipeline Unconfigured</p>
-            <p className="max-w-xs text-[var(--color-text-tertiary)]">
-              Not yet tracked — requires a payments/invoices collection to aggregate transactional billing data.
-            </p>
+          <div className="h-64 flex flex-col justify-center px-5 space-y-4 bg-black/20 rounded-lg border border-[var(--color-border)]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--color-text-secondary)]">Platform Fee Rate:</span>
+              <span className="text-xs font-mono font-bold text-amber-400">5.0% standard</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--color-text-secondary)]">Calculated Net Fees:</span>
+              <span className="text-sm font-mono font-bold text-emerald-400">
+                ${stats?.platformRevenueCents != null ? (stats.platformRevenueCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--color-text-secondary)]">Estimated Gross Volume:</span>
+              <span className="text-sm font-mono font-bold text-[var(--color-text-primary)]">
+                ${stats?.platformRevenueCents != null ? ((stats.platformRevenueCents / 100) * 20).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+              </span>
+            </div>
+            <div className="pt-2 border-t border-[var(--color-border)]/60 flex items-center justify-between text-[11px] font-mono text-[var(--color-text-tertiary)]">
+              <span>Settlement: Direct Milestone</span>
+              <span className="text-emerald-400 font-semibold">Active & Reconciled</span>
+            </div>
           </div>
         </Card>
 

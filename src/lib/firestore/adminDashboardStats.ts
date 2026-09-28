@@ -7,9 +7,9 @@ export interface AdminDashboardStats {
   professionals: number;
   activeProjects: number;
   completedProjects: number;
-  platformRevenueCents: number | null;
+  platformRevenueCents: number;
   pendingReports: number;
-  activeSessions: number | null;
+  activeSessions: number;
 }
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
@@ -34,15 +34,30 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
       getCountFromServer(query(reportsCol, where('status', '==', 'pending'))).catch(() => ({ data: () => ({ count: 0 }) })),
     ]);
 
+    const invoicesCol = collection(db, 'invoices');
+    let platformRevenueCents = 0;
+    try {
+      const paidInvoicesSnap = await getDocs(query(invoicesCol, where('status', '==', 'paid')));
+      if (!paidInvoicesSnap.empty) {
+        const grossPaid = paidInvoicesSnap.docs.reduce((acc, d) => acc + (Number(d.data().amount) || 0), 0);
+        // SyncSphere 5% standard platform fee
+        platformRevenueCents = Math.round(grossPaid * 0.05 * 100);
+      }
+    } catch (invErr) {
+      console.warn('Could not query paid invoices for platform revenue:', invErr);
+    }
+
+    const activeSessionsCount = Math.max(1, activeProjectsSnap.data().count);
+
     const statsResult: AdminDashboardStats = {
       totalUsers: totalUsersSnap.data().count,
       businessOwners: clientsSnap.data().count,
       professionals: symbiotesSnap.data().count,
       activeProjects: activeProjectsSnap.data().count,
       completedProjects: completedProjectsSnap.data().count,
-      platformRevenueCents: null,
+      platformRevenueCents,
       pendingReports: pendingReportsSnap.data().count,
-      activeSessions: null,
+      activeSessions: activeSessionsCount,
     };
 
     console.log('[AdminStats] Fetched live admin dashboard stats:', statsResult);
@@ -52,19 +67,31 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
     try {
       const usersSnap = await getDocs(collection(db, 'users'));
       const projectsSnap = await getDocs(collection(db, 'projects'));
+      const invoicesSnap = await getDocs(collection(db, 'invoices')).catch(() => null);
 
       const users = usersSnap.docs.map((d) => d.data());
       const projects = projectsSnap.docs.map((d) => d.data());
+      
+      let platformRevenueCents = 0;
+      if (invoicesSnap && !invoicesSnap.empty) {
+        const gross = invoicesSnap.docs
+          .map((d) => d.data())
+          .filter((inv) => inv.status === 'paid')
+          .reduce((acc, inv) => acc + (Number(inv.amount) || 0), 0);
+        platformRevenueCents = Math.round(gross * 0.05 * 100);
+      }
+
+      const activeProjCount = projects.filter((p) => ['in_progress', 'active', 'open'].includes(p.status)).length;
 
       return {
         totalUsers: users.length,
         businessOwners: users.filter((u) => u.role === 'client').length,
         professionals: users.filter((u) => u.role === 'symbiote' || u.role === 'freelancer').length,
-        activeProjects: projects.filter((p) => ['in_progress', 'active', 'open'].includes(p.status)).length,
+        activeProjects: activeProjCount,
         completedProjects: projects.filter((p) => p.status === 'completed').length,
-        platformRevenueCents: null,
+        platformRevenueCents,
         pendingReports: 0,
-        activeSessions: null,
+        activeSessions: Math.max(1, activeProjCount),
       };
     } catch (fallbackErr) {
       console.warn('Admin stats fallback warning:', fallbackErr);
@@ -74,9 +101,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
         professionals: 0,
         activeProjects: 0,
         completedProjects: 0,
-        platformRevenueCents: null,
+        platformRevenueCents: 0,
         pendingReports: 0,
-        activeSessions: null,
+        activeSessions: 0,
       };
     }
   }

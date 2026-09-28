@@ -219,10 +219,14 @@ export const InvoiceManagementPage: React.FC = () => {
 
     try {
       const cleanLast4 = cardNumber.replace(/\D/g, '').slice(-4) || '4242';
+      const token = firebaseUser ? await firebaseUser.getIdToken() : '';
 
       const response = await fetch('/api/payments/process-invoice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           invoiceId: activeInvoice.id,
           amount: activeInvoice.amount,

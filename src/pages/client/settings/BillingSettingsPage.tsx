@@ -112,11 +112,11 @@ export const BillingSettingsPage: React.FC = () => {
     const updatedBillingInfo: BillingInfo = {
       planName: 'Enterprise Plan',
       status: 'active',
-      renewalDate: 'September 1, 2026',
+      renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       amountPerMonth: 1299,
       paymentMethodLast4: cardNumber.slice(-4) || '4242',
       paymentMethodBrand: 'Visa',
-      billingEmail: firebaseUser?.email || 'billing@aetherdynamics.ai',
+      billingEmail: firebaseUser?.email || userProfile?.email || '',
     };
 
     try {
@@ -157,7 +157,7 @@ export const BillingSettingsPage: React.FC = () => {
 OFFICIAL BILLING RECEIPT — INVOICE ${inv.invoiceNumber || inv.id}
 ================================================
 Date: ${new Date(inv.createdAt).toLocaleDateString('en-US', { dateStyle: 'full' })}
-Billing Entity: ${billingInfo.billingEmail || 'Aether Dynamics Inc.'}
+Billing Entity: ${userProfile?.displayName || userProfile?.companyName || billingInfo.billingEmail || 'SyncSphere Client'}
 Plan Tier: ${inv.title || 'Growth Plan Monthly Subscription'}
 Amount Paid: $${typeof inv.amount === 'number' ? inv.amount.toFixed(2) : '—'} USD
 Payment Status: PAID via Stripe (${billingInfo.paymentMethodBrand} •••• ${billingInfo.paymentMethodLast4})

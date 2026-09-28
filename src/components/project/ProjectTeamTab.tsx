@@ -19,6 +19,7 @@ import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
 import { StatusPill } from '@/src/components/ui/badge';
 import { EmptyState } from '@/src/components/ui/EmptyState';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   Users,
   UserCheck,
@@ -367,7 +368,13 @@ export const ProjectTeamTab: React.FC<ProjectTeamTabProps> = ({
 
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5">
-                    <Avatar name={member.displayName} initials={member.avatarInitials} src={member.avatarUrl} size="lg" statusDot="online" />
+                    <Avatar
+                      name={member.displayName}
+                      initials={member.avatarInitials}
+                      src={member.avatarUrl}
+                      size="lg"
+                      statusDot={getUserStatusDot(realUsersMap.get(member.uid) || (member as any))}
+                    />
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="text-sm font-bold text-[var(--color-text-primary)] leading-tight">{member.displayName}</h4>

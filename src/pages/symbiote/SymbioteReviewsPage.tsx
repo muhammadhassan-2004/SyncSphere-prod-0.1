@@ -315,8 +315,8 @@ export const SymbioteReviewsPage: React.FC = () => {
         ) : reviews.length > 0 ? (
           <div className="space-y-4">
             {reviews.map((rev) => {
-              const clientName = rev.clientName || 'Apex Corp Client';
-              const projName = rev.projectName || 'Autonomous Multi-Agent Swarm';
+              const clientName = rev.clientName || 'Enterprise Client';
+              const projName = rev.projectName || 'Enterprise AI Milestone';
               const score = rev.ratings?.overall || 5;
               const dateStr = rev.createdAt ? new Date(rev.createdAt).toLocaleDateString() : 'Recently';
 

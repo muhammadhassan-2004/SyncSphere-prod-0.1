@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Project, WorkspaceTask, WorkspaceMilestone } from '@/src/types/firestore';
-import { createTask, updateTask, approveTaskByClient, requestTaskChanges } from '@/src/lib/firestore/workspace';
+import { Project, WorkspaceTask, WorkspaceMilestone, TaskComment } from '@/src/types/firestore';
+import {
+  createTask,
+  updateTask,
+  updateTaskStatus,
+  approveTaskByClient,
+  requestTaskChanges,
+  addTaskComment,
+  updateTaskComment,
+  deleteTaskComment,
+} from '@/src/lib/firestore/workspace';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Avatar } from '@/src/components/ui/avatar';
+import { useAuth } from '@/src/context/AuthContext';
 import {
   X,
   Plus,
@@ -18,6 +28,11 @@ import {
   Layers,
   Sparkles,
   RotateCcw,
+  Shield,
+  MessageSquare,
+  Send,
+  Trash2,
+  Edit3,
 } from 'lucide-react';
 
 interface TaskDrawerProps {
@@ -47,6 +62,11 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
 }) => {
   const projectId = project.id || '';
   const approvedTeamMembers = project.teamMembers || [];
+  const { userProfile, firebaseUser } = useAuth();
+  const isClientOrAdmin =
+    userProfile?.role === 'client' ||
+    userProfile?.role === 'admin' ||
+    firebaseUser?.uid === (project.clientId || project.ownerId);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -54,6 +74,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
   const [status, setStatus] = useState<'todo' | 'in_progress' | 'review' | 'completed'>(initialStatus);
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [estimatedHours, setEstimatedHours] = useState<number>(8);
+  const [maxHours, setMaxHours] = useState<number | ''>('');
   const [actualHours, setActualHours] = useState<number>(0);
   const [milestoneId, setMilestoneId] = useState<string>('');
   const [dependencyTaskId, setDependencyTaskId] = useState<string>('');
@@ -63,6 +84,13 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  // Comments state
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   // Review & Approval Action State
   const [isReviewProcessing, setIsReviewProcessing] = useState(false);
@@ -103,6 +131,64 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
     }
   };
 
+  // Task Comment Handlers
+  const handleAddComment = async () => {
+    if (!newCommentText.trim() || !projectId || !taskToEdit?.id) return;
+    setSubmittingComment(true);
+    try {
+      const authorName = userProfile?.displayName || firebaseUser?.displayName || 'User';
+      const authorRole = (userProfile?.role || 'client') as 'client' | 'symbiote' | 'admin';
+      const authorAvatarUrl = userProfile?.avatarUrl || firebaseUser?.photoURL || undefined;
+      const authorAvatarInitials = userProfile?.avatarInitials || authorName.slice(0, 2).toUpperCase();
+
+      const newComm = await addTaskComment(projectId, taskToEdit.id, {
+        authorId: firebaseUser?.uid || '',
+        authorName,
+        authorRole,
+        authorAvatarUrl,
+        authorAvatarInitials,
+        content: newCommentText.trim(),
+      });
+
+      setComments((prev) => [...prev, newComm]);
+      setNewCommentText('');
+      onTaskSaved?.();
+    } catch (err: any) {
+      console.error('Failed to add comment:', err);
+      setErrorText('Failed to post comment.');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleSaveEditComment = async (commentId: string) => {
+    if (!editingCommentText.trim() || !projectId || !taskToEdit?.id) return;
+    try {
+      await updateTaskComment(projectId, taskToEdit.id, commentId, editingCommentText.trim());
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === commentId ? { ...c, content: editingCommentText.trim(), updatedAt: new Date().toISOString() } : c
+        )
+      );
+      setEditingCommentId(null);
+      setEditingCommentText('');
+      onTaskSaved?.();
+    } catch (err) {
+      console.error('Failed to update comment:', err);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!projectId || !taskToEdit?.id) return;
+    try {
+      await deleteTaskComment(projectId, taskToEdit.id, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      onTaskSaved?.();
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+    }
+  };
+
   // Populate form on edit or open
   useEffect(() => {
     if (!isOpen) return;
@@ -113,9 +199,14 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
       setStatus(taskToEdit.status || 'todo');
       setPriority(taskToEdit.priority || 'medium');
       setEstimatedHours(taskToEdit.estimatedHours || 8);
+      setMaxHours(taskToEdit.maxHours !== undefined ? taskToEdit.maxHours : (taskToEdit.estimatedHours || 8));
       setActualHours(taskToEdit.actualHours || 0);
       setMilestoneId(taskToEdit.milestoneId || (milestones[0]?.id || ''));
       setDependencyTaskId(taskToEdit.dependencyTaskId || '');
+      setComments(taskToEdit.comments || []);
+      setNewCommentText('');
+      setEditingCommentId(null);
+      setEditingCommentText('');
 
       if (taskToEdit.assignees && taskToEdit.assignees.length > 0) {
         setSelectedAssigneeUids(taskToEdit.assignees.map((a) => a.uid));
@@ -129,11 +220,16 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
       setDescription('');
       setStatus(initialStatus);
       setPriority('medium');
-      setEstimatedHours(8);
+      setEstimatedHours(5);
+      setMaxHours(5);
       setActualHours(0);
       setMilestoneId(initialMilestoneId || (milestones[0]?.id || ''));
       setDependencyTaskId('');
       setSelectedAssigneeUids([]);
+      setComments([]);
+      setNewCommentText('');
+      setEditingCommentId(null);
+      setEditingCommentText('');
     }
     setErrorText(null);
   }, [isOpen, taskToEdit, initialMilestoneId, initialStatus, milestones]);
@@ -141,6 +237,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
   if (!isOpen) return null;
 
   const toggleAssignee = (uid: string) => {
+    if (!isClientOrAdmin) return;
     if (selectedAssigneeUids.includes(uid)) {
       setSelectedAssigneeUids(selectedAssigneeUids.filter((id) => id !== uid));
     } else {
@@ -150,12 +247,46 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Freelancer Task Guard: Freelancers cannot edit task metadata (title, description, budget, milestones).
+    // Freelancers only update task progress status (To Do, In Progress, Submit for Review).
+    if (!isClientOrAdmin) {
+      if (taskToEdit && taskToEdit.id && status !== taskToEdit.status) {
+        setIsSubmitting(true);
+        setErrorText(null);
+        try {
+          if (status === 'review') {
+            const { submitTaskForReview } = await import('@/src/lib/firestore/workspace');
+            await submitTaskForReview(projectId, taskToEdit.id);
+          } else {
+            await updateTaskStatus(projectId, taskToEdit.id, status);
+          }
+          if (onTaskSaved) onTaskSaved();
+          onClose();
+        } catch (err: any) {
+          setErrorText(err?.message || 'Failed to update task status.');
+        } finally {
+          setIsSubmitting(false);
+        }
+      } else {
+        onClose();
+      }
+      return;
+    }
+
     if (!title.trim()) {
       setErrorText('Task Title is required.');
       return;
     }
     if (!milestoneId) {
       setErrorText('Please select or create a Milestone for this task.');
+      return;
+    }
+
+    const finalEstimated = Math.max(0.5, Number(estimatedHours) || 1);
+    const finalMax = maxHours !== '' ? Math.max(finalEstimated, Number(maxHours)) : finalEstimated;
+    if (maxHours !== '' && Number(maxHours) < finalEstimated) {
+      setErrorText('Max Cap Limit cannot be less than Estimated Hours.');
       return;
     }
 
@@ -183,7 +314,9 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
         description: description.trim(),
         status,
         priority,
-        estimatedHours: Number(estimatedHours) || 0,
+        estimatedHours: finalEstimated,
+        minHours: finalEstimated,
+        maxHours: finalMax,
         actualHours: Number(actualHours) || 0,
         milestoneId,
         milestoneTitle: selectedMilestoneObj?.title || selectedMilestoneObj?.name || 'Milestone',
@@ -244,9 +377,16 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
-                {taskToEdit ? 'Edit Workspace Task' : 'Add New Task'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-[var(--color-text-primary)]">
+                  {taskToEdit ? (isClientOrAdmin ? 'Edit Workspace Task' : 'Task Details & Progress') : 'Add New Task'}
+                </h2>
+                {!isClientOrAdmin && (
+                  <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[10px] font-mono border border-cyan-500/25">
+                    Specialist View
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-[var(--color-text-secondary)] font-mono">
                 Project: {project.title || 'Untitled Project'}
               </p>
@@ -291,47 +431,56 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 </div>
               )}
 
-              {showRevisionInput && (
-                <div className="space-y-1.5 pt-1">
-                  <label className="text-[10.5px] font-mono text-amber-300 font-bold block">
-                    Revision Feedback for Specialist:
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={revisionNotes}
-                    onChange={(e) => setRevisionNotes(e.target.value)}
-                    placeholder="Describe what needs to be changed or updated..."
-                    className="w-full text-xs p-2 rounded bg-[var(--color-background)] border border-amber-500/40 text-[var(--color-text-primary)] focus:outline-none focus:border-amber-400"
-                  />
+              {isClientOrAdmin ? (
+                <>
+                  {showRevisionInput && (
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[10.5px] font-mono text-amber-300 font-bold block">
+                        Revision Feedback for Specialist:
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={revisionNotes}
+                        onChange={(e) => setRevisionNotes(e.target.value)}
+                        placeholder="Describe what needs to be changed or updated..."
+                        className="w-full text-xs p-2 rounded bg-[var(--color-background)] border border-amber-500/40 text-[var(--color-text-primary)] focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* ACTION BUTTONS */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={isReviewProcessing}
+                      onClick={handleApproveFromDrawer}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{isReviewProcessing ? 'Processing...' : 'Approve & Mark Done'}</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isReviewProcessing}
+                      onClick={handleRequestChangesFromDrawer}
+                      className="border-amber-500/40 text-amber-400 hover:bg-amber-500/15 text-xs flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{showRevisionInput ? (isReviewProcessing ? 'Submitting...' : 'Confirm Changes') : 'Request Changes'}</span>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="pt-2 border-t border-amber-500/20 text-xs text-amber-300/90 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Submitted for Client Review. You will be notified once reviewed by the client.</span>
                 </div>
               )}
-
-              {/* ACTION BUTTONS */}
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={isReviewProcessing}
-                  onClick={handleApproveFromDrawer}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{isReviewProcessing ? 'Processing...' : 'Approve & Mark Done'}</span>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isReviewProcessing}
-                  onClick={handleRequestChangesFromDrawer}
-                  className="border-amber-500/40 text-amber-400 hover:bg-amber-500/15 text-xs flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{showRevisionInput ? (isReviewProcessing ? 'Submitting...' : 'Confirm Changes') : 'Request Changes'}</span>
-                </Button>
-              </div>
             </div>
           )}
 
@@ -344,7 +493,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Implement OAuth2 Refresh Token Rotation"
-              className="text-xs"
+              disabled={!isClientOrAdmin}
+              className="text-xs disabled:opacity-80 disabled:cursor-not-allowed"
               required
             />
           </div>
@@ -359,7 +509,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detailed description of deliverables, specs, or acceptance criteria..."
               rows={3}
-              className="w-full p-2.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[8px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] resize-none"
+              disabled={!isClientOrAdmin}
+              className="w-full p-2.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[8px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] resize-none disabled:opacity-80 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -371,7 +522,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 <span>Belongs to Milestone <span className="text-[var(--color-danger-red)]">*</span></span>
               </label>
 
-              {onOpenCreateMilestoneModal && (
+              {onOpenCreateMilestoneModal && isClientOrAdmin && (
                 <button
                   type="button"
                   onClick={onOpenCreateMilestoneModal}
@@ -386,7 +537,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             {milestones.length === 0 ? (
               <div className="p-3 bg-[var(--color-warning-amber)]/10 border border-[var(--color-warning-amber)]/30 rounded-[6px] text-xs text-[var(--color-warning-amber)] flex items-center justify-between gap-2">
                 <span>No milestones created yet for this project.</span>
-                {onOpenCreateMilestoneModal && (
+                {onOpenCreateMilestoneModal && isClientOrAdmin && (
                   <Button
                     type="button"
                     variant="secondary"
@@ -402,7 +553,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               <select
                 value={milestoneId}
                 onChange={(e) => setMilestoneId(e.target.value)}
-                className="w-full p-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer"
+                disabled={!isClientOrAdmin}
+                className="w-full p-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
                 required
               >
                 {milestones.map((ms) => (
@@ -424,8 +576,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 value={status}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val === 'completed' && taskToEdit?.status !== 'completed') {
-                    setErrorText('Tasks must be submitted for Client Review before they can be marked Completed.');
+                  if (val === 'completed' && taskToEdit?.status !== 'completed' && !isClientOrAdmin) {
+                    setErrorText('Specialists must submit tasks for Client Review before they can be marked Completed.');
                     return;
                   }
                   setErrorText(null);
@@ -436,7 +588,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 <option value="todo">To Do</option>
                 <option value="in_progress">In Progress</option>
                 <option value="review">Submit for Review</option>
-                <option value="completed" disabled={taskToEdit?.status !== 'completed'}>
+                <option value="completed" disabled={!isClientOrAdmin && taskToEdit?.status !== 'completed'}>
                   Completed (Client Approved)
                 </option>
               </select>
@@ -449,7 +601,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as any)}
-                className="w-full p-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer"
+                disabled={!isClientOrAdmin}
+                className="w-full p-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -459,47 +612,68 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             </div>
           </div>
 
-          {/* 5. ESTIMATED HOURS & ACTUAL HOURS (READ-ONLY FROZEN) */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[11px] font-mono font-bold text-[var(--color-text-secondary)] uppercase flex items-center gap-1">
-                <Clock className="w-3 h-3 text-[var(--color-accent-cyan)]" />
-                <span>Estimated Hours</span>
-              </label>
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={estimatedHours}
-                onChange={(e) => setEstimatedHours(parseFloat(e.target.value) || 0)}
-                placeholder="e.g. 12"
-                className="text-xs"
-              />
-              <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
-                Target estimated effort
-              </p>
+          {/* 5. ESTIMATED HOURS & MAX CAP LIMIT (CLEAN & SIMPLIFIED) */}
+          <div className="p-3.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[10px] space-y-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-[var(--color-text-secondary)] uppercase">
+              <Clock className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
+              <span>Time & Effort (Hours)</span>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[11px] font-mono font-bold text-[var(--color-text-secondary)] uppercase flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[var(--color-success-green)]" />
-                  <span>Actual Logged Hours</span>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Estimated Hours */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-mono font-bold text-[var(--color-text-primary)] block">
+                  Estimated Hours <span className="text-[var(--color-danger-red)]">*</span>
+                </label>
+                <Input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={estimatedHours || ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                    const numVal = val === '' ? 0 : val;
+                    setEstimatedHours(numVal);
+                    if (maxHours === '' || maxHours === estimatedHours) {
+                      setMaxHours(val);
+                    }
+                  }}
+                  placeholder="e.g. 8"
+                  disabled={!isClientOrAdmin}
+                  className="text-xs disabled:opacity-80 disabled:cursor-not-allowed"
+                  required
+                />
+              </div>
+
+              {/* Max Cap Limit */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-mono font-bold text-[var(--color-text-primary)] block">
+                  Max Cap Limit (Hours)
+                </label>
+                <Input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={maxHours}
+                  onChange={(e) => setMaxHours(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  placeholder="e.g. 10"
+                  disabled={!isClientOrAdmin}
+                  className="text-xs disabled:opacity-80 disabled:cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            {/* If editing existing task with logged hours, show summary */}
+            {taskToEdit && Number(actualHours) > 0 && (
+              <div className="pt-2 border-t border-[var(--color-border)]/50 flex items-center justify-between text-xs font-mono">
+                <span className="text-[var(--color-text-secondary)] flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-emerald-400" /> Logged Hours:
                 </span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-mono border border-amber-500/30">
-                  Auto-Logged
-                </span>
-              </label>
-              <div className="h-10 px-3 flex items-center justify-between rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-mono font-semibold text-[var(--color-success-green)] select-none">
-                <span>{Number(actualHours || 0).toFixed(1)} hrs</span>
-                <span className="text-[10px] text-[var(--color-text-secondary)] font-normal">
-                  {estimatedHours > 0 ? `${Math.round(((actualHours || 0) / estimatedHours) * 100)}%` : '0%'}
+                <span className="font-bold text-emerald-400">
+                  {Number(actualHours).toFixed(1)} hrs
                 </span>
               </div>
-              <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
-                Tracked via live stopwatch
-              </p>
-            </div>
+            )}
           </div>
 
           {/* 6. TASK DEPENDENCY */}
@@ -511,7 +685,8 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             <select
               value={dependencyTaskId}
               onChange={(e) => setDependencyTaskId(e.target.value)}
-              className="w-full p-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer"
+              disabled={!isClientOrAdmin}
+              className="w-full p-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[6px] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed"
             >
               <option value="">None (No Task Dependency)</option>
               {availableDependencyTasks.map((t) => (
@@ -520,12 +695,9 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 </option>
               ))}
             </select>
-            <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
-              Link a task that must be completed prior to starting this task.
-            </p>
           </div>
 
-          {/* 7. TEAM MEMBER ASSIGNMENT (FILTERED EXCLUSIVELY FROM APPROVED PROJECT TEAM MEMBERS) */}
+          {/* 7. TEAM MEMBER ASSIGNMENT */}
           <div className="p-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[10px] space-y-2.5">
             <label className="text-[11px] font-mono font-bold text-[var(--color-text-primary)] uppercase flex items-center justify-between">
               <span className="flex items-center gap-1.5">
@@ -549,30 +721,33 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                     <div
                       key={member.uid}
                       onClick={() => toggleAssignee(member.uid)}
-                      className={`p-2 rounded-[8px] border transition-all flex items-center justify-between cursor-pointer ${
+                      className={`p-2 rounded-[8px] border transition-all flex items-center justify-between ${
+                        isClientOrAdmin ? 'cursor-pointer' : 'cursor-default'
+                      } ${
                         isSelected
                           ? 'bg-[var(--color-accent-cyan)]/10 border-[var(--color-accent-cyan)] text-[var(--color-text-primary)]'
                           : 'bg-[var(--color-surface)] border-[var(--color-border)] hover:border-[var(--color-text-secondary)] text-[var(--color-text-secondary)]'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-3 min-w-0">
                         <Avatar
                           name={member.displayName}
                           initials={member.avatarInitials}
                           size="sm"
+                          className="shrink-0"
                         />
-                        <div>
-                          <p className="text-xs font-bold text-[var(--color-text-primary)]">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-[var(--color-text-primary)] truncate">
                             {member.displayName}
                           </p>
-                          <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
+                          <p className="text-[10px] text-[var(--color-text-secondary)] font-mono truncate">
                             {member.role}
                           </p>
                         </div>
                       </div>
 
                       <div
-                        className={`w-4 h-4 rounded border flex items-center justify-center ${
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ml-2 ${
                           isSelected
                             ? 'bg-[var(--color-accent-cyan)] border-[var(--color-accent-cyan)] text-black'
                             : 'border-[var(--color-border)]'
@@ -586,6 +761,158 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               </div>
             )}
           </div>
+
+          {/* 8. TASK COMMENTS & WORK LOG */}
+          {taskToEdit && (
+            <div className="p-3.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[10px] space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono font-bold text-[var(--color-text-primary)] uppercase flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
+                  <span>Task Comments & Notes</span>
+                </span>
+                <span className="text-[10px] font-mono text-[var(--color-text-secondary)] px-2 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border)]">
+                  {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+                </span>
+              </div>
+
+              {/* COMMENTS LIST */}
+              {comments.length === 0 ? (
+                <div className="p-3 bg-[var(--color-surface)]/60 border border-dashed border-[var(--color-border)] rounded-[8px] text-[11px] text-[var(--color-text-secondary)] text-center">
+                  No comments on this task yet. Add notes or progress updates below.
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                  {comments.map((comm) => {
+                    const isAuthor = comm.authorId === firebaseUser?.uid || userProfile?.role === 'admin';
+                    const isEditing = editingCommentId === comm.id;
+
+                    return (
+                      <div
+                        key={comm.id}
+                        className="p-2.5 rounded-[8px] bg-[var(--color-surface)] border border-[var(--color-border)] space-y-1.5 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Avatar
+                              src={comm.authorAvatarUrl}
+                              name={comm.authorName}
+                              initials={comm.authorAvatarInitials || comm.authorName.slice(0, 2).toUpperCase()}
+                              size="xs"
+                            />
+                            <span className="font-bold text-[var(--color-text-primary)] text-xs">
+                              {comm.authorName}
+                            </span>
+                            <span
+                              className={`text-[9px] font-mono px-1.5 py-0.2 rounded uppercase ${
+                                comm.authorRole === 'client'
+                                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              }`}
+                            >
+                              {comm.authorRole === 'client' ? 'Client' : 'Freelancer'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-[var(--color-text-secondary)]">
+                              {new Date(comm.createdAt).toLocaleDateString('default', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                            {isAuthor && !isEditing && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCommentId(comm.id);
+                                    setEditingCommentText(comm.content);
+                                  }}
+                                  className="text-[var(--color-text-secondary)] hover:text-cyan-400 transition-colors p-0.5 cursor-pointer"
+                                  title="Edit comment"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comm.id)}
+                                  className="text-[var(--color-text-secondary)] hover:text-rose-400 transition-colors p-0.5 cursor-pointer"
+                                  title="Delete comment"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {isEditing ? (
+                          <div className="space-y-1.5 pt-1">
+                            <textarea
+                              rows={2}
+                              value={editingCommentText}
+                              onChange={(e) => setEditingCommentText(e.target.value)}
+                              className="w-full text-xs p-2 rounded bg-[var(--color-background)] border border-[var(--color-accent-cyan)]/50 text-[var(--color-text-primary)] focus:outline-none resize-none"
+                            />
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="secondary"
+                                onClick={() => setEditingCommentId(null)}
+                                className="h-6 text-[10px] px-2 cursor-pointer"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="primary"
+                                onClick={() => handleSaveEditComment(comm.id)}
+                                className="h-6 text-[10px] px-2 bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer"
+                              >
+                                Save
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[var(--color-text-secondary)] whitespace-pre-line text-xs leading-relaxed">
+                            {comm.content}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ADD COMMENT INPUT */}
+              <div className="pt-2 border-t border-[var(--color-border)] flex items-start gap-2">
+                <textarea
+                  rows={2}
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  placeholder="Write a comment or progress note..."
+                  className="flex-1 p-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[8px] text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] resize-none"
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={submittingComment || !newCommentText.trim()}
+                  onClick={handleAddComment}
+                  className="h-9 px-3 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white text-xs font-bold rounded-[8px] flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  {submittingComment ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>Post</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </form>
 
         {/* DRAWER FOOTER */}
@@ -607,7 +934,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             ) : (
               <CheckCircle2 className="w-3.5 h-3.5" />
             )}
-            <span>{taskToEdit ? 'Update Task' : 'Save Task'}</span>
+            <span>{isClientOrAdmin ? (taskToEdit ? 'Update Task' : 'Save Task') : 'Update Status'}</span>
           </Button>
         </div>
       </div>

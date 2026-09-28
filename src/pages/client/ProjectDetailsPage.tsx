@@ -135,6 +135,17 @@ export const ProjectDetailsPage: React.FC = () => {
     }
   };
 
+  const handleReopenProject = async () => {
+    if (!projectId) return;
+    try {
+      const { reopenProject } = await import('@/src/lib/firestore/workspace');
+      await reopenProject(projectId);
+      setToastMessage('Project reopened back to In Progress mode.');
+    } catch (err: any) {
+      console.error('Error reopening project:', err);
+    }
+  };
+
   const pendingReviewsCount = useMemo(() => {
     return tasks.filter((t) => t.status === 'review').length;
   }, [tasks]);
@@ -236,6 +247,7 @@ export const ProjectDetailsPage: React.FC = () => {
         onOpenAddTeamModal={() => setIsAddTeamModalOpen(true)}
         onEditProject={() => navigate(`/client/projects/new/step-1?draftId=${projectId}`)}
         onCompleteProject={handleCompleteProject}
+        onReopenProject={handleReopenProject}
         approvedTeamCount={approvedTeamCount}
         filesCount={filesCount}
         pendingReviewsCount={pendingReviewsCount}

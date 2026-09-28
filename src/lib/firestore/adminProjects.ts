@@ -15,12 +15,20 @@ import { db } from '@/src/lib/firebase';
 
 export type ProjectOversightStatus = 'active' | 'completed' | 'in_review' | 'suspended';
 
+export interface ProjectProfessional {
+  uid?: string;
+  name: string;
+  avatarUrl?: string;
+  role?: string;
+}
+
 export interface ProjectOversightRow {
   id: string;
   projectIdLabel: string; // "PRJ-2041" style
   name: string;
   businessOwnerName: string;
   professionalNames: string[]; // for avatar stack
+  professionals: ProjectProfessional[]; // with real avatarUrl & role
   budgetDisplay: string; // e.g. "$10,000 - $15,000"
   budget: number | null;
   previousBudget: number | null; // for strikethrough-revised-budget display
@@ -46,12 +54,18 @@ const statusRawValues: Record<ProjectOversightStatus, string[]> = {
 };
 
 export function formatProjectBudget(data: any): string {
-  if (!data) return 'Negotiable';
+  if (!data) return 'Dynamic Per-Task';
+
+  // If project has tracked cumulative spend from approved tasks
+  if (data.totalSpent != null && !isNaN(Number(data.totalSpent))) {
+    const spent = Number(data.totalSpent);
+    return `$${spent.toLocaleString()} spent`;
+  }
 
   // If string, return formatted
   if (typeof data === 'string') {
     const trimmed = data.trim();
-    if (!trimmed) return 'Negotiable';
+    if (!trimmed) return 'Dynamic Per-Task';
     return trimmed.startsWith('$') ? trimmed : `$${trimmed}`;
   }
 
@@ -106,7 +120,7 @@ export function formatProjectBudget(data: any): string {
     return data.budget.startsWith('$') ? data.budget : `$${data.budget}`;
   }
 
-  return 'Negotiable';
+  return 'Dynamic Per-Task';
 }
 
 export async function getProjectsPage(
@@ -136,15 +150,40 @@ export async function getProjectsPage(
       snap = await getDocs(collection(db, 'projects'));
     }
 
-    // Resolve owner user profiles to get real company / business owner names
+    // Resolve owner & professional user profiles from Firestore
     const ownerIds = Array.from(
       new Set(snap.docs.map((d) => d.data().ownerId || d.data().clientId).filter(Boolean))
     ) as string[];
 
-    const userMap = new Map<string, string>();
-    if (ownerIds.length > 0) {
+    const proIds = Array.from(
+      new Set(
+        snap.docs.flatMap((d) => {
+          const data = d.data();
+          const ids: string[] = [];
+          if (data.assignedSymbioteId) ids.push(data.assignedSymbioteId);
+          if (data.symbioteId) ids.push(data.symbioteId);
+          if (Array.isArray(data.teamMembers)) {
+            data.teamMembers.forEach((m: any) => {
+              if (m?.uid) ids.push(m.uid);
+              if (m?.id) ids.push(m.id);
+            });
+          }
+          if (typeof data.assignedTo === 'string' && data.assignedTo.length > 15) {
+            ids.push(data.assignedTo);
+          } else if (data.assignedTo?.uid || data.assignedTo?.id) {
+            ids.push(data.assignedTo.uid || data.assignedTo.id);
+          }
+          return ids;
+        }).filter(Boolean)
+      )
+    ) as string[];
+
+    const allLookupUids = Array.from(new Set([...ownerIds, ...proIds]));
+    const userProfileMap = new Map<string, { name: string; avatarUrl?: string; companyName?: string }>();
+
+    if (allLookupUids.length > 0) {
       await Promise.all(
-        ownerIds.map(async (uid) => {
+        allLookupUids.map(async (uid) => {
           try {
             const uDoc = await getDoc(doc(db, 'users', uid));
             if (uDoc.exists()) {
@@ -155,12 +194,22 @@ export async function getProjectsPage(
                 uData.displayName ||
                 uData.fullName ||
                 (uData.firstName ? `${uData.firstName} ${uData.lastName || ''}`.trim() : null);
-              if (cName) {
-                userMap.set(uid, cName);
-              }
+              const pName =
+                uData.displayName ||
+                uData.fullName ||
+                (uData.firstName ? `${uData.firstName} ${uData.lastName || ''}`.trim() : null) ||
+                uData.email?.split('@')[0] ||
+                'User';
+              const avatar = uData.avatarUrl || uData.photoURL || undefined;
+
+              userProfileMap.set(uid, {
+                name: pName,
+                avatarUrl: avatar,
+                companyName: cName || undefined,
+              });
             }
           } catch (e) {
-            console.warn('Failed to lookup user doc for project owner:', uid, e);
+            console.warn('Failed to lookup user doc for admin projects:', uid, e);
           }
         })
       );
@@ -192,27 +241,81 @@ export async function getProjectsPage(
         }
       }
 
-      // Professional Names extraction
-      let professionalNames: string[] = [];
-      if (Array.isArray(data.teamMemberNames)) {
-        professionalNames = data.teamMemberNames;
-      } else if (Array.isArray(data.assignedToNames)) {
-        professionalNames = data.assignedToNames;
-      } else if (Array.isArray(data.teamMembers)) {
-        professionalNames = data.teamMembers.map((m: any) => m.displayName || m.name || 'Pro');
-      } else if (Array.isArray(data.professionals)) {
-        professionalNames = data.professionals.map((p: any) => (typeof p === 'string' ? p : p?.name || 'Pro'));
+      // Professional Profiles extraction with avatarUrl
+      const professionals: ProjectProfessional[] = [];
+
+      if (Array.isArray(data.teamMembers) && data.teamMembers.length > 0) {
+        data.teamMembers.forEach((m: any) => {
+          const profile = m?.uid ? userProfileMap.get(m.uid) : null;
+          professionals.push({
+            uid: m?.uid,
+            name: m.displayName || m.name || profile?.name || 'Pro',
+            avatarUrl: m.avatarUrl || profile?.avatarUrl,
+            role: m.role || 'Team Member',
+          });
+        });
+      } else if (data.assignedSymbioteId || data.symbioteId) {
+        const sUid = data.assignedSymbioteId || data.symbioteId;
+        const profile = userProfileMap.get(sUid);
+        professionals.push({
+          uid: sUid,
+          name: data.assignedSymbioteName || profile?.name || 'Freelancer',
+          avatarUrl: data.assignedSymbioteAvatarUrl || profile?.avatarUrl,
+          role: 'Assigned Freelancer',
+        });
+      } else if (Array.isArray(data.teamMemberNames) && data.teamMemberNames.length > 0) {
+        data.teamMemberNames.forEach((nameStr: string) => {
+          professionals.push({ name: nameStr });
+        });
+      } else if (Array.isArray(data.assignedToNames) && data.assignedToNames.length > 0) {
+        data.assignedToNames.forEach((nameStr: string) => {
+          professionals.push({ name: nameStr });
+        });
+      } else if (Array.isArray(data.professionals) && data.professionals.length > 0) {
+        data.professionals.forEach((p: any) => {
+          if (typeof p === 'string') {
+            professionals.push({ name: p });
+          } else {
+            const profile = p.uid ? userProfileMap.get(p.uid) : null;
+            professionals.push({
+              uid: p.uid,
+              name: p.name || profile?.name || 'Pro',
+              avatarUrl: p.avatarUrl || profile?.avatarUrl,
+              role: p.role,
+            });
+          }
+        });
       } else if (data.assignedTo) {
-        professionalNames = [typeof data.assignedTo === 'string' ? data.assignedTo : data.assignedTo?.name || 'Pro'];
+        if (typeof data.assignedTo === 'string') {
+          const profile = userProfileMap.get(data.assignedTo);
+          professionals.push({
+            uid: data.assignedTo,
+            name: profile?.name || data.assignedTo,
+            avatarUrl: profile?.avatarUrl,
+          });
+        } else {
+          const proUid = data.assignedTo.uid || data.assignedTo.id;
+          const profile = proUid ? userProfileMap.get(proUid) : null;
+          professionals.push({
+            uid: proUid,
+            name: data.assignedTo.name || profile?.name || 'Pro',
+            avatarUrl: data.assignedTo.avatarUrl || profile?.avatarUrl,
+            role: data.assignedTo.role,
+          });
+        }
       }
 
+      const professionalNames = professionals.map((p) => p.name);
+
       const ownerUid = data.ownerId || data.clientId;
+      const ownerProfile = ownerUid ? userProfileMap.get(ownerUid) : null;
       const businessOwnerName =
         data.companyName ||
         data.clientName ||
         data.ownerName ||
         data.createdByName ||
-        (ownerUid ? userMap.get(ownerUid) : null) ||
+        ownerProfile?.companyName ||
+        ownerProfile?.name ||
         'Client';
 
       const budgetDisplay = formatProjectBudget(data);
@@ -231,6 +334,7 @@ export async function getProjectsPage(
         name: data.title || data.name || 'Untitled Project',
         businessOwnerName,
         professionalNames,
+        professionals,
         budgetDisplay,
         budget: numericBudget,
         previousBudget: typeof data.originalBudget === 'number' ? data.originalBudget : null,

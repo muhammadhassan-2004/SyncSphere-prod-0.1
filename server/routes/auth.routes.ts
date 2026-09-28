@@ -119,18 +119,8 @@ authRouter.post("/send-signup-verification", authOtpRateLimiter, async (req: Req
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
 
-    let adminLink = `${dynamicAppUrl}/verify-email?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`;
-
-    try {
-      const adminApp = getFirebaseAdmin();
-      if (adminApp) {
-        const authAdmin = getAuth(adminApp);
-        adminLink = await authAdmin.generateEmailVerificationLink(cleanEmail, {
-          url: `${dynamicAppUrl}/verify-email?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`,
-          handleCodeInApp: true,
-        });
-      }
-    } catch {}
+    // Direct branded SyncSphere verification URL with OTP and email query parameters
+    const adminLink = `${dynamicAppUrl}/verify-email?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`;
 
     const record: VerificationRecord = {
       email: cleanEmail,
@@ -350,18 +340,8 @@ authRouter.post("/send-reset-code", authOtpRateLimiter, async (req: Request, res
     const protocol = req.protocol || "https";
     const dynamicAppUrl = `${protocol}://${host}`;
 
-    let adminLink = `${dynamicAppUrl}/reset/new-password?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`;
-
-    try {
-      const adminApp = getFirebaseAdmin();
-      if (adminApp) {
-        const authAdmin = getAuth(adminApp);
-        adminLink = await authAdmin.generatePasswordResetLink(cleanEmail, {
-          url: `${dynamicAppUrl}/reset/new-password?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`,
-          handleCodeInApp: true,
-        });
-      }
-    } catch {}
+    // Direct branded SyncSphere password reset URL with OTP and email query parameters
+    const adminLink = `${dynamicAppUrl}/reset/new-password?code=${otpCode}&email=${encodeURIComponent(cleanEmail)}`;
 
     // Try to resolve user's role and UID from Firebase Auth & Firestore
     let userRole = "client";

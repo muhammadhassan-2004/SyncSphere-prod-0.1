@@ -1,80 +1,101 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/src/context/AuthContext';
 import { ToastProvider } from '@/src/lib/toast/ToastProvider';
 import { ProtectedRoute } from '@/src/components/ProtectedRoute';
 import { PublicOnlyRoute } from '@/src/components/PublicOnlyRoute';
 import { PortalShell } from '@/src/components/layout/PortalShell';
+import { ScrollToTop } from '@/src/components/layout/ScrollToTop';
+import { Loader2 } from 'lucide-react';
+
+// Route-level code-splitting helper for named exports
+const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
+  loader: () => Promise<T>,
+  key: K
+) => lazy(() => loader().then((m) => ({ default: m[key] })));
 
 // Public pages
-import { LandingPage } from '@/src/pages/public/LandingPage';
-import { PortalSelectPage } from '@/src/pages/public/PortalSelectPage';
-import { SignupPage } from '@/src/pages/public/SignupPage';
-import { VerifyEmailPage } from '@/src/pages/public/VerifyEmailPage';
-import { LoginPage } from '@/src/pages/public/LoginPage';
-import { ForgotPasswordPage } from '@/src/pages/public/ForgotPasswordPage';
-import { ResetVerifyPage } from '@/src/pages/public/ResetVerifyPage';
-import { ResetNewPasswordPage } from '@/src/pages/public/ResetNewPasswordPage';
-import { AuthActionPage } from '@/src/pages/public/AuthActionPage';
-import { OnboardingPage } from '@/src/pages/public/OnboardingPage';
-import { AboutPage } from '@/src/pages/public/AboutPage';
-import { HelpCenterPage } from '@/src/pages/public/HelpCenterPage';
-import { ContactUsPage } from '@/src/pages/public/ContactUsPage';
-import { PrivacyPolicyPage } from '@/src/pages/public/PrivacyPolicyPage';
-import { TermsOfServicePage } from '@/src/pages/public/TermsOfServicePage';
+const LandingPage = lazyNamed(() => import('@/src/pages/public/LandingPage'), 'LandingPage');
+const PortalSelectPage = lazyNamed(() => import('@/src/pages/public/PortalSelectPage'), 'PortalSelectPage');
+const SignupPage = lazyNamed(() => import('@/src/pages/public/SignupPage'), 'SignupPage');
+const VerifyEmailPage = lazyNamed(() => import('@/src/pages/public/VerifyEmailPage'), 'VerifyEmailPage');
+const LoginPage = lazyNamed(() => import('@/src/pages/public/LoginPage'), 'LoginPage');
+const ForgotPasswordPage = lazyNamed(() => import('@/src/pages/public/ForgotPasswordPage'), 'ForgotPasswordPage');
+const ResetVerifyPage = lazyNamed(() => import('@/src/pages/public/ResetVerifyPage'), 'ResetVerifyPage');
+const ResetNewPasswordPage = lazyNamed(() => import('@/src/pages/public/ResetNewPasswordPage'), 'ResetNewPasswordPage');
+const AuthActionPage = lazyNamed(() => import('@/src/pages/public/AuthActionPage'), 'AuthActionPage');
+const OnboardingPage = lazyNamed(() => import('@/src/pages/public/OnboardingPage'), 'OnboardingPage');
+const AboutPage = lazyNamed(() => import('@/src/pages/public/AboutPage'), 'AboutPage');
+const HelpCenterPage = lazyNamed(() => import('@/src/pages/public/HelpCenterPage'), 'HelpCenterPage');
+const ContactUsPage = lazyNamed(() => import('@/src/pages/public/ContactUsPage'), 'ContactUsPage');
+const PrivacyPolicyPage = lazyNamed(() => import('@/src/pages/public/PrivacyPolicyPage'), 'PrivacyPolicyPage');
+const TermsOfServicePage = lazyNamed(() => import('@/src/pages/public/TermsOfServicePage'), 'TermsOfServicePage');
 
-// Portal pages
-import { ClientDashboardPage } from '@/src/pages/client/ClientDashboardPage';
-import { ClientProjectsPage } from '@/src/pages/client/ClientProjectsPage';
-import { CreateProjectStep1Page } from '@/src/pages/client/CreateProjectStep1Page';
-import { CreateProjectStep2Page } from '@/src/pages/client/CreateProjectStep2Page';
-import { CreateProjectStep3Page } from '@/src/pages/client/CreateProjectStep3Page';
-import { CreateProjectStep4Page } from '@/src/pages/client/CreateProjectStep4Page';
-import { ProjectDetailsPage } from '@/src/pages/client/ProjectDetailsPage';
-import { FindTalentPage } from '@/src/pages/client/FindTalentPage';
-import { ProfessionalProfilePage } from '@/src/pages/client/ProfessionalProfilePage';
-import { AIMatchingPage } from '@/src/pages/client/AIMatchingPage';
-import { ApplicationsPage } from '@/src/pages/client/ApplicationsPage';
-import { MessagingPage } from '@/src/pages/client/MessagingPage';
-import { WorkspaceKanbanPage } from '@/src/pages/client/WorkspaceKanbanPage';
-import { TimeTrackingPage } from '@/src/pages/client/TimeTrackingPage';
-import { FilesAndDocsPage } from '@/src/pages/client/FilesAndDocsPage';
-import { InvoiceManagementPage } from '@/src/pages/client/InvoiceManagementPage';
-import { LeaveReviewPage } from '@/src/pages/client/LeaveReviewPage';
-import { ClientReviewsPage } from '@/src/pages/client/ClientReviewsPage';
-import { CompanyProfilePage } from '@/src/pages/client/settings/CompanyProfilePage';
-import { NotificationsSettingsPage } from '@/src/pages/client/settings/NotificationsSettingsPage';
-import { SecuritySettingsPage } from '@/src/pages/client/settings/SecuritySettingsPage';
-import { BillingSettingsPage } from '@/src/pages/client/settings/BillingSettingsPage';
-import { NotificationsFeedPage } from '@/src/pages/client/NotificationsFeedPage';
-import { EditProfilePage } from '@/src/pages/client/EditProfilePage';
-import { PlaceholderSettingsTab } from '@/src/pages/client/settings/PlaceholderSettingsTab';
-import { SymbioteDashboardPage } from '@/src/pages/symbiote/SymbioteDashboardPage';
-import { SymbioteBrowseProjectsPage } from '@/src/pages/symbiote/SymbioteBrowseProjectsPage';
-import { SymbioteProjectDetailPage } from '@/src/pages/symbiote/SymbioteProjectDetailPage';
-import { SymbioteInvitationsPage } from '@/src/pages/symbiote/SymbioteInvitationsPage';
-import { SymbioteProjectsPage } from '@/src/pages/symbiote/SymbioteProjectsPage';
-import { SymbioteWorkspacePage } from '@/src/pages/symbiote/SymbioteWorkspacePage';
-import { SymbioteMessagingPage } from '@/src/pages/symbiote/SymbioteMessagingPage';
-import { SymbioteTimeTrackingPage } from '@/src/pages/symbiote/SymbioteTimeTrackingPage';
-import { SymbioteEarningsPage } from '@/src/pages/symbiote/SymbioteEarningsPage';
-import { SymbioteInvoicesPage } from '@/src/pages/symbiote/SymbioteInvoicesPage';
-import { SymbioteReviewsPage } from '@/src/pages/symbiote/SymbioteReviewsPage';
-import { SymbioteProfilePage } from '@/src/pages/symbiote/SymbioteProfilePage';
-import { SymbioteSettingsPage } from '@/src/pages/symbiote/SymbioteSettingsPage';
-import { AdminDashboardPage } from '@/src/pages/admin/AdminDashboardPage';
-import { UserManagementPage } from '@/src/pages/admin/UserManagementPage';
-import { UserDetailPage } from '@/src/pages/admin/UserDetailPage';
-import { ProjectOversightPage } from '@/src/pages/admin/ProjectOversightPage';
-import { PlatformMonitoringPage } from '@/src/pages/admin/PlatformMonitoringPage';
-import { AuditLogsPage } from '@/src/pages/admin/AuditLogsPage';
-import { AnalyticsReportingPage } from '@/src/pages/admin/AnalyticsReportingPage';
-import { ReportsCenterPage } from '@/src/pages/admin/ReportsCenterPage';
-import { AdminSettingsPage } from '@/src/pages/admin/AdminSettingsPage';
-import { PlaceholderPageRoute } from '@/src/pages/PlaceholderPageRoute';
+// Client Portal pages
+const ClientDashboardPage = lazyNamed(() => import('@/src/pages/client/ClientDashboardPage'), 'ClientDashboardPage');
+const ClientProjectsPage = lazyNamed(() => import('@/src/pages/client/ClientProjectsPage'), 'ClientProjectsPage');
+const CreateProjectStep1Page = lazyNamed(() => import('@/src/pages/client/CreateProjectStep1Page'), 'CreateProjectStep1Page');
+const CreateProjectStep2Page = lazyNamed(() => import('@/src/pages/client/CreateProjectStep2Page'), 'CreateProjectStep2Page');
+const CreateProjectStep3Page = lazyNamed(() => import('@/src/pages/client/CreateProjectStep3Page'), 'CreateProjectStep3Page');
+const CreateProjectStep4Page = lazyNamed(() => import('@/src/pages/client/CreateProjectStep4Page'), 'CreateProjectStep4Page');
+const ProjectDetailsPage = lazyNamed(() => import('@/src/pages/client/ProjectDetailsPage'), 'ProjectDetailsPage');
+const FindTalentPage = lazyNamed(() => import('@/src/pages/client/FindTalentPage'), 'FindTalentPage');
+const ProfessionalProfilePage = lazyNamed(() => import('@/src/pages/client/ProfessionalProfilePage'), 'ProfessionalProfilePage');
+const AIMatchingPage = lazyNamed(() => import('@/src/pages/client/AIMatchingPage'), 'AIMatchingPage');
+const ApplicationsPage = lazyNamed(() => import('@/src/pages/client/ApplicationsPage'), 'ApplicationsPage');
+const MessagingPage = lazyNamed(() => import('@/src/pages/client/MessagingPage'), 'MessagingPage');
+const WorkspaceKanbanPage = lazyNamed(() => import('@/src/pages/client/WorkspaceKanbanPage'), 'WorkspaceKanbanPage');
+const TimeTrackingPage = lazyNamed(() => import('@/src/pages/client/TimeTrackingPage'), 'TimeTrackingPage');
+const FilesAndDocsPage = lazyNamed(() => import('@/src/pages/client/FilesAndDocsPage'), 'FilesAndDocsPage');
+const InvoiceManagementPage = lazyNamed(() => import('@/src/pages/client/InvoiceManagementPage'), 'InvoiceManagementPage');
+const LeaveReviewPage = lazyNamed(() => import('@/src/pages/client/LeaveReviewPage'), 'LeaveReviewPage');
+const ClientReviewsPage = lazyNamed(() => import('@/src/pages/client/ClientReviewsPage'), 'ClientReviewsPage');
+const CompanyProfilePage = lazyNamed(() => import('@/src/pages/client/settings/CompanyProfilePage'), 'CompanyProfilePage');
+const NotificationsSettingsPage = lazyNamed(() => import('@/src/pages/client/settings/NotificationsSettingsPage'), 'NotificationsSettingsPage');
+const SecuritySettingsPage = lazyNamed(() => import('@/src/pages/client/settings/SecuritySettingsPage'), 'SecuritySettingsPage');
+const BillingSettingsPage = lazyNamed(() => import('@/src/pages/client/settings/BillingSettingsPage'), 'BillingSettingsPage');
+const NotificationsFeedPage = lazyNamed(() => import('@/src/pages/client/NotificationsFeedPage'), 'NotificationsFeedPage');
+const EditProfilePage = lazyNamed(() => import('@/src/pages/client/EditProfilePage'), 'EditProfilePage');
 
-import { DevPrimitivesQA } from '@/src/components/DevPrimitivesQA';
-import { ScrollToTop } from '@/src/components/layout/ScrollToTop';
+// Symbiote / Freelancer Portal pages
+const SymbioteDashboardPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteDashboardPage'), 'SymbioteDashboardPage');
+const SymbioteBrowseProjectsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteBrowseProjectsPage'), 'SymbioteBrowseProjectsPage');
+const SymbioteProjectDetailPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteProjectDetailPage'), 'SymbioteProjectDetailPage');
+const SymbioteInvitationsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteInvitationsPage'), 'SymbioteInvitationsPage');
+const SymbioteProjectsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteProjectsPage'), 'SymbioteProjectsPage');
+const SymbioteWorkspacePage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteWorkspacePage'), 'SymbioteWorkspacePage');
+const SymbioteMessagingPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteMessagingPage'), 'SymbioteMessagingPage');
+const SymbioteTimeTrackingPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteTimeTrackingPage'), 'SymbioteTimeTrackingPage');
+const SymbioteEarningsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteEarningsPage'), 'SymbioteEarningsPage');
+const SymbioteInvoicesPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteInvoicesPage'), 'SymbioteInvoicesPage');
+const SymbioteReviewsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteReviewsPage'), 'SymbioteReviewsPage');
+const SymbioteProfilePage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteProfilePage'), 'SymbioteProfilePage');
+const SymbioteSettingsPage = lazyNamed(() => import('@/src/pages/symbiote/SymbioteSettingsPage'), 'SymbioteSettingsPage');
+
+// Admin Portal pages
+const AdminDashboardPage = lazyNamed(() => import('@/src/pages/admin/AdminDashboardPage'), 'AdminDashboardPage');
+const UserManagementPage = lazyNamed(() => import('@/src/pages/admin/UserManagementPage'), 'UserManagementPage');
+const UserDetailPage = lazyNamed(() => import('@/src/pages/admin/UserDetailPage'), 'UserDetailPage');
+const ProjectOversightPage = lazyNamed(() => import('@/src/pages/admin/ProjectOversightPage'), 'ProjectOversightPage');
+const PlatformMonitoringPage = lazyNamed(() => import('@/src/pages/admin/PlatformMonitoringPage'), 'PlatformMonitoringPage');
+const AuditLogsPage = lazyNamed(() => import('@/src/pages/admin/AuditLogsPage'), 'AuditLogsPage');
+const AnalyticsReportingPage = lazyNamed(() => import('@/src/pages/admin/AnalyticsReportingPage'), 'AnalyticsReportingPage');
+const ReportsCenterPage = lazyNamed(() => import('@/src/pages/admin/ReportsCenterPage'), 'ReportsCenterPage');
+const AdminSettingsPage = lazyNamed(() => import('@/src/pages/admin/AdminSettingsPage'), 'AdminSettingsPage');
+
+// Dev QA Bench
+const DevPrimitivesQA = lazyNamed(() => import('@/src/components/DevPrimitivesQA'), 'DevPrimitivesQA');
+
+function PageLoadingFallback() {
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center bg-[var(--color-background)]">
+      <div className="flex items-center gap-3 bg-[var(--color-surface)] px-5 py-3 rounded-full border border-[var(--color-border)] shadow-lg">
+        <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+        <span className="text-xs font-medium text-[var(--color-text-secondary)]">Loading...</span>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -83,9 +104,10 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <div id="syncsphere-app" className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased">
-          <Routes>
-            {/* PUBLIC ROUTES */}
-            <Route path="/" element={<LandingPage />} />
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Routes>
+                {/* PUBLIC ROUTES */}
+                <Route path="/" element={<LandingPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/help" element={<HelpCenterPage />} />
             <Route path="/contact" element={<ContactUsPage />} />
@@ -117,8 +139,19 @@ export default function App() {
             <Route path="/__/auth/action" element={<AuthActionPage />} />
 
 
-            {/* DEV QA BENCH */}
-            <Route path="/dev/primitives" element={<DevPrimitivesQA />} />
+            {/* DEV QA BENCH - Guarded for Admin and DEV environments only */}
+            <Route
+              path="/dev/primitives"
+              element={
+                import.meta.env.DEV ? (
+                  <DevPrimitivesQA />
+                ) : (
+                  <ProtectedRoute requiredRole="admin">
+                    <DevPrimitivesQA />
+                  </ProtectedRoute>
+                )
+              }
+            />
 
             {/* CLIENT PORTAL GROUP (Blue Accent) */}
             <Route
@@ -223,9 +256,10 @@ export default function App() {
             {/* FALLBACK CATCH-ALL */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </div>
-      </BrowserRouter>
-      </ToastProvider>
-    </AuthProvider>
+        </Suspense>
+      </div>
+    </BrowserRouter>
+    </ToastProvider>
+  </AuthProvider>
   );
 }

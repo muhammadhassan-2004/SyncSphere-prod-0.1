@@ -4,6 +4,8 @@ import {
   createStripePaymentIntent,
   executeInvoicePayment,
 } from "../stripeService";
+import { requireAuth } from "../middleware/auth";
+import { getFirebaseAdmin, getAdminFirestore } from "../firebaseAdmin";
 
 export const paymentsRouter = Router();
 
@@ -18,7 +20,7 @@ paymentsRouter.get("/config", (req: Request, res: Response) => {
 });
 
 // 2. Create Payment Intent
-paymentsRouter.post("/create-intent", async (req: Request, res: Response) => {
+paymentsRouter.post("/create-intent", requireAuth, async (req: Request, res: Response) => {
   try {
     const { amount, currency = "USD", invoiceId, clientId, clientEmail } = req.body;
 
@@ -48,8 +50,11 @@ paymentsRouter.post("/create-intent", async (req: Request, res: Response) => {
 });
 
 // 3. Process & Confirm Invoice Payment with Milestone Settlement
-paymentsRouter.post("/process-invoice", async (req: Request, res: Response) => {
+paymentsRouter.post("/process-invoice", requireAuth, async (req: Request, res: Response) => {
   try {
+    const caller = (req as any).user;
+    const callerUid = caller?.uid;
+
     const {
       invoiceId,
       amount,
@@ -74,11 +79,34 @@ paymentsRouter.post("/process-invoice", async (req: Request, res: Response) => {
       });
     }
 
+    // Verify invoice ownership in Firestore
+    const adminApp = getFirebaseAdmin();
+    if (adminApp) {
+      const firestoreAdmin = getAdminFirestore(adminApp);
+      const invoiceDoc = await firestoreAdmin.collection("invoices").doc(String(invoiceId)).get();
+      if (invoiceDoc.exists) {
+        const invData = invoiceDoc.data();
+        const invoiceClientId = invData?.clientId || invData?.clientUid;
+        const isClientOwner = Boolean(
+          (invoiceClientId && invoiceClientId === callerUid) ||
+          (clientId && clientId === callerUid)
+        );
+        const isAdminCaller = caller?.role === "admin" || caller?.admin === true;
+
+        if (!isClientOwner && !isAdminCaller) {
+          return res.status(403).json({
+            success: false,
+            error: "Forbidden: You are not authorized to settle this invoice.",
+          });
+        }
+      }
+    }
+
     const result = await executeInvoicePayment({
       invoiceId: String(invoiceId),
       amount: Number(amount),
       currency: String(currency),
-      clientId: String(clientId || "client-demo"),
+      clientId: String(callerUid || clientId || "client-demo"),
       clientEmail: clientEmail ? String(clientEmail) : undefined,
       clientName: clientName ? String(clientName) : undefined,
       symbioteId: String(symbioteId || ""),

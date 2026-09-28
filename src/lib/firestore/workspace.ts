@@ -11,7 +11,8 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '@/src/lib/firebase';
-import { WorkspaceTask, WorkspaceMilestone, WorkspaceUpdate, MilestoneDeliverableItem } from '@/src/types/firestore';
+import { WorkspaceTask, WorkspaceMilestone, WorkspaceUpdate, MilestoneDeliverableItem, TaskComment } from '@/src/types/firestore';
+export type { WorkspaceTask, WorkspaceMilestone, WorkspaceUpdate, MilestoneDeliverableItem, TaskComment };
 import { createNotification } from '@/src/lib/firestore/notifications';
 import { logProjectActivity } from '@/src/lib/firestore/projectActivity';
 import { createProjectFile } from '@/src/lib/firestore/projectFiles';
@@ -123,9 +124,9 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
       const projData = projSnap.data();
       let targetStatus = projData.status || 'in_progress';
 
-      if (isCompleted) {
-        targetStatus = 'completed';
-      } else if (projData.status === 'completed' && calculatedProgress < 100 && (totalTasks > 0 || totalMilestones > 0)) {
+      // Completing a project is an explicit client action triggered via "Complete Project" button.
+      // Do NOT automatically force project status to 'completed' here.
+      if (projData.status === 'completed' && calculatedProgress < 100 && (totalTasks > 0 || totalMilestones > 0)) {
         targetStatus = 'in_progress';
       } else if (projData.status === 'open' && (calculatedProgress > 0 || totalTasks > 0)) {
         targetStatus = 'in_progress';
@@ -143,6 +144,59 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
         progressPercent: calculatedProgress,
         updatedAt: new Date().toISOString(),
       };
+
+      // Backfill and maintain accurate totalSpent from completed tasks or milestones
+      const completedTasksList = allTasks.filter(t => t.status === 'completed');
+      let calculatedTasksSpend = 0;
+      const projTeam = projData.teamMembers || [];
+
+      for (const t of completedTasksList) {
+        if (t.settledAmount && Number(t.settledAmount) > 0) {
+          calculatedTasksSpend += Number(t.settledAmount);
+        } else {
+          const assigneeUid = t.assigneeId || (t.assignees && t.assignees[0]?.uid) || projData.assignedSymbioteId || projData.symbioteId;
+          const member = projTeam.find((m: any) => m.uid === assigneeUid);
+          const rate = Number(member?.hourlyRate) || Number(t.settledRate) || Number(projData.hourlyRate) || 75;
+          const hours = Number(t.actualHours || t.actualTotalHours || t.estimatedHours || 1);
+          calculatedTasksSpend += Math.max(25, Math.round(hours * rate));
+        }
+      }
+
+      // Check completed milestones with explicit amounts if no task spend
+      if (calculatedTasksSpend === 0 && allMilestones.length > 0) {
+        const completedMilestonesList = allMilestones.filter(m => m.completed);
+        for (const m of completedMilestonesList) {
+          const mAmount = Number((m as any).amount || 0);
+          if (mAmount > 0) {
+            calculatedTasksSpend += mAmount;
+          }
+        }
+      }
+
+      const existingSpent = Number(projData.totalSpent || 0);
+      if (calculatedTasksSpend > 0 && (existingSpent === 0 || existingSpent < calculatedTasksSpend)) {
+        updates.totalSpent = calculatedTasksSpend;
+        updates.totalSettledTasks = completedTasksList.length || allMilestones.filter(m => m.completed).length;
+      } else if (projData.status === 'completed' && existingSpent === 0 && calculatedTasksSpend === 0) {
+        // Fallback for completed legacy projects: check project invoices or agreed deliverable budget
+        try {
+          const invQuery = query(collection(db, 'invoices'), where('projectId', '==', projectId));
+          const invSnap = await getDocs(invQuery);
+          let invSpend = 0;
+          invSnap.docs.forEach(d => {
+            const inv = d.data();
+            invSpend += Number(inv.amount || 0);
+          });
+          if (invSpend > 0) {
+            updates.totalSpent = invSpend;
+            updates.totalSettledTasks = invSnap.size;
+          } else if (projData.budget && typeof projData.budget === 'number' && projData.budget > 0) {
+            updates.totalSpent = projData.budget;
+          }
+        } catch (invErr) {
+          console.debug('[workspace] Could not fetch project invoices during sync:', invErr);
+        }
+      }
 
       if (targetStatus !== projData.status) {
         updates.status = targetStatus;
@@ -423,13 +477,15 @@ export async function approveTaskByClient(
       });
     }
 
-    // Auto-approve any time entries logged against this task
+    // Auto-approve any time entries logged against this task and sum logged hours
+    let totalLoggedTimeHours = 0;
     try {
       const timeColRef = collection(db, 'time_entries');
       const timeQuery = query(timeColRef, where('taskId', '==', taskId));
       const timeSnap = await getDocs(timeQuery);
       for (const tDoc of timeSnap.docs) {
         const entryData = tDoc.data() as Record<string, any>;
+        totalLoggedTimeHours += Number(entryData.hours || 0);
         if (entryData?.status !== 'approved') {
           await updateDoc(tDoc.ref, {
             status: 'approved',
@@ -442,104 +498,155 @@ export async function approveTaskByClient(
       console.warn('Could not auto-approve time entries for task:', timeErr);
     }
 
-    // AUTO-INVOICING CHECK: Check if all tasks in the milestone are now completed
-    if (taskData?.milestoneId) {
-      const milestoneId = taskData.milestoneId;
-      const tasksCol = collection(db, 'workspaces', projectId, 'tasks');
-      const allTasksSnap = await getDocs(tasksCol);
-      const milestoneTasks = allTasksSnap.docs
-        .map(d => ({ id: d.id, ...d.data() } as WorkspaceTask))
-        .filter(t => t.milestoneId === milestoneId);
+    // DIRECT PER-TASK INVOICING AT FREELANCER'S AGREED RATE
+    try {
+      const projRef = doc(db, 'projects', projectId);
+      const projSnap = await getDoc(projRef);
+      if (projSnap.exists()) {
+        const projData = projSnap.data();
+        const clientId = projData.ownerId || projData.clientId;
+        const assigneeUid =
+          taskData?.assigneeId ||
+          (taskData?.assignees && taskData.assignees[0]?.uid) ||
+          projData.assignedSymbioteId ||
+          projData.symbioteId;
+        const assigneeName =
+          taskData?.assigneeName ||
+          (taskData?.assignees && taskData.assignees[0]?.displayName) ||
+          projData.assignedSymbioteName ||
+          'Specialist';
 
-      const allMilestoneTasksCompleted = milestoneTasks.length > 0 && milestoneTasks.every(t => (t.id === taskId ? true : t.status === 'completed'));
+        // 1. Determine freelancer agreed hourly rate from teamMembers or user profile
+        const assignedMember = (projData.teamMembers || []).find((m: any) => m.uid === assigneeUid);
+        let freelancerRate = Number(assignedMember?.hourlyRate);
 
-      if (allMilestoneTasksCompleted) {
-        // Automatically mark milestone completed if not already
-        const msRef = doc(db, 'workspaces', projectId, 'milestones', milestoneId);
-        const msSnap = await getDoc(msRef);
-        if (msSnap.exists()) {
-          const msData = msSnap.data() as WorkspaceMilestone;
-          if (!msData.completed) {
-            await updateDoc(msRef, { completed: true, updatedAt: new Date().toISOString() });
-          }
-
-          // Fetch project to retrieve client & symbiote information
-          const projRef = doc(db, 'projects', projectId);
-          const projSnap = await getDoc(projRef);
-          if (projSnap.exists()) {
-            const projData = projSnap.data();
-            const clientId = projData.ownerId || projData.clientId;
-            const symbioteId = taskData.assigneeId || projData.assignedSymbioteId || projData.symbioteId;
-            const symbioteName = taskData.assigneeName || projData.assignedSymbioteName || 'Specialist';
-
-            // Calculate milestone amount or task-based total
-            const totalHours = milestoneTasks.reduce((sum, t) => sum + (Number(t.actualHours || t.estimatedHours || 0)), 0);
-            const hourlyRate = Number(projData.hourlyRate) || 50;
-            const calculatedAmount = msData.rate && Number(msData.rate) > 0 
-              ? Number(msData.rate) 
-              : Math.max(100, Math.round(totalHours > 0 ? totalHours * hourlyRate : (msData.hoursAllocated || 20) * hourlyRate));
-
-            if (clientId && symbioteId && !msData.invoiced) {
-              const { createInvoice } = await import('@/src/lib/firestore/invoices');
-              const now = new Date();
-              const dueDate = new Date();
-              dueDate.setDate(dueDate.getDate() + 14);
-              const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-              const invId = await createInvoice({
-                invoiceNumber,
-                clientId,
-                symbioteId,
-                symbioteName,
-                projectId,
-                projectName: projData.title || 'Project Deliverable',
-                title: `Milestone Deliverable: ${msData.title || msData.name || 'Completed Milestone'}`,
-                description: `Auto-generated invoice for approved milestone "${msData.title || msData.name || 'Milestone'}" including all verified tasks.`,
-                amount: calculatedAmount,
-                issuedDate: now.toISOString().slice(0, 10),
-                dueDate: dueDate.toISOString().slice(0, 10),
-                status: 'pending',
-                lineItems: milestoneTasks.map(t => ({
-                  description: t.title,
-                  amount: Math.round((Number(t.actualHours || t.estimatedHours || 1)) * hourlyRate),
-                })),
-              });
-
-              await updateDoc(msRef, {
-                invoiced: true,
-                invoiceNumber,
-                invoiceId: invId || '',
-                updatedAt: new Date().toISOString(),
-              });
-
-              await logProjectActivity(projectId, {
-                title: 'Invoice Auto-Generated',
-                description: `Invoice ${invoiceNumber} ($${calculatedAmount.toLocaleString()}) was automatically created for completed milestone "${msData.title || msData.name || 'Milestone'}".`,
-                type: 'invoice',
-              });
-
-              // Check if all project workspace milestones are now completed
-              const allMsCol = collection(db, 'workspaces', projectId, 'milestones');
-              const allMsSnap = await getDocs(allMsCol);
-              const allMilestones = allMsSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkspaceMilestone));
-              const isEntireProjectCompleted = allMilestones.length > 0 && allMilestones.every(m => m.id === milestoneId ? true : m.completed);
-
-              if (isEntireProjectCompleted) {
-                await updateDoc(projRef, {
-                  status: 'completed',
-                  progressPct: 100,
-                  completedAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                });
-                await logProjectActivity(projectId, {
-                  title: 'Project 100% Completed',
-                  description: 'All milestones and verified deliverables have been successfully completed.',
-                  type: 'milestone',
-                });
+        if (!freelancerRate || freelancerRate <= 0) {
+          try {
+            if (assigneeUid) {
+              const userRef = doc(db, 'users', assigneeUid);
+              const userSnap = await getDoc(userRef);
+              if (userSnap.exists()) {
+                const uData = userSnap.data();
+                freelancerRate = Number(uData.hourlyRate || uData.rate);
               }
             }
+          } catch (uErr) {
+            console.warn('Could not fetch user profile rate:', uErr);
           }
         }
+
+        if (!freelancerRate || freelancerRate <= 0) {
+          freelancerRate = Number(projData.maxBudget) || Number(projData.hourlyRate) || 75;
+        }
+
+        // 2. Determine actual execution hours
+        const taskLogged = Number(taskData?.actualHours || taskData?.actualTotalHours || 0);
+        const effectiveHours = taskLogged > 0
+          ? taskLogged
+          : (totalLoggedTimeHours > 0 ? totalLoggedTimeHours : (Number(taskData?.estimatedHours) || 1));
+        const taskAmount = Math.max(25, Math.round(effectiveHours * freelancerRate));
+
+        // 3. Generate itemized direct invoice for this task (if not already invoiced)
+        if (clientId && assigneeUid && !taskData?.invoiced) {
+          const { createInvoice } = await import('@/src/lib/firestore/invoices');
+          const now = new Date();
+          const dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 14);
+          const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+          const invId = await createInvoice({
+            invoiceNumber,
+            clientId,
+            symbioteId: assigneeUid,
+            symbioteName: assigneeName,
+            projectId,
+            projectName: projData.title || 'Project Deliverable',
+            title: `Task Settlement: ${taskTitle}`,
+            description: `Direct task settlement for approved task "${taskTitle}" (${effectiveHours} hrs @ $${freelancerRate}/hr).`,
+            amount: taskAmount,
+            issuedDate: now.toISOString().slice(0, 10),
+            dueDate: dueDate.toISOString().slice(0, 10),
+            status: 'pending',
+            lineItems: [
+              {
+                description: `${taskTitle} — Execution (${effectiveHours}h @ $${freelancerRate}/hr)`,
+                amount: taskAmount,
+              },
+            ],
+          });
+
+          await updateDoc(docRef, {
+            invoiced: true,
+            invoiceNumber,
+            invoiceId: invId || '',
+            settledAmount: taskAmount,
+            settledRate: freelancerRate,
+            settledHours: effectiveHours,
+            updatedAt: new Date().toISOString(),
+          });
+
+          // Atomically accumulate totalSpent and totalSettledTasks on project
+          try {
+            const currentTotalSpent = Number(projData.totalSpent || 0);
+            const currentSettledTasks = Number(projData.totalSettledTasks || 0);
+            await updateDoc(projRef, {
+              totalSpent: currentTotalSpent + taskAmount,
+              totalSettledTasks: currentSettledTasks + 1,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (pUpErr) {
+            console.warn('Could not update project totalSpent:', pUpErr);
+          }
+
+          await logProjectActivity(projectId, {
+            title: 'Task Invoice Auto-Generated',
+            description: `Invoice ${invoiceNumber} ($${taskAmount.toLocaleString()}) was auto-created for approved task "${taskTitle}" (${effectiveHours}h @ $${freelancerRate}/hr).`,
+            type: 'invoice',
+          });
+
+          await createNotification({
+            userId: assigneeUid,
+            type: 'invoice',
+            title: 'Task Invoice Generated 💰',
+            description: `Invoice ${invoiceNumber} for $${taskAmount.toLocaleString()} has been submitted to client for task "${taskTitle}".`,
+            read: false,
+            relatedItemId: invId || '',
+            relatedItemLink: '/symbiote/invoices',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (invErr) {
+      console.error('Direct task invoice generation failed:', invErr);
+    }
+
+    // MILESTONE PHASE AUTO-COMPLETION (Milestones as pure phases)
+    if (taskData?.milestoneId) {
+      try {
+        const milestoneId = taskData.milestoneId;
+        const tasksCol = collection(db, 'workspaces', projectId, 'tasks');
+        const allTasksSnap = await getDocs(tasksCol);
+        const milestoneTasks = allTasksSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as WorkspaceTask))
+          .filter(t => t.milestoneId === milestoneId);
+
+        const allMilestoneTasksCompleted = milestoneTasks.length > 0 && milestoneTasks.every(t => (t.id === taskId ? true : t.status === 'completed'));
+
+        if (allMilestoneTasksCompleted) {
+          const msRef = doc(db, 'workspaces', projectId, 'milestones', milestoneId);
+          await updateDoc(msRef, {
+            completed: true,
+            updatedAt: new Date().toISOString(),
+          });
+
+          await logProjectActivity(projectId, {
+            title: 'Milestone Phase Completed',
+            description: `All tasks under milestone phase "${taskData.milestoneTitle || 'Milestone'}" have been completed and approved.`,
+            type: 'milestone',
+          });
+        }
+      } catch (msErr) {
+        console.warn('Could not sync milestone phase completion:', msErr);
       }
     }
 
@@ -620,6 +727,97 @@ export async function deleteTask(
     await syncProjectCompletionAndProgress(projectId);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `workspaces/${projectId}/tasks/${taskId}`);
+  }
+}
+
+export async function addTaskComment(
+  projectId: string,
+  taskId: string,
+  commentData: Omit<TaskComment, 'id' | 'createdAt'>
+): Promise<TaskComment> {
+  const newComment: TaskComment = {
+    id: `comm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    ...commentData,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const taskData = snap.data() as WorkspaceTask;
+      const existingComments = taskData.comments || [];
+      const updatedComments = [...existingComments, newComment];
+
+      await updateDoc(docRef, {
+        comments: updatedComments,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await logProjectActivity(projectId, {
+        title: 'Task Comment Added',
+        description: `${commentData.authorName} commented on "${taskData.title}": "${commentData.content.slice(0, 60)}${commentData.content.length > 60 ? '...' : ''}"`,
+        type: 'task',
+        actorName: commentData.authorName,
+        actorId: commentData.authorId,
+        actorAvatarUrl: commentData.authorAvatarUrl,
+        actorAvatarInitials: commentData.authorAvatarInitials,
+        actorRole: commentData.authorRole,
+      });
+    }
+    return newComment;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `workspaces/${projectId}/tasks/${taskId}/comments`);
+    return newComment;
+  }
+}
+
+export async function updateTaskComment(
+  projectId: string,
+  taskId: string,
+  commentId: string,
+  newContent: string
+): Promise<void> {
+  try {
+    const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const taskData = snap.data() as WorkspaceTask;
+      const existingComments = taskData.comments || [];
+      const updatedComments = existingComments.map((c) =>
+        c.id === commentId ? { ...c, content: newContent.trim(), updatedAt: new Date().toISOString() } : c
+      );
+
+      await updateDoc(docRef, {
+        comments: updatedComments,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `workspaces/${projectId}/tasks/${taskId}/comments/${commentId}`);
+  }
+}
+
+export async function deleteTaskComment(
+  projectId: string,
+  taskId: string,
+  commentId: string
+): Promise<void> {
+  try {
+    const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const taskData = snap.data() as WorkspaceTask;
+      const existingComments = taskData.comments || [];
+      const updatedComments = existingComments.filter((c) => c.id !== commentId);
+
+      await updateDoc(docRef, {
+        comments: updatedComments,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `workspaces/${projectId}/tasks/${taskId}/comments/${commentId}`);
   }
 }
 
@@ -870,18 +1068,29 @@ export async function approveMilestoneByClient(
       (sum, t) => sum + Number(t.actualHours || t.estimatedHours || 0),
       0
     );
-    const hourlyRate = Number(projData?.hourlyRate) || 50;
+    // Resolve specialist agreed rate from project team members or user profile
+    const assignedMember = (projData?.teamMembers || []).find((m: any) => m.uid === symbioteId);
+    let resolvedHourlyRate = Number(assignedMember?.hourlyRate);
+    if (!resolvedHourlyRate || resolvedHourlyRate <= 0) {
+      if (symbioteId) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', symbioteId));
+          if (userSnap.exists()) {
+            resolvedHourlyRate = Number(userSnap.data()?.hourlyRate || userSnap.data()?.rate);
+          }
+        } catch {
+          // Ignore lookup warning
+        }
+      }
+    }
+    if (!resolvedHourlyRate || resolvedHourlyRate <= 0) {
+      resolvedHourlyRate = Number(projData?.hourlyRate) || 0;
+    }
+
     const calculatedAmount =
       msData.rate && Number(msData.rate) > 0
         ? Number(msData.rate)
-        : Math.max(
-            100,
-            Math.round(
-              totalHours > 0
-                ? totalHours * hourlyRate
-                : (msData.hoursAllocated || 20) * hourlyRate
-            )
-          );
+        : Math.round(totalHours * resolvedHourlyRate);
 
     if (clientId && symbioteId && !msData.invoiced) {
       const { createInvoice } = await import('@/src/lib/firestore/invoices');
@@ -910,16 +1119,16 @@ export async function approveMilestoneByClient(
             ? milestoneTasks.map((t) => ({
                 description: t.title,
                 hours: Number(t.actualHours || t.estimatedHours || 1),
-                rate: hourlyRate,
+                rate: resolvedHourlyRate,
                 amount: Math.round(
-                  Number(t.actualHours || t.estimatedHours || 1) * hourlyRate
+                  Number(t.actualHours || t.estimatedHours || 1) * resolvedHourlyRate
                 ),
               }))
             : [
                 {
                   description: `Deliverable: ${msTitle}`,
                   hours: totalHours || 1,
-                  rate: hourlyRate,
+                  rate: resolvedHourlyRate,
                   amount: calculatedAmount,
                 },
               ],
@@ -1037,3 +1246,24 @@ export function subscribeToWorkspaceUpdates(
     }
   );
 }
+
+/**
+ * Explicitly reopens a completed project back to in_progress status.
+ */
+export async function reopenProject(projectId: string): Promise<void> {
+  try {
+    const projRef = doc(db, 'projects', projectId);
+    await updateDoc(projRef, {
+      status: 'in_progress',
+      updatedAt: new Date().toISOString(),
+    });
+    await logProjectActivity(projectId, {
+      title: 'Project Reopened',
+      description: 'Client reopened project back to In Progress.',
+      type: 'general',
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `projects/${projectId}`);
+  }
+}
+

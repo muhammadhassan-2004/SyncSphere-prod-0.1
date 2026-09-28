@@ -32,7 +32,7 @@ import {
 
 const WIZARD_STEPS = [
   { id: '1', label: 'Basic Info', description: 'Title, category & skills' },
-  { id: '2', label: 'Scope & Budget', description: 'Milestones & deliverables' },
+  { id: '2', label: 'Timeline & Schedule', description: 'Dates & work arrangement' },
   { id: '3', label: 'AI Matching', description: 'Preferences & criteria' },
   { id: '4', label: 'Review & Publish', description: 'Final audit & launch' },
 ];
@@ -84,16 +84,6 @@ export const CreateProjectStep4Page: React.FC = () => {
       isMounted = false;
     };
   }, [draftId, navigate]);
-
-  // Formatted Budget Range string
-  const formattedBudget = useMemo(() => {
-    if (!projectData) return '$0 total';
-    const curr = (projectData.currency || 'USD ($)').split(' ')[0];
-    const unit = projectData.budgetType === 'hourly' ? '/ hr' : 'total';
-    const min = projectData.minBudget?.toLocaleString() || '0';
-    const max = projectData.maxBudget?.toLocaleString() || '0';
-    return `${curr} ${min} – ${curr} ${max} ${unit}`;
-  }, [projectData]);
 
   // Save Draft handler
   const handleSaveDraft = async () => {
@@ -335,13 +325,13 @@ export const CreateProjectStep4Page: React.FC = () => {
             </div>
           </Card>
 
-          {/* 2. BUDGET & TIMELINE SUMMARY CARD */}
+          {/* 2. TIMELINE & WORK ARRANGEMENT SUMMARY CARD */}
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-[var(--color-accent-cyan)]" />
+                <Calendar className="w-4 h-4 text-[var(--color-accent-cyan)]" />
                 <h2 className="text-sm font-bold text-[var(--color-text-primary)] uppercase tracking-wider font-mono">
-                  2. Budget & Execution Window Summary
+                  2. Timeline & Work Arrangement Summary
                 </h2>
               </div>
               <Button
@@ -354,19 +344,18 @@ export const CreateProjectStep4Page: React.FC = () => {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Budget Model:</span>
-                  <span className="font-bold text-[var(--color-text-primary)] capitalize">
-                    {projectData?.budgetType || 'fixed'}
+                  <span className="text-[11px] text-[var(--color-text-secondary)]">Duration:</span>
+                  <span className="font-bold text-[var(--color-text-primary)]">
+                    {projectData?.duration || 'Flexible'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50">
-                  <span className="text-[11px] text-[var(--color-text-secondary)] font-medium">Allocated Range:</span>
-                  <span className="font-mono font-bold text-[var(--color-accent-cyan)] text-sm">
-                    {formattedBudget}
-                  </span>
+                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50 text-[11px] font-mono text-[var(--color-text-secondary)]">
+                  <span>{projectData?.startDate || 'TBD'}</span>
+                  <span>→</span>
+                  <span>{projectData?.endDate || 'TBD'}</span>
                 </div>
               </div>
 
@@ -377,38 +366,23 @@ export const CreateProjectStep4Page: React.FC = () => {
                     {projectData?.workMode || 'Remote'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Weekly Commitment:</span>
-                  <span className="font-mono font-bold text-[var(--color-text-primary)]">
-                    {projectData?.weeklyCommitment || 35} hours / week
-                  </span>
+                <div className="pt-1 border-t border-[var(--color-border)]/50 text-[11px] text-[var(--color-text-secondary)]">
+                  Location & collaboration arrangement
                 </div>
               </div>
 
               <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Duration:</span>
-                  <span className="font-bold text-[var(--color-text-primary)]">
-                    {projectData?.duration || '3 months'}
-                  </span>
+                  <span className="text-[11px] text-[var(--color-text-secondary)]">Priority Level:</span>
+                  <StatusPill
+                    variant={projectData?.priority === 'Urgent' ? 'red' : projectData?.priority === 'High' ? 'amber' : 'blue'}
+                    label={projectData?.priority || 'High'}
+                    className="text-[9.5px] py-0 px-1.5"
+                  />
                 </div>
-                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50 text-[11px] font-mono text-[var(--color-text-secondary)]">
-                  <span>Start: {projectData?.startDate || 'TBD'}</span>
-                  <span>End: {projectData?.endDate || 'TBD'}</span>
+                <div className="pt-1 border-t border-[var(--color-border)]/50 text-[11px] text-[var(--color-text-secondary)]">
+                  Execution queue priority
                 </div>
-              </div>
-
-              <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] text-[var(--color-text-secondary)]">Priority Level</p>
-                  <p className="font-bold text-[var(--color-text-primary)] mt-0.5">
-                    {projectData?.priority || 'High'}
-                  </p>
-                </div>
-                <StatusPill
-                  variant={projectData?.priority === 'Urgent' ? 'red' : 'amber'}
-                  label={projectData?.priority || 'High'}
-                />
               </div>
             </div>
           </Card>
@@ -549,7 +523,7 @@ export const CreateProjectStep4Page: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 text-[var(--color-success-green)]">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Budget & Timeline configured</span>
+                <span>Timeline & Work Arrangement configured</span>
               </div>
               <div className="flex items-center gap-2 text-[var(--color-success-green)]">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />

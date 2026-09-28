@@ -11,6 +11,7 @@ import { subscribeToSymbiotesFromFirestore, getAllSymbiotesFromFirestore } from 
 import { InviteModal } from '@/src/components/talent/InviteModal';
 import { subscribeToClientInvitations } from '@/src/lib/firestore/invitations';
 import { Invitation } from '@/src/types/firestore';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   Search,
   LayoutGrid,
@@ -143,20 +144,20 @@ export const FindTalentPage: React.FC = () => {
     const mapUsers = (users: any[]): SymbioteProfile[] => {
       return users.map((u) => ({
         uid: u.uid || u.id,
-        email: u.email || 'specialist@syncsphere.io',
+        email: u.email || '',
         displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Symbiote Specialist',
-        title: u.title || u.jobTitle || 'AI Engineering Specialist',
+        title: u.title || u.jobTitle || 'Specialist',
         avatarInitials: u.avatarInitials || (u.displayName || u.firstName || 'SP').slice(0, 2).toUpperCase(),
         avatarUrl: u.avatarUrl || '',
         rating: typeof u.rating === 'number' ? u.rating : (parseFloat(u.rating) || 0),
         reviewsCount: typeof u.reviewsCount === 'number' ? u.reviewsCount : (typeof u.reviewCount === 'number' ? u.reviewCount : (parseInt(u.reviewsCount || u.reviewCount, 10) || 0)),
         completedProjects: u.completedProjects ?? 0,
-        hourlyRate: u.hourlyRate ?? 130,
+        hourlyRate: typeof u.hourlyRate === 'number' ? u.hourlyRate : (parseFloat(u.hourlyRate) || 0),
         experience: (u.experience as any) || 'Senior',
         availability: (u.availability as any) || 'Immediate',
         location: u.location || 'Remote',
         bio: u.bio || '',
-        skills: Array.isArray(u.skills) && u.skills.length > 0 ? u.skills : ['Python', 'PyTorch', 'LangChain', 'FastAPI'],
+        skills: Array.isArray(u.skills) ? u.skills : [],
         portfolio: u.portfolio || [],
         experiences: u.experiences || [],
         certifications: u.certifications || [],
@@ -668,10 +669,10 @@ export const FindTalentPage: React.FC = () => {
                             initials={symbiote.avatarInitials}
                             src={symbiote.avatarUrl}
                             size="md"
-                            statusDot="online"
+                            statusDot={getUserStatusDot(symbiote)}
                           />
                           <div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <h3 className="text-sm font-bold text-[var(--color-text-primary)]">
                                 {symbiote.displayName}
                               </h3>
@@ -680,6 +681,14 @@ export const FindTalentPage: React.FC = () => {
                             <p className="text-[11.5px] text-[var(--color-text-secondary)] line-clamp-1">
                               {symbiote.title}
                             </p>
+                            {symbiote.email && (
+                              <p
+                                className="text-[10.5px] font-mono text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] truncate max-w-[200px] transition-colors"
+                                title={symbiote.email}
+                              >
+                                {symbiote.email}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -739,28 +748,6 @@ export const FindTalentPage: React.FC = () => {
 
                     {/* BOTTOM ACTION BUTTONS */}
                     <div className="pt-3 border-t border-[var(--color-border)] flex items-center gap-2">
-                      {isInvited ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs opacity-60 cursor-not-allowed bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-[var(--color-success-green)]" />
-                          <span>Invited</span>
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => handleOpenInvite(symbiote)}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Invite</span>
-                        </Button>
-                      )}
-
                       <Button
                         variant="secondary"
                         size="sm"
@@ -768,6 +755,16 @@ export const FindTalentPage: React.FC = () => {
                         className="flex-1 text-xs"
                       >
                         <span>View Profile</span>
+                      </Button>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleOpenInvite(symbiote)}
+                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold bg-[var(--color-accent-cyan)] hover:bg-[var(--color-accent-cyan)]/90 text-slate-950"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Invite to Project</span>
                       </Button>
                     </div>
                   </Card>
@@ -791,7 +788,7 @@ export const FindTalentPage: React.FC = () => {
                         initials={symbiote.avatarInitials}
                         src={symbiote.avatarUrl}
                         size="md"
-                        statusDot="online"
+                        statusDot={getUserStatusDot(symbiote)}
                       />
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -803,7 +800,20 @@ export const FindTalentPage: React.FC = () => {
                             {symbiote.experience}
                           </span>
                         </div>
-                        <p className="text-xs text-[var(--color-text-secondary)]">{symbiote.title}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs text-[var(--color-text-secondary)]">{symbiote.title}</p>
+                          {symbiote.email && (
+                            <>
+                              <span className="text-[var(--color-border)]">•</span>
+                              <span
+                                className="text-[11px] font-mono text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] transition-colors"
+                                title={symbiote.email}
+                              >
+                                {symbiote.email}
+                              </span>
+                            </>
+                          )}
+                        </div>
                         <p className="text-[11.5px] text-[var(--color-text-secondary)] line-clamp-1">
                           {symbiote.bio}
                         </p>
@@ -842,29 +852,18 @@ export const FindTalentPage: React.FC = () => {
                           onClick={() => navigate(`/client/professionals/${symbiote.uid}`)}
                           className="text-xs"
                         >
-                          Profile
+                          View Profile
                         </Button>
-                        {isInvited ? (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled
-                            className="flex items-center gap-1 text-xs opacity-60 cursor-not-allowed bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[var(--color-success-green)]" />
-                            <span>Invited</span>
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => handleOpenInvite(symbiote)}
-                            className="flex items-center gap-1 text-xs"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>Invite</span>
-                          </Button>
-                        )}
+
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleOpenInvite(symbiote)}
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--color-accent-cyan)] hover:bg-[var(--color-accent-cyan)]/90 text-slate-950"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Invite to Project</span>
+                        </Button>
                       </div>
                     </div>
                   </Card>

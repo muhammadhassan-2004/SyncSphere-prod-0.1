@@ -18,7 +18,7 @@ export const reportDefinitions: ReportDefinition[] = [
   { id: 'user-status', category: 'users', title: 'User Status Report', description: 'Current breakdown of active, suspended, and disabled accounts.', available: true },
   { id: 'project-status', category: 'projects', title: 'Project Status Report', description: 'All platform projects grouped by current status.', available: true },
   { id: 'project-category', category: 'projects', title: 'Project Category Report', description: 'Project volume broken down by category.', available: true },
-  { id: 'revenue-summary', category: 'revenue', title: 'Revenue Summary Report', description: 'Requires a payments/invoices collection — not yet available.', available: false },
+  { id: 'revenue-summary', category: 'revenue', title: 'Revenue Summary Report', description: 'Gross invoice volume, platform fees (5%), and net payouts across all transactions.', available: true },
   { id: 'activity-audit', category: 'activity', title: 'Admin Activity Report', description: 'Audit log export for a selected date range.', available: true },
 ];
 
@@ -130,6 +130,43 @@ export async function generateProjectCategoryReport(): Promise<ReportRow[]> {
     return Array.from(counts.entries()).map(([Category, Count]) => ({ Category, Count }));
   } catch (err) {
     console.error('Failed to generate project category report:', err);
+    return [];
+  }
+}
+
+export async function generateRevenueSummaryReport(from?: Date, to?: Date): Promise<ReportRow[]> {
+  try {
+    const snap = await getDocs(collection(db, 'invoices'));
+    let docs = snap.docs;
+
+    if (from || to) {
+      const fromMs = from ? from.getTime() : 0;
+      const toMs = to ? to.getTime() : Infinity;
+      docs = docs.filter((d) => {
+        const data = d.data();
+        const created = data.createdAt ? new Date(data.createdAt).getTime() : 0;
+        return created >= fromMs && created <= toMs;
+      });
+    }
+
+    return docs.map((d) => {
+      const data = d.data();
+      const amount = Number(data.amount) || 0;
+      const platformFee = Math.round(amount * 0.05 * 100) / 100;
+      return {
+        'Invoice ID': data.invoiceNumber || d.id,
+        'Date': data.createdAt ? new Date(data.createdAt).toLocaleDateString() : '—',
+        'Project': data.projectName || data.projectId || 'General Scope',
+        'Client ID': data.clientId || '—',
+        'Specialist': data.symbioteName || data.symbioteId || '—',
+        'Total Amount ($)': amount.toFixed(2),
+        'Platform Fee (5%) ($)': platformFee.toFixed(2),
+        'Net Specialist Payout ($)': (amount - platformFee).toFixed(2),
+        'Payment Status': (data.status || 'pending').toUpperCase(),
+      };
+    });
+  } catch (err) {
+    console.error('Failed to generate revenue summary report:', err);
     return [];
   }
 }

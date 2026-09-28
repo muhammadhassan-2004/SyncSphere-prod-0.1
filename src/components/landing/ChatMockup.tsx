@@ -20,7 +20,133 @@ const SAMPLE_PROMPTS = [
   'B2B SaaS fleet tracking dashboard',
   'Healthcare patient portal with HIPAA compliance',
   'AI document search with vector embeddings',
+  'FinTech real-time settlement microservices',
 ];
+
+const generateAIResponse = (query: string): { text: string; recommendation?: { team: string; timeline: string; budget: string } } => {
+  const lower = query.toLowerCase();
+
+  // Platform & commercial inquiries
+  if (lower.includes('fee') || lower.includes('pricing') || lower.includes('cost') || lower.includes('commission')) {
+    return {
+      text: 'SyncSphere charges a flat, transparent 5% platform fee on milestone disbursements. There are zero subscription tiers or hidden recruiter markups.',
+      recommendation: {
+        team: 'Verified Specialist Network',
+        timeline: 'Immediate Intake',
+        budget: '5% Platform Fee',
+      },
+    };
+  }
+
+  if (lower.includes('escrow') || lower.includes('payment') || lower.includes('milestone') || lower.includes('protect')) {
+    return {
+      text: 'SyncSphere features automated milestone escrow. Client funds are locked securely prior to sprint execution and released only upon full review and approval of deliverables.',
+      recommendation: {
+        team: 'Milestone Governance & SLA Protection',
+        timeline: 'Instant Settlement',
+        budget: '100% Protected Milestones',
+      },
+    };
+  }
+
+  if (lower.includes('how it works') || lower.includes('vetting') || lower.includes('hire') || lower.includes('specialist') || lower.includes('talent')) {
+    return {
+      text: 'PreSync AI analyzes your technical requirements, architecture constraints, and budget, then matches pre-vetted specialists with a 98% accuracy score within 48 hours.',
+      recommendation: {
+        team: 'Pre-Vetted Senior Engineers & Architects',
+        timeline: '48h Avg Placement',
+        budget: 'Market-Rate Direct Contracts',
+      },
+    };
+  }
+
+  // Technical Domain Inquiries
+  if (lower.includes('healthcare') || lower.includes('hipaa') || lower.includes('patient') || lower.includes('medical') || lower.includes('ehr')) {
+    return {
+      text: 'HIPAA-compliant healthcare architectures require strict BAA coverage, TLS 1.3 in-transit / AES-256 at-rest encryption, partitioned audit trails, and strict RBAC.',
+      recommendation: {
+        team: '1 Lead Healthcare Systems Architect, 1 Backend Security Specialist, 1 React/Next.js Engineer',
+        timeline: '10–14 Weeks',
+        budget: '$45,000 – $65,000',
+      },
+    };
+  }
+
+  if (lower.includes('fintech') || lower.includes('settlement') || lower.includes('crypto') || lower.includes('banking') || lower.includes('stripe') || lower.includes('wallet')) {
+    return {
+      text: 'FinTech settlement engines require idempotent double-entry ledger bookkeeping, PCI-DSS compliance, sub-second latency, and distributed transactional consistency.',
+      recommendation: {
+        team: '1 Principal Distributed Systems Architect, 1 Go/Rust Backend Engineer, 1 QA/Security Auditor',
+        timeline: '8–12 Weeks',
+        budget: '$38,000 – $58,000',
+      },
+    };
+  }
+
+  if (lower.includes('fleet') || lower.includes('iot') || lower.includes('telematics') || lower.includes('tracking') || lower.includes('dashboard')) {
+    return {
+      text: 'High-throughput fleet telematics systems require WebSocket or MQTT ingest pipelines, geo-sharded time-series storage, and reactive map rendering.',
+      recommendation: {
+        team: '1 Lead Frontend Architect (React/Mapbox), 1 Cloud Backend Engineer (Node/Go), 1 IoT/DevOps Specialist',
+        timeline: '8–12 Weeks',
+        budget: '$32,000 – $48,000',
+      },
+    };
+  }
+
+  if (lower.includes('ai') || lower.includes('vector') || lower.includes('llm') || lower.includes('rag') || lower.includes('embedding') || lower.includes('agent') || lower.includes('gemini')) {
+    return {
+      text: 'AI Vector Search and Multi-Agent workflows require low-latency vector index stores (e.g. pgvector/Pinecone), semantic caching, streaming LLM inference, and evaluation guardrails.',
+      recommendation: {
+        team: '1 Senior Applied AI / ML Engineer, 1 Full-Stack Python/TypeScript Engineer, 1 MLOps Specialist',
+        timeline: '6–10 Weeks',
+        budget: '$28,000 – $44,000',
+      },
+    };
+  }
+
+  if (lower.includes('mobile') || lower.includes('ios') || lower.includes('android') || lower.includes('react native') || lower.includes('flutter')) {
+    return {
+      text: 'Cross-platform mobile apps benefit from shared business logic, offline-first SQLite synchronization, native biometric auth, and streamlined CI/CD to App Store & Google Play.',
+      recommendation: {
+        team: '2 Senior Mobile Specialists (React Native / Flutter), 1 Cloud API Engineer, 1 UI/UX Specialist',
+        timeline: '8–12 Weeks',
+        budget: '$30,000 – $46,000',
+      },
+    };
+  }
+
+  if (lower.includes('cloud') || lower.includes('devops') || lower.includes('kubernetes') || lower.includes('docker') || lower.includes('aws') || lower.includes('azure') || lower.includes('gcp') || lower.includes('migration')) {
+    return {
+      text: 'Enterprise cloud migrations focus on zero-downtime database replication, containerized microservices orchestration, Terraform IaC, and Datadog/CloudWatch observability.',
+      recommendation: {
+        team: '1 Principal Cloud/DevOps Architect, 1 Site Reliability Engineer (SRE), 1 Cloud Security Engineer',
+        timeline: '6–10 Weeks',
+        budget: '$35,000 – $52,000',
+      },
+    };
+  }
+
+  // General Tech Scoping
+  const techKeywords = ['app', 'web', 'software', 'platform', 'build', 'create', 'saas', 'api', 'backend', 'frontend', 'database', 'system', 'site', 'design', 'service', 'code', 'stack', 'tool', 'portal'];
+  const hasTechKeyword = techKeywords.some((kw) => lower.includes(kw));
+
+  if (hasTechKeyword) {
+    return {
+      text: `Synthesizing architecture scope for "${query.trim()}". PreSync AI evaluated technical feasibility, milestone staging, and stack compatibility.`,
+      recommendation: {
+        team: '2 Senior Full-Stack Specialists, 1 Product UI/UX Designer',
+        timeline: '6–10 Weeks',
+        budget: '$24,000 – $38,000',
+      },
+    };
+  }
+
+  // Guardrail Restriction for Off-Topic Queries
+  return {
+    text: "I am PreSync AI, an enterprise technical scoping assistant. My capabilities are restricted to software architecture, tech stacks, team scoping, and SyncSphere platform inquiries. Please describe your software project or engineering requirements to get an architectural breakdown!",
+  };
+};
 
 export const ChatMockup: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -68,20 +194,17 @@ export const ChatMockup: React.FC = () => {
     setIsTyping(true);
 
     setTimeout(() => {
+      const response = generateAIResponse(text.trim());
       const aiReply: ChatMessage = {
         id: `ai-${Date.now()}`,
         sender: 'ai',
-        text: `Synthesizing project brief for "${text.trim()}". Candidate matching criteria compiled across 50+ vetting dimensions.`,
+        text: response.text,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        recommendation: {
-          team: '2 Senior Full-Stack Engineers, 1 Product UI/UX Designer',
-          timeline: '6–10 Weeks',
-          budget: '$24,000 – $38,000',
-        },
+        recommendation: response.recommendation,
       };
       setMessages((prev) => [...prev, aiReply]);
       setIsTyping(false);
-    }, 800);
+    }, 700);
   };
 
   return (
@@ -106,23 +229,23 @@ export const ChatMockup: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive Prompt Pills */}
-      <div className="px-4 py-2 bg-[var(--color-surface-elevated)]/50 border-b border-[var(--color-border)] flex items-center gap-2 overflow-x-auto text-[11px]">
+      {/* Interactive Prompt Pills (Hidden Native Scrollbar) */}
+      <div className="px-4 py-2 bg-[var(--color-surface-elevated)]/50 border-b border-[var(--color-border)] flex items-center gap-2 overflow-x-auto text-[11px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span className="text-[var(--color-text-tertiary)] font-mono text-[10px] uppercase shrink-0">Try prompt:</span>
         {SAMPLE_PROMPTS.map((prompt, i) => (
           <button
             key={i}
             type="button"
             onClick={() => handleSend(prompt)}
-            className="px-2.5 py-1 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-cyan)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors whitespace-nowrap cursor-pointer"
+            className="px-2.5 py-1 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-cyan)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors whitespace-nowrap cursor-pointer shrink-0"
           >
             {prompt}
           </button>
         ))}
       </div>
 
-      {/* Message Thread */}
-      <div className="p-5 space-y-4 bg-[var(--color-surface)] text-xs leading-relaxed max-h-[340px] overflow-y-auto">
+      {/* Message Thread (Hidden Native Scrollbar) */}
+      <div className="p-5 space-y-4 bg-[var(--color-surface)] text-xs leading-relaxed max-h-[340px] overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {messages.map((msg) => (
           <div
             key={msg.id}

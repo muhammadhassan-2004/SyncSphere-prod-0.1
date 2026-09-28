@@ -8,7 +8,7 @@ export interface AnalyticsStats {
   activeUsers: number | null; // null = needs a "last active" tracking field that may not exist yet
   projectsCreated: number;
   projectsCompleted: number;
-  platformRevenueCents: null; // no payments collection wired
+  platformRevenueCents: number; // 5% fee on settled invoices
 }
 
 function rangeStartDate(range: TimeRange): Date {
@@ -114,12 +114,43 @@ export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStat
       console.warn('Project aggregation failed:', projErr);
     }
 
+    let platformRevenueCents = 0;
+    try {
+      const invoicesCol = collection(db, 'invoices');
+      const paidInvoicesSnap = await getDocs(query(invoicesCol, where('status', '==', 'paid')));
+      paidInvoicesSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const rawPaid = data.paidAt || data.updatedAt || data.createdAt;
+        let paidDate: Date | null = null;
+        if (rawPaid) {
+          if (rawPaid instanceof Timestamp) {
+            paidDate = rawPaid.toDate();
+          } else if (typeof rawPaid?.toDate === 'function') {
+            paidDate = rawPaid.toDate();
+          } else {
+            paidDate = new Date(rawPaid);
+          }
+        }
+
+        // Include if payment falls within time range (or if paidDate missing/unparseable, include in all-time/general tally)
+        if (!paidDate || isNaN(paidDate.getTime()) || paidDate.getTime() >= startMs) {
+          const invAmount = Number(data.amount) || (Number(data.amountCents) ? Number(data.amountCents) / 100 : 0);
+          const feeCents = data.paymentDetails?.fee
+            ? Math.round(data.paymentDetails.fee * 100)
+            : Math.round(invAmount * 0.05 * 100);
+          platformRevenueCents += feeCents;
+        }
+      });
+    } catch (invErr) {
+      console.warn('Invoices revenue aggregation failed for analytics:', invErr);
+    }
+
     return {
       totalUsers: totalUsersCount,
       activeUsers: activeUsersCount,
       projectsCreated: projectsCreatedCount,
       projectsCompleted: projectsCompletedCount,
-      platformRevenueCents: null,
+      platformRevenueCents,
     };
   } catch (err) {
     console.warn('Failed to fetch analytics stats:', err);
@@ -128,7 +159,7 @@ export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStat
       activeUsers: 0,
       projectsCreated: 0,
       projectsCompleted: 0,
-      platformRevenueCents: null,
+      platformRevenueCents: 0,
     };
   }
 }

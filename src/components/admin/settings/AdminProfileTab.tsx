@@ -5,8 +5,8 @@ import { Avatar } from '@/src/components/ui/avatar';
 import { Badge } from '@/src/components/ui/badge';
 import { useAuth } from '@/src/context/AuthContext';
 import { updateUserProfile, subscribeToUserProfile } from '@/src/lib/firestore/users';
-import { uploadAvatarFile, auth } from '@/src/lib/firebase';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { uploadAvatarFile } from '@/src/lib/firebase';
+import { requestPasswordReset } from '@/src/lib/auth/passwordReset';
 import { Camera, Upload, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, User, KeyRound, Mail } from 'lucide-react';
 
 export function AdminProfileTab() {
@@ -116,13 +116,17 @@ export function AdminProfileTab() {
     }
   };
 
+  // Dispatches reset code via Teams SMTP (replacing legacy sendPasswordResetEmail)
   const handleSendPasswordReset = async () => {
     if (!email) return;
     setSendingReset(true);
     setError(null);
     setResetSent(false);
     try {
-      await sendPasswordResetEmail(auth, email);
+      const result = await requestPasswordReset(email);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to dispatch password reset email via Teams SMTP.');
+      }
       setResetSent(true);
       setTimeout(() => setResetSent(false), 5000);
     } catch (err: any) {
@@ -322,6 +326,13 @@ export function AdminProfileTab() {
             {sendingReset ? 'Dispatching…' : 'Send Password Reset Email'}
           </Button>
         </div>
+
+        {resetSent && (
+          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span>Password reset OTP code dispatched to {email} via Teams SMTP.</span>
+          </div>
+        )}
       </Card>
 
       {/* SAVE BUTTON */}

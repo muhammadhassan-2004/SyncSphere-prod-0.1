@@ -140,12 +140,8 @@ runTest('deleteTimeEntry updates and rolls back task actualHours and actualTotal
   );
 });
 
-runTest('SymbioteTimeTrackingPage enforces task selection before starting timer and logging', () => {
+runTest('SymbioteTimeTrackingPage enforces task selection before logging time entries', () => {
   const content = readFile('src/pages/symbiote/SymbioteTimeTrackingPage.tsx');
-  assert.ok(
-    content.includes('Please select a Workspace Task to track time against.'),
-    'SymbioteTimeTrackingPage does not guard timer start without task selection'
-  );
   assert.ok(
     content.includes('Please select a Workspace Task for this work session.'),
     'SymbioteTimeTrackingPage does not guard logging without task selection'
@@ -1295,6 +1291,202 @@ runTest('Edge Case 8: AIMatchingPage clamps minScoreThreshold and sanitizes skil
   assert.ok(code.includes('rawProjSkills'), 'AIMatchingPage missing safe project skills array normalization');
 });
 
+console.log('\n📌 Test Group 34: Issue #0.7 (Dynamic Per-Task Settlement Alignment & Cumulative Spent Tracking)');
+
+runTest('src/types/firestore.ts defines totalSpent and totalSettledTasks in Project interface', () => {
+  const code = readFile('src/types/firestore.ts');
+  assert.ok(code.includes('totalSpent?: number;'), 'Project interface missing totalSpent');
+  assert.ok(code.includes('totalSettledTasks?: number;'), 'Project interface missing totalSettledTasks');
+});
+
+runTest('approveTaskByClient in workspace.ts atomically accumulates totalSpent and totalSettledTasks', () => {
+  const code = readFile('src/lib/firestore/workspace.ts');
+  assert.ok(code.includes('totalSpent: currentTotalSpent + taskAmount'), 'workspace.ts missing atomic totalSpent increment');
+  assert.ok(code.includes('totalSettledTasks: currentSettledTasks + 1'), 'workspace.ts missing totalSettledTasks increment');
+});
+
+runTest('CreateProjectStep2Page has removed arbitrary rate/budget boxes and focuses purely on timeline', () => {
+  const code = readFile('src/pages/client/CreateProjectStep2Page.tsx');
+  assert.ok(!code.includes('const [budgetType, setBudgetType]'), 'CreateProjectStep2Page still has budgetType state');
+  assert.ok(!code.includes('const [minBudget, setMinBudget]'), 'CreateProjectStep2Page still has minBudget state');
+  assert.ok(code.includes('Timeline & Schedule'), 'CreateProjectStep2Page missing Timeline & Schedule');
+  assert.ok(!code.includes('100% Dynamic Per-Task Settlement'), 'CreateProjectStep2Page still has redundant banner box');
+});
+
+runTest('ProjectHeader and OverviewTab purge hardcoded $15,000 Total and weeklyCommitment 40 hrs', () => {
+  const headerCode = readFile('src/components/project/ProjectHeader.tsx');
+  assert.ok(!headerCode.includes('$15,000 Total'), 'ProjectHeader still has hardcoded $15,000 Total');
+  assert.ok(headerCode.includes('Spent So Far'), 'ProjectHeader missing Spent So Far metric');
+
+  const overviewCode = readFile('src/components/project/OverviewTab.tsx');
+  assert.ok(!overviewCode.includes('weeklyCommitment'), 'OverviewTab still renders weeklyCommitment');
+  assert.ok(!overviewCode.includes('hrs / week'), 'OverviewTab still renders hrs / week');
+});
+
+runTest('OverviewTab and SymbioteOverviewTab render real cumulative spend figures', () => {
+  const clientTab = readFile('src/components/project/OverviewTab.tsx');
+  assert.ok(clientTab.includes('Total Spent So Far'), 'OverviewTab missing Total Spent So Far');
+  assert.ok(clientTab.includes('project.totalSpent'), 'OverviewTab missing project.totalSpent reference');
+
+  const proTab = readFile('src/components/project/SymbioteOverviewTab.tsx');
+  assert.ok(proTab.includes('Total Project Settlement'), 'SymbioteOverviewTab missing Total Project Settlement');
+  assert.ok(proTab.includes('project.totalSpent'), 'SymbioteOverviewTab missing project.totalSpent reference');
+});
+
+runTest('ClientProjectsPage tracks and renders Total Spent So Far across all metrics', () => {
+  const code = readFile('src/pages/client/ClientProjectsPage.tsx');
+  assert.ok(code.includes('p.totalSpent || 0'), 'ClientProjectsPage missing totalSpent accumulation');
+  assert.ok(code.includes('Total Spent So Far'), 'ClientProjectsPage missing Total Spent So Far KPI label');
+  assert.ok(code.includes('Spent So Far'), 'ClientProjectsPage missing Spent So Far table column header');
+});
+
+runTest('adminProjects.ts and ProjectOversightPage prioritize totalSpent for Admin oversight', () => {
+  const adminCode = readFile('src/lib/firestore/adminProjects.ts');
+  assert.ok(adminCode.includes('data.totalSpent != null'), 'adminProjects.ts missing totalSpent priority check');
+  assert.ok(adminCode.includes('Dynamic Per-Task'), 'adminProjects.ts missing Dynamic Per-Task fallback');
+
+  const oversightCode = readFile('src/pages/admin/ProjectOversightPage.tsx');
+  assert.ok(oversightCode.includes('Total Spent'), 'ProjectOversightPage missing Total Spent column header');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #0.7 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 0.7 ✅ [P0] Dynamic Per-Task Settlement Alignment'), 'Tracker missing Issue #0.7 header');
+  assert.ok(code.includes('Status**: Resolved & Verified ✅ (2026-09-24)'), 'Tracker missing verified status for 0.7');
+});
+
+// ----------------------------------------------------
+// Test Group 35: Issue #0.8 - Platform-Wide Hardcoded Fallbacks & Disconnected DB Purge
+// ----------------------------------------------------
+console.log('\n📌 Test Group 35: Issue #0.8 (Platform-Wide Hardcoded Fallbacks & Disconnected DB Purge)');
+runTest('ClientDashboardPage purges hardcoded fake months, dumps, matchScore and connects real time_entries', () => {
+  const code = readFile('src/pages/client/ClientDashboardPage.tsx');
+  assert.ok(!code.includes("{ month: 'Mar', spend: 0 }"), 'ClientDashboardPage still has static months');
+  assert.ok(!code.includes("a.matchScore || 90"), 'ClientDashboardPage still has 90% fallback');
+  assert.ok(code.includes('subscribeToTimeEntriesForClient'), 'ClientDashboardPage missing time_entries subscription');
+  assert.ok(code.includes('Spent So Far'), 'ClientDashboardPage missing Spent So Far table header');
+});
+
+runTest('FilesAndDocsPage and FindTalentPage purge hardcoded amounts, fake skills and dummy domains', () => {
+  const filesCode = readFile('src/pages/client/FilesAndDocsPage.tsx');
+  assert.ok(!filesCode.includes('budget?.max || 8500'), 'FilesAndDocsPage still has 8500 fallback');
+  assert.ok(!filesCode.includes('client@syncsphere.io'), 'FilesAndDocsPage still has fake client email');
+  assert.ok(!filesCode.includes('specialist@syncsphere.io'), 'FilesAndDocsPage still has fake specialist email');
+
+  const talentCode = readFile('src/pages/client/FindTalentPage.tsx');
+  assert.ok(!talentCode.includes('hourlyRate ?? 130'), 'FindTalentPage still injects 130 rate fallback');
+  assert.ok(!talentCode.includes("['Python', 'PyTorch', 'LangChain', 'FastAPI']"), 'FindTalentPage still injects fake skills');
+});
+
+runTest('SecuritySettingsPage and SymbioteSettingsPage implement dynamic browser session detection', () => {
+  const clientSec = readFile('src/pages/client/settings/SecuritySettingsPage.tsx');
+  assert.ok(!clientSec.includes('192.168.1.104'), 'SecuritySettingsPage still has fake IP');
+  assert.ok(!clientSec.includes('MacBook Pro 16" — Chrome (macOS Sonoma)'), 'SecuritySettingsPage still has fake MacBook');
+  assert.ok(clientSec.includes('getInitialSessions'), 'SecuritySettingsPage missing dynamic session detector');
+
+  const symbioteSec = readFile('src/pages/symbiote/SymbioteSettingsPage.tsx');
+  assert.ok(!symbioteSec.includes('192.168.1.104'), 'SymbioteSettingsPage still has fake IP');
+  assert.ok(symbioteSec.includes('getInitialSessions'), 'SymbioteSettingsPage missing dynamic session detector');
+});
+
+runTest('BillingSettingsPage, SymbioteDashboardPage and SymbioteEarningsPage purge fake values', () => {
+  const billingCode = readFile('src/pages/client/settings/BillingSettingsPage.tsx');
+  assert.ok(!billingCode.includes('September 1, 2026'), 'BillingSettingsPage still has hardcoded renewal date');
+  assert.ok(!billingCode.includes('Aether Dynamics Inc.'), 'BillingSettingsPage still has fake company entity');
+
+  const dashCode = readFile('src/pages/symbiote/SymbioteDashboardPage.tsx');
+  assert.ok(!dashCode.includes("'Privacy app'"), 'SymbioteDashboardPage still has Privacy app fallback');
+  assert.ok(!dashCode.includes('95}% Match'), 'SymbioteDashboardPage still has 95% Match fallback');
+
+  const earningsCode = readFile('src/pages/symbiote/SymbioteEarningsPage.tsx');
+  assert.ok(!earningsCode.includes('hourlyRate || 120'), 'SymbioteEarningsPage still has 120 fallback');
+});
+
+runTest('Admin platform stats, live reports, monitoring, ApprovalsQueue and workspace are dynamically connected', () => {
+  const adminStats = readFile('src/lib/firestore/adminDashboardStats.ts');
+  assert.ok(!adminStats.includes('platformRevenueCents: null'), 'adminDashboardStats still has null revenue');
+  assert.ok(!adminStats.includes('activeSessions: null'), 'adminDashboardStats still has null active sessions');
+
+  const reportsCode = readFile('src/lib/firestore/adminReports.ts');
+  assert.ok(reportsCode.includes("id: 'revenue-summary'"), 'adminReports missing revenue-summary');
+  assert.ok(reportsCode.includes('available: true'), 'revenue-summary is not available: true');
+  assert.ok(reportsCode.includes('generateRevenueSummaryReport'), 'adminReports missing generateRevenueSummaryReport');
+
+  const reportsCenter = readFile('src/pages/admin/ReportsCenterPage.tsx');
+  assert.ok(reportsCenter.includes("'revenue-summary': generateRevenueSummaryReport"), 'ReportsCenterPage missing revenue generator mapping');
+
+  const approvalsCode = readFile('src/components/project/ApprovalsQueueView.tsx');
+  assert.ok(!approvalsCode.includes('hourlyRate = Number(project.hourlyRate) || 50;'), 'ApprovalsQueueView still has 50 fallback');
+
+  const workspaceCode = readFile('src/lib/firestore/workspace.ts');
+  assert.ok(!workspaceCode.includes('const hourlyRate = Number(projData?.hourlyRate) || 50;'), 'workspace.ts still has 50 fallback');
+  assert.ok(!workspaceCode.includes('(msData.hoursAllocated || 20) * hourlyRate'), 'workspace.ts still has 20 hours fallback');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #0.8 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 0.8 ✅ [P0] Platform-Wide Hardcoded Fallbacks & Disconnected Database Purge'), 'Tracker missing Issue #0.8 header');
+  assert.ok(code.includes('Status**: Resolved & Verified ✅ (2026-09-24)'), 'Tracker missing verified status for 0.8');
+});
+
+// ----------------------------------------------------
+// Test Group 36: Issue #0.9 - Milestone Phases Grounding & Cumulative Spend Auto-Sync
+// ----------------------------------------------------
+console.log('\n📌 Test Group 36: Issue #0.9 (Milestone Phases Grounding & Cumulative Spend Auto-Sync)');
+runTest('OverviewTab.tsx does NOT contain hardcoded Phase 1 or Phase 2 strings', () => {
+  const code = readFile('src/components/project/OverviewTab.tsx');
+  assert.ok(!code.includes('Phase 1: Scope & Architecture'), 'OverviewTab still contains hardcoded Phase 1');
+  assert.ok(!code.includes('Phase 2: Core Engineering'), 'OverviewTab still contains hardcoded Phase 2');
+});
+
+runTest('OverviewTab.tsx subscribes to real workspace milestones and renders clean empty state when none exist', () => {
+  const code = readFile('src/components/project/OverviewTab.tsx');
+  assert.ok(code.includes('subscribeToWorkspaceMilestones'), 'OverviewTab missing subscribeToWorkspaceMilestones');
+  assert.ok(code.includes('No milestone phases defined yet'), 'OverviewTab missing clean empty state for milestones');
+  assert.ok(code.includes("'Draft Phase'") && code.includes('isDraft'), 'OverviewTab missing dynamic Draft Phase health mapping');
+});
+
+runTest('workspace.ts syncProjectCompletionAndProgress auto-calculates and backfills totalSpent', () => {
+  const code = readFile('src/lib/firestore/workspace.ts');
+  assert.ok(code.includes('calculatedTasksSpend'), 'workspace.ts missing calculatedTasksSpend calculation');
+  assert.ok(code.includes('updates.totalSpent = calculatedTasksSpend'), 'workspace.ts missing updates.totalSpent assignment');
+});
+
+runTest('ClientProjectsPage.tsx imports and triggers syncProjectCompletionAndProgress auto-healing', () => {
+  const code = readFile('src/pages/client/ClientProjectsPage.tsx');
+  assert.ok(code.includes('syncProjectCompletionAndProgress'), 'ClientProjectsPage missing syncProjectCompletionAndProgress import');
+  assert.ok(code.includes('syncProjectCompletionAndProgress(p.id)'), 'ClientProjectsPage missing auto-heal invocation on completed projects');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #0.9 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 0.9 ✅ [P0] Milestone Phases Grounding'), 'Tracker missing Issue #0.9 header');
+  assert.ok(code.includes('Cumulative Spend Auto-Sync Completed'), 'Tracker missing Issue #0.9 title');
+});
+
+// ----------------------------------------------------
+// Test Group 37: Issue #82 - Client Portal Label Standardization to Files & Resources
+// ----------------------------------------------------
+console.log('\n📌 Test Group 37: Issue #82 (Files & Resources Label & Header Standardization)');
+
+runTest('PortalShell.tsx uses "Files & Resources" label and Folder icon for Client Portal navigation', () => {
+  const code = readFile('src/components/layout/PortalShell.tsx');
+  assert.ok(code.includes("label: 'Files & Resources'"), 'PortalShell missing Files & Resources nav item');
+  assert.ok(!code.includes("label: 'Files & Docs'"), 'PortalShell still contains legacy Files & Docs nav item');
+  assert.ok(code.includes("<Folder className="), 'PortalShell missing Folder icon for Files & Resources');
+});
+
+runTest('FilesAndDocsPage.tsx renders "All Project Files & Resources" header and enhanced project search', () => {
+  const code = readFile('src/pages/client/FilesAndDocsPage.tsx');
+  assert.ok(code.includes('All Project Files & Resources'), 'FilesAndDocsPage missing "All Project Files & Resources" title');
+  assert.ok(!code.includes('>Project Files & Documents<'), 'FilesAndDocsPage still contains legacy "Project Files & Documents" title');
+  assert.ok(code.includes('resolvedProjectName'), 'FilesAndDocsPage missing resolvedProjectName fallback in search filter');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #82 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('82. ✅ [P1] Client Portal Navigation & Repository Standardization: "Files & Resources"'), 'Tracker missing Issue #82 header');
+});
 
 console.log('\n====================================================');
 console.log(`📊 Test Summary: ${passedTests}/${totalTests} Passed (${Math.round((passedTests / totalTests) * 100)}%)`);

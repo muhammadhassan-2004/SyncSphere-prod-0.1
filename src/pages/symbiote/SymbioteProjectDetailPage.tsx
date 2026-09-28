@@ -4,17 +4,21 @@ import { useAuth } from '@/src/context/AuthContext';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { StatusPill } from '@/src/components/ui/badge';
+import { Avatar } from '@/src/components/ui/avatar';
 import {
   getProjectById,
   createApplication,
   getApplicationsBySymbiote,
   subscribeToSymbioteApplications,
+  subscribeToSymbioteInvitations,
+  updateInvitationStatus,
   getUserProfile,
   cleanupLegacyApplicationScores,
 } from '@/src/lib/firestore';
-import { Project, Application, UserProfile } from '@/src/types/firestore';
+import { Project, Application, UserProfile, Invitation } from '@/src/types/firestore';
 import {
   ArrowLeft,
+  ArrowRight,
   Sparkles,
   Briefcase,
   Building,
@@ -35,6 +39,7 @@ import {
   TrendingUp,
   Bot,
   AlertTriangle,
+  Mail,
 } from 'lucide-react';
 
 export const SymbioteProjectDetailPage: React.FC = () => {
@@ -47,6 +52,8 @@ export const SymbioteProjectDetailPage: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [clientProfile, setClientProfile] = useState<UserProfile | null>(null);
   const [existingApp, setExistingApp] = useState<Application | null>(null);
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
+  const [acceptingInvite, setAcceptingInvite] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Subscription State (Required to apply to projects without bidding)
@@ -144,9 +151,41 @@ export const SymbioteProjectDetailPage: React.FC = () => {
     return () => unsub();
   }, [uid, projectId]);
 
+  // Real-time subscription to Symbiote's Invitations for this project
+  useEffect(() => {
+    if (!uid || !projectId) return;
+    const unsub = subscribeToSymbioteInvitations(uid, (invList) => {
+      const match = (invList || []).find((inv) => inv.projectId === projectId);
+      setInvitation(match || null);
+    });
+    return () => unsub();
+  }, [uid, projectId]);
+
+  const handleAcceptInvitation = async () => {
+    if (!invitation?.id) return;
+    setAcceptingInvite(true);
+    try {
+      await updateInvitationStatus(invitation.id, 'accepted');
+      navigate('/symbiote/invitations');
+    } catch (e) {
+      console.error('Failed to accept invitation:', e);
+    } finally {
+      setAcceptingInvite(false);
+    }
+  };
+
   // Compute AI Match Score & Recommendation
   const computePreSyncAiAnalysis = () => {
     if (!project) return null;
+
+    // Check if invitation has explicit match score
+    if (invitation && (invitation.matchScore || invitation.aiMatchScore)) {
+      const score = invitation.matchScore || invitation.aiMatchScore!;
+      return {
+        matchScore: score,
+        rationale: `Client direct invitation with validated structural match of ${score}%.`,
+      };
+    }
 
     // Check if project has explicit match score or user skills overlap
     const userSkills = userProfile?.skills || [];
@@ -157,7 +196,11 @@ export const SymbioteProjectDetailPage: React.FC = () => {
       const matchCount = projSkills.filter((ps) =>
         userSkills.some((us) => us.toLowerCase() === ps.toLowerCase())
       ).length;
-      score = Math.min(98, Math.max(65, Math.round((matchCount / projSkills.length) * 100)));
+      if (matchCount === 0) {
+        score = 25;
+      } else {
+        score = Math.min(98, Math.max(45, Math.round((matchCount / projSkills.length) * 100)));
+      }
     }
 
     return {
@@ -170,6 +213,17 @@ export const SymbioteProjectDetailPage: React.FC = () => {
   };
 
   const aiAnalysis = computePreSyncAiAnalysis();
+
+  const isAlreadyHired = Boolean(
+    uid && (
+      project?.symbioteId === uid ||
+      project?.assignedSymbioteId === uid ||
+      (project?.teamMembers || []).some((m) => m.uid === uid) ||
+      invitation?.status === 'accepted' ||
+      existingApp?.status === 'accepted' ||
+      existingApp?.status === 'hired'
+    )
+  );
 
   // Helper to activate subscription for testing
   const handleActivateSubscription = () => {
@@ -241,13 +295,8 @@ export const SymbioteProjectDetailPage: React.FC = () => {
   const handleSubmitProposal = async (isDraft: boolean = false) => {
     if (!projectId || !project || !uid) return;
 
-    if (!isDraft && !hasSubscription) {
-      setErrorMessage('Specialist Subscription required. Please activate your subscription membership to apply.');
-      return;
-    }
-
     if (!isDraft && !coverLetter.trim()) {
-      setErrorMessage('Please provide a cover letter detailing your technical approach.');
+      setErrorMessage('Please provide a brief technical note or pitch for this project.');
       return;
     }
 
@@ -271,15 +320,17 @@ export const SymbioteProjectDetailPage: React.FC = () => {
         symbioteId: uid,
         symbioteName: symbioteName,
         symbioteTitle: userProfile?.title || 'Specialist Engineer',
+        symbioteAvatarUrl: userProfile?.avatarUrl || (userProfile as any)?.photoURL || firebaseUser?.photoURL || '',
+        symbioteAvatarInitials: userProfile?.avatarInitials || symbioteName.slice(0, 2).toUpperCase() || 'SP',
         clientId: project.ownerId || project.clientId || '',
         status: isDraft ? 'draft' : 'pending',
         appliedAt: new Date().toISOString(),
-        proposedRate: project.maxBudget || project.minBudget || 0,
-        rate: project.maxBudget || project.minBudget || 0,
+        proposedRate: project.budget || project.maxBudget || project.minBudget || 0,
+        rate: project.budget || project.maxBudget || project.minBudget || 0,
         estimatedDuration: estWeeks || project.duration || '4 Weeks',
-        coverLetter: coverLetter,
-        coverNote: coverLetter,
-        questionsForClient: questionsForClient,
+        coverLetter: coverLetter.trim(),
+        coverNote: coverLetter.trim(),
+        questionsForClient: questionsForClient.trim(),
         ...(aiAnalysis?.matchScore != null
           ? { aiMatchScore: aiAnalysis.matchScore, aiMatchStatus: 'calculated' as const }
           : { aiMatchStatus: 'pending' as const }),
@@ -409,9 +460,13 @@ export const SymbioteProjectDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 text-caption">
-            <span className="text-[var(--color-text-secondary)]">Project Budget:</span>
+            <span className="text-[var(--color-text-secondary)]">Payment Model:</span>
             <span className="font-bold text-emerald-400 text-body">
-              ${project.maxBudget ? project.maxBudget.toLocaleString() : (project.minBudget ? project.minBudget.toLocaleString() : 'Fixed Scope')}
+              {project.maxBudget
+                ? `$${project.maxBudget.toLocaleString()}`
+                : project.minBudget
+                ? `$${project.minBudget.toLocaleString()}`
+                : 'Dynamic Per-Task'}
             </span>
           </div>
         </div>
@@ -445,10 +500,10 @@ export const SymbioteProjectDetailPage: React.FC = () => {
             <div className="grid grid-cols-3 gap-3 p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-center">
               <div>
                 <span className="text-[11px] uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold block">
-                  Budget
+                  Payment Model
                 </span>
                 <span className="text-body font-bold text-cyan-400">
-                  {project.maxBudget ? `$${project.maxBudget.toLocaleString()}` : 'Negotiable'}
+                  Dynamic Per-Task
                 </span>
               </div>
               <div className="border-x border-[var(--color-border)] px-2">
@@ -456,7 +511,7 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                   Timeline
                 </span>
                 <span className="text-body font-bold text-[var(--color-text-primary)]">
-                  {project.duration || project.timeline || '4 Weeks'}
+                  {project.duration || project.timeline || 'Flexible Schedule'}
                 </span>
               </div>
               <div>
@@ -525,7 +580,80 @@ export const SymbioteProjectDetailPage: React.FC = () => {
               {existingApp && getStatusBadge(existingApp.status)}
             </div>
 
-            {((existingApp && existingApp.status !== 'draft') || submitSuccess) ? (
+            {invitation && invitation.status === 'pending' ? (
+              <div className="p-5 rounded-xl border border-amber-500/40 bg-gradient-to-b from-amber-950/25 via-[var(--color-surface)] to-[var(--color-surface)] space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                    <Mail className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-white">Client Invitation Received!</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                      You were directly invited by the client to join this project team. No proposal drafting required!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-2 text-xs">
+                  {invitation.clientNote && (
+                    <div className="text-[var(--color-text-secondary)] italic border-b border-[var(--color-border)] pb-2">
+                      "{invitation.clientNote}"
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-[var(--color-text-secondary)] font-mono">Offered Rate / Budget:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {invitation.budgetRange || `$${(project.maxBudget || project.minBudget || 0).toLocaleString()}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--color-text-secondary)] font-mono">Match Assessment:</span>
+                    <span className="font-mono font-bold text-cyan-400">
+                      {invitation.matchScore || invitation.aiMatchScore || 90}% Match
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                  <Button
+                    type="button"
+                    onClick={handleAcceptInvitation}
+                    disabled={acceptingInvite}
+                    className="w-full sm:flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold text-xs py-2.5 shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{acceptingInvite ? 'Accepting Invitation...' : 'Accept Invitation & Join'}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => navigate('/symbiote/invitations')}
+                    className="w-full sm:w-auto text-xs py-2.5 cursor-pointer"
+                  >
+                    View in Invitations
+                  </Button>
+                </div>
+              </div>
+            ) : isAlreadyHired ? (
+              <div className="p-5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-sm text-emerald-300">You are on this project team!</h4>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">
+                      You are an active specialist on this project. Head over to the workspace to track hours, complete tasks, and collaborate with the client.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={() => navigate(`/symbiote/workspace/${project.id}`)}
+                  className="w-full sm:w-auto text-xs py-2 px-4 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+                >
+                  Open Workspace <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : ((existingApp && existingApp.status !== 'draft') || submitSuccess) ? (
               <div className="space-y-4">
                 {/* STATUS SUMMARY ROW */}
                 <div className="p-3.5 rounded-lg border bg-[var(--color-background)] border-[var(--color-border)] flex items-center justify-between gap-3">
@@ -551,10 +679,10 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
                   <div>
                     <span className="text-[11px] uppercase font-mono tracking-wider text-[var(--color-text-secondary)] block font-semibold">
-                      Project Budget
+                      Payment Model
                     </span>
                     <span className="text-body font-bold text-cyan-400 font-mono">
-                      ${(project.maxBudget || project.minBudget || 0).toLocaleString()}
+                      Dynamic Per-Task
                     </span>
                   </div>
                   <div>
@@ -562,18 +690,18 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                       Est. Timeline
                     </span>
                     <span className="text-body font-bold text-[var(--color-text-primary)]">
-                      {existingApp?.estimatedDuration || estWeeks || project.duration || '4 Weeks'}
+                      {existingApp?.estimatedDuration || estWeeks || project.duration || 'Flexible Schedule'}
                     </span>
                   </div>
                 </div>
 
-                {/* COVER LETTER DISPLAY */}
+                {/* PROPOSAL NOTE DISPLAY */}
                 <div className="space-y-1.5">
                   <span className="text-caption font-semibold text-[var(--color-text-primary)] block">
-                    Cover Letter
+                    Technical Pitch & Proposal Note
                   </span>
                   <div className="p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-caption text-[var(--color-text-primary)] leading-relaxed whitespace-pre-line max-h-60 overflow-y-auto">
-                    {existingApp?.coverLetter || existingApp?.coverNote || coverLetter || 'No cover letter content.'}
+                    {existingApp?.coverLetter || existingApp?.coverNote || coverLetter || 'No proposal note submitted.'}
                   </div>
                 </div>
 
@@ -599,188 +727,114 @@ export const SymbioteProjectDetailPage: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {subActivatedMsg && (
-                  <div className="p-3.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                    <span>{subActivatedMsg}</span>
+                {/* ACTIVE APPLICATION BADGE */}
+                <div className="flex items-center justify-between px-3.5 py-2 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="font-semibold text-emerald-400 font-mono">Direct Application (Zero Bids)</span>
+                  </div>
+                  <span className="text-[11px] text-[var(--color-text-secondary)]">
+                    Payment: <span className="text-cyan-400 font-semibold font-mono">Dynamic Per-Task</span>
+                  </span>
+                </div>
+
+                {errorMessage && (
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-caption">
+                    {errorMessage}
                   </div>
                 )}
 
-                {!hasSubscription ? (
-                  /* SUBSCRIPTION GATEWAY CARD */
-                  <div className="p-5 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-4">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
-                        <Sparkles className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-bold text-[var(--color-text-primary)]">
-                          Specialist Subscription Required
-                        </h4>
-                        <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-                          No bidding needed! Subscribing grants you direct application access to all client projects on the platform.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-[var(--color-text-primary)]">
-                        <span className="text-[var(--color-text-secondary)] font-mono">Membership:</span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                          Inactive (Subscription Required)
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[var(--color-text-primary)]">
-                        <span className="text-[var(--color-text-secondary)] font-mono">Application Model:</span>
-                        <span className="font-mono font-semibold text-emerald-400">Direct Application (Zero Bids)</span>
-                      </div>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] pt-1.5 border-t border-[var(--color-border)]">
-                        Subscription plans will be decided soon. You can activate membership right now to test direct project applications.
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={handleActivateSubscription}
-                      disabled={activatingSub}
-                      className="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-slate-950 font-bold text-xs py-3 border-0 shadow-md cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      {activatingSub ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                          <span>Activating Subscription...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Activate Specialist Subscription (Test Direct Apply)</span>
-                        </>
-                      )}
-                    </Button>
+                {draftSaved && (
+                  <div className="p-3 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-caption font-semibold">
+                    Draft proposal saved to Firestore!
                   </div>
-                ) : (
-                  <>
-                    {/* ACTIVE SUBSCRIPTION BADGE */}
-                    <div className="flex items-center justify-between px-3.5 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
-                      <span className="flex items-center gap-1.5 font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>Specialist Membership Active • Unlimited Direct Applications</span>
+                )}
+
+                {/* RATE & ESTIMATED TIMELINE */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-caption font-semibold text-[var(--color-text-primary)]">
+                      Agreed Billing Rate
+                    </label>
+                    <div className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-cyan-400 font-bold flex items-center justify-between font-mono">
+                      <span>${(userProfile as any)?.hourlyRate || 50}/hr</span>
+                      <span className="text-[10px] text-[var(--color-text-secondary)] font-normal uppercase">
+                        Profile Rate
                       </span>
-                      <span className="text-[10px] uppercase font-bold text-emerald-300">Verified ✓</span>
                     </div>
+                  </div>
 
-                    {errorMessage && (
-                      <div className="p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-caption">
-                        {errorMessage}
-                      </div>
-                    )}
+                  <div className="space-y-1">
+                    <label className="text-caption font-semibold text-[var(--color-text-primary)]">
+                      Estimated Delivery Timeline
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2-3 Weeks"
+                      value={estWeeks}
+                      onChange={(e) => setEstWeeks(e.target.value)}
+                      className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
 
-                    {draftSaved && (
-                      <div className="p-3 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-caption font-semibold">
-                        Draft proposal saved to Firestore!
-                      </div>
-                    )}
-
-                    {/* PROJECT BUDGET & ESTIMATED WEEKS (NO BID FIELD) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-caption font-semibold text-[var(--color-text-primary)]">
-                          Project Budget
-                        </label>
-                        <div className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-emerald-400 font-bold flex items-center justify-between font-mono">
-                          <span>${project.maxBudget ? project.maxBudget.toLocaleString() : (project.minBudget ? project.minBudget.toLocaleString() : 'Fixed Scope')}</span>
-                          <span className="text-[10px] text-[var(--color-text-secondary)] font-normal uppercase">Direct Rate</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-caption font-semibold text-[var(--color-text-primary)]">
-                          Estimated Delivery Timeline
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 3 Weeks"
-                          value={estWeeks}
-                          onChange={(e) => setEstWeeks(e.target.value)}
-                          className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* COVER LETTER TEXTAREA WITH CHAR COUNTER & AI GENERATOR */}
-                    <div className="space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <label className="text-caption font-semibold text-[var(--color-text-primary)]">
-                          Cover Letter / Technical Approach *
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={generatingPitch || submitting}
-                            onClick={handleGenerateAiProposalPitch}
-                            className="text-[11px] font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 py-1 h-7 flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Sparkles className={`w-3.5 h-3.5 ${generatingPitch ? 'animate-spin text-emerald-400' : 'text-emerald-400'}`} />
-                            <span>{generatingPitch ? 'Drafting with AI...' : 'Generate AI Proposal Pitch'}</span>
-                          </Button>
-                          <span className="text-[11px] font-mono text-[var(--color-text-secondary)]">
-                            {coverLetter.length} / 2000 chars
-                          </span>
-                        </div>
-                      </div>
-                      <textarea
-                        rows={5}
-                        maxLength={2000}
-                        placeholder="Describe your technical approach, relevant past work, and why you are the ideal specialist for this project..."
-                        value={coverLetter}
-                        onChange={(e) => setCoverLetter(e.target.value)}
-                        className="w-full p-3 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-
-                    {/* QUESTIONS FOR CLIENT TEXTAREA */}
-                    <div className="space-y-1">
-                      <label className="text-caption font-semibold text-[var(--color-text-primary)]">
-                        Questions for Client (Optional)
-                      </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Any clarification needed regarding architecture, credentials, or timeline..."
-                        value={questionsForClient}
-                        onChange={(e) => setQuestionsForClient(e.target.value)}
-                        className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-
-                    {/* ACTION BUTTONS: SAVE DRAFT & SUBMIT PROPOSAL */}
-                    <div className="flex items-center gap-3 pt-2">
+                {/* TECHNICAL PROPOSAL / PITCH */}
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <label className="text-caption font-semibold text-[var(--color-text-primary)]">
+                      Technical Pitch / Approach *
+                    </label>
+                    <div className="flex items-center gap-2">
                       <Button
                         type="button"
-                        variant="secondary"
-                        disabled={savingDraft || submitting}
-                        onClick={() => handleSubmitProposal(true)}
-                        className="flex-1 border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-background)] text-caption py-2.5 cursor-pointer"
+                        variant="outline"
+                        size="sm"
+                        disabled={generatingPitch || submitting}
+                        onClick={handleGenerateAiProposalPitch}
+                        className="text-[11px] font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 py-0.5 h-6 flex items-center gap-1 cursor-pointer"
                       >
-                        <Save className="w-4 h-4 mr-1.5" />
-                        {savingDraft ? 'Saving...' : 'Save Draft'}
+                        <Sparkles className={`w-3 h-3 ${generatingPitch ? 'animate-spin' : ''}`} />
+                        <span>{generatingPitch ? 'Drafting...' : 'AI Pitch'}</span>
                       </Button>
-
-                      <Button
-                        type="button"
-                        variant="primary"
-                        disabled={submitting || savingDraft}
-                        onClick={() => handleSubmitProposal(false)}
-                        className="flex-1 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-slate-950 font-bold text-xs py-2.5 border-0 shadow-sm cursor-pointer"
-                      >
-                        <Send className="w-4 h-4 mr-1.5" />
-                        {submitting ? 'Submitting...' : 'Submit Application'}
-                      </Button>
+                      <span className="text-[10px] font-mono text-[var(--color-text-secondary)]">
+                        {coverLetter.length} / 2000 chars
+                      </span>
                     </div>
-                  </>
-                )}
+                  </div>
+                  <textarea
+                    rows={4}
+                    maxLength={2000}
+                    placeholder="Summarize your technical approach, relevant experience, and why you are the ideal specialist for this project..."
+                    value={coverLetter}
+                    onChange={(e) => setCoverLetter(e.target.value)}
+                    className="w-full p-3 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
+                  />
+                </div>
+
+                {/* ACTION BUTTONS: SAVE DRAFT & SUBMIT PROPOSAL */}
+                <div className="flex items-center gap-3 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={savingDraft || submitting}
+                    onClick={() => handleSubmitProposal(true)}
+                    className="flex-1 border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-background)] text-caption py-2.5 cursor-pointer font-medium"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={submitting || savingDraft}
+                    onClick={() => handleSubmitProposal(false)}
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold text-xs py-2.5 border-0 shadow-md cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1.5" />
+                    {submitting ? 'Submitting...' : 'Submit Application'}
+                  </Button>
+                </div>
               </div>
             )}
           </Card>
@@ -792,9 +846,12 @@ export const SymbioteProjectDetailPage: React.FC = () => {
             </h3>
 
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-lg flex items-center justify-center shrink-0">
-                {clientName.substring(0, 2).toUpperCase()}
-              </div>
+              <Avatar
+                src={clientProfile?.avatarUrl || (clientProfile as any)?.photoURL}
+                name={clientName}
+                size="md"
+                className="shrink-0 ring-2 ring-[var(--color-accent-cyan)]/30"
+              />
               <div>
                 <h4 className="text-body font-bold text-[var(--color-text-primary)]">{clientName}</h4>
                 <p className="text-caption text-[var(--color-text-secondary)] flex items-center gap-1 mt-0.5">

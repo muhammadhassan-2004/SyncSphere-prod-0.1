@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, children }) => {
-  const { authenticatedUser, userProfile, currentRole, loading } = useAuth();
+  const { authenticatedUser, userProfile, firebaseUser, currentRole, loading } = useAuth();
   const location = useLocation();
 
   // Explicitly block rendering of any protected components before authentication status is verified
@@ -32,6 +32,26 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, ch
   // Redirects to /login if role is missing or incorrect
   if (!activeUser || !activeRole || activeRole !== requiredRole) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Strictly enforce email verification across all roles (Client, Freelancer/Symbiote, Admin)
+  // If email is not verified, user cannot access any dashboard or portal route
+  const isEmailUnverified =
+    activeUser.emailVerified === false ||
+    (firebaseUser && firebaseUser.emailVerified === false && activeUser.emailVerified !== true);
+
+  if (isEmailUnverified && location.pathname !== '/verify-email') {
+    return (
+      <Navigate
+        to={`/verify-email?email=${encodeURIComponent(activeUser.email || firebaseUser?.email || '')}&role=${activeRole}`}
+        state={{
+          email: activeUser.email || firebaseUser?.email,
+          uid: activeUser.uid || firebaseUser?.uid,
+          role: activeRole,
+        }}
+        replace
+      />
+    );
   }
 
   // If a brand new user explicitly has not completed onboarding, redirect to onboarding screen

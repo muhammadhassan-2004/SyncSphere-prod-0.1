@@ -10,11 +10,17 @@ import {
   Clock,
   Bell,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
+import { Avatar } from '@/src/components/ui/avatar';
 import { EmptyStateBlock } from '@/src/components/widgets/EmptyStateBlock';
 import { ProjectActivityItem } from '@/src/types/firestore';
 import { subscribeToProjectActivity } from '@/src/lib/firestore/projectActivity';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '@/src/lib/firebase';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
+import { UserProfileModal } from '@/src/components/profile/UserProfileModal';
 
 interface ProjectActivityTabProps {
   projectId: string;
@@ -26,6 +32,21 @@ export const ProjectActivityTab: React.FC<ProjectActivityTabProps> = ({ projectI
   const [categoryFilter, setCategoryFilter] = useState<
     'all' | 'task' | 'milestone' | 'file' | 'team' | 'invoice'
   >('all');
+
+  // Real users resolution map for dynamic, functional avatars
+  const [realUsersMap, setRealUsersMap] = useState<Map<string, any>>(new Map());
+  const [profileModalUid, setProfileModalUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+      const uMap = new Map<string, any>();
+      snap.docs.forEach((d) => {
+        uMap.set(d.id, { uid: d.id, ...d.data() });
+      });
+      setRealUsersMap(uMap);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (!projectId) {
@@ -158,47 +179,115 @@ export const ProjectActivityTab: React.FC<ProjectActivityTabProps> = ({ projectI
         </div>
       ) : filteredActivities.length > 0 ? (
         <div className="space-y-3">
-          {filteredActivities.map((event) => (
-            <div
-              key={event.id}
-              className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] hover:border-emerald-500/30 transition-all flex items-start justify-between gap-3 group"
-            >
-              <div className="flex items-start gap-3 min-w-0 flex-1">
-                {/* ACTOR AVATAR */}
-                <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                  {getActorInitials(event.actorName)}
-                </div>
+          {filteredActivities.map((event) => {
+            // Defensive actor resolution against live user documents
+            const actorUser =
+              (event.actorId && realUsersMap.get(event.actorId)) ||
+              (event.actorName
+                ? Array.from(realUsersMap.values()).find(
+                    (u: any) =>
+                      u.displayName?.trim().toLowerCase() === event.actorName?.trim().toLowerCase()
+                  )
+                : null);
 
-                {/* ACTIVITY CONTENT */}
-                <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-body text-[var(--color-text-primary)]">
-                      {event.title}
-                    </span>
-                    {renderBadge(event.type)}
+            const resolvedActorId = actorUser?.uid || event.actorId || null;
+            const resolvedName = actorUser?.displayName || event.actorName || 'Team Member';
+            const resolvedAvatarUrl =
+              actorUser?.avatarUrl || (actorUser as any)?.photoURL || event.actorAvatarUrl;
+            const resolvedInitials =
+              actorUser?.avatarInitials ||
+              event.actorAvatarInitials ||
+              getActorInitials(resolvedName);
+            const statusDot = actorUser ? getUserStatusDot(actorUser) : undefined;
+            const canOpenProfile = !!resolvedActorId;
+
+            return (
+              <div
+                key={event.id}
+                className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] hover:border-emerald-500/30 transition-all flex items-start justify-between gap-3 group"
+              >
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  {/* FUNCTIONAL ACTOR AVATAR */}
+                  <div
+                    onClick={() => {
+                      if (canOpenProfile) setProfileModalUid(resolvedActorId);
+                    }}
+                    className={`relative shrink-0 mt-0.5 ${
+                      canOpenProfile
+                        ? 'cursor-pointer hover:ring-2 hover:ring-[var(--color-accent-cyan)] rounded-full transition-all hover:scale-105 active:scale-95'
+                        : ''
+                    }`}
+                    title={canOpenProfile ? `View ${resolvedName}'s Profile` : resolvedName}
+                  >
+                    <Avatar
+                      name={resolvedName}
+                      initials={resolvedInitials}
+                      src={resolvedAvatarUrl}
+                      size="sm"
+                      statusDot={statusDot}
+                      className="shadow-xs"
+                    />
                   </div>
-                  <p className="text-body text-[var(--color-text-secondary)] leading-snug break-words">
-                    {event.description}
-                  </p>
-                  <p className="text-caption font-mono text-[var(--color-text-secondary)] opacity-80 pt-0.5">
-                    By <strong className="text-[var(--color-text-primary)]">{event.actorName || 'System User'}</strong>
-                  </p>
+
+                  {/* ACTIVITY CONTENT */}
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-body text-[var(--color-text-primary)]">
+                        {event.title}
+                      </span>
+                      {renderBadge(event.type)}
+                    </div>
+                    <p className="text-body text-[var(--color-text-secondary)] leading-snug break-words">
+                      {event.description}
+                    </p>
+                    <div className="text-caption font-mono text-[var(--color-text-secondary)] opacity-80 pt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>By</span>
+                      {canOpenProfile ? (
+                        <button
+                          type="button"
+                          onClick={() => setProfileModalUid(resolvedActorId)}
+                          className="font-bold text-[var(--color-text-primary)] hover:text-[var(--color-accent-cyan)] hover:underline cursor-pointer transition-colors"
+                          title={`View ${resolvedName}'s Profile`}
+                        >
+                          {resolvedName}
+                        </button>
+                      ) : (
+                        <strong className="text-[var(--color-text-primary)]">
+                          {resolvedName}
+                        </strong>
+                      )}
+                      {actorUser?.role && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700/50 uppercase">
+                          {actorUser.role === 'symbiote' ? 'Freelancer' : actorUser.role}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* RELATIVE TIMESTAMP */}
+                <div className="text-caption font-mono text-[var(--color-text-secondary)] shrink-0 pt-0.5 flex items-center gap-1">
+                  <Clock className="w-3 h-3 opacity-60" />
+                  {getRelativeTime(event.timestamp)}
                 </div>
               </div>
-
-              {/* RELATIVE TIMESTAMP */}
-              <div className="text-caption font-mono text-[var(--color-text-secondary)] shrink-0 pt-0.5 flex items-center gap-1">
-                <Clock className="w-3 h-3 opacity-60" />
-                {getRelativeTime(event.timestamp)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <EmptyStateBlock
           icon={<ActivityIcon className="w-6 h-6 text-emerald-400" />}
           title="No Events Recorded"
           description={`No activity recorded under the "${categoryFilter}" category yet.`}
+        />
+      )}
+
+      {/* USER PROFILE MODAL FOR FUNCTIONAL AVATAR INTERACTIONS */}
+      {profileModalUid && (
+        <UserProfileModal
+          isOpen={!!profileModalUid}
+          onClose={() => setProfileModalUid(null)}
+          userId={profileModalUid}
         />
       )}
     </Card>

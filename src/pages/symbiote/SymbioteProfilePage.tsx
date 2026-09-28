@@ -59,7 +59,6 @@ import {
   Building2,
   Link2,
   Layers,
-  ArrowUpRight,
   HelpCircle,
   AlertCircle,
   Edit3,
@@ -143,7 +142,7 @@ export const SymbioteProfilePage: React.FC = () => {
         setDisplayName(profile.displayName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || (firebaseUser?.email ? firebaseUser.email.split('@')[0] : ''));
         setJobTitle(profile.title || profile.jobTitle || '');
         setHourlyRate(profile.hourlyRate ? String(profile.hourlyRate) : '');
-        setLocation(profile.location || '');
+        setLocation(profile.location || (profile as any).country || (profile as any).city || profile.companyProfile?.country || '');
         setTimeZone(profile.timeZone || '');
         setAvailability(profile.availability || '');
         setExperienceLevel((profile.experience as any) || '');
@@ -424,17 +423,6 @@ export const SymbioteProfilePage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          {/* VIEW PUBLIC CLIENT PROFILE BUTTON */}
-          <Button
-            onClick={() => navigate(`/client/professionals/${uid}`)}
-            variant="outline"
-            className="border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] gap-2 text-caption font-semibold cursor-pointer"
-          >
-            <Eye className="w-4 h-4 shrink-0 text-[var(--color-accent-cyan)]" />
-            <span>View Client Page</span>
-            <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-[var(--color-text-secondary)]" />
-          </Button>
-
           {/* SAVE PROFILE BUTTON */}
           <Button
             onClick={handleSaveProfile}

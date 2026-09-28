@@ -25,6 +25,9 @@ export interface CreateProjectActivityInput {
   type: ProjectActivityCategory;
   actorName?: string;
   actorId?: string;
+  actorAvatarUrl?: string;
+  actorAvatarInitials?: string;
+  actorRole?: string;
   timestamp?: string;
   referenceText?: string;
   referenceUrl?: string;
@@ -47,6 +50,9 @@ export async function logProjectActivity(
       type: activity.type || 'general',
       actorName: activity.actorName || 'System User',
       actorId: activity.actorId || '',
+      actorAvatarUrl: activity.actorAvatarUrl || '',
+      actorAvatarInitials: activity.actorAvatarInitials || '',
+      actorRole: activity.actorRole || '',
       timestamp: activity.timestamp || new Date().toISOString(),
       ...(activity.referenceText ? { referenceText: activity.referenceText } : {}),
       ...(activity.referenceUrl ? { referenceUrl: activity.referenceUrl } : {}),

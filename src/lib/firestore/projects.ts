@@ -224,6 +224,7 @@ export async function addTeamMemberToProject(
     displayName: string;
     role: string;
     avatarInitials?: string;
+    avatarUrl?: string;
     email?: string;
     hourlyRate?: number;
     matchScore?: number;
@@ -239,8 +240,15 @@ export async function addTeamMemberToProject(
       return;
     }
     const updatedTeam = [...existingTeam, { ...member, addedAt: new Date().toISOString() }];
+    const existingUids = Array.isArray(data.teamMemberUids)
+      ? data.teamMemberUids
+      : existingTeam.map((m: any) => m.uid).filter(Boolean);
+    const updatedUids = Array.from(new Set([...existingUids, member.uid]));
+
     await updateDoc(docRef, {
       teamMembers: updatedTeam,
+      teamMemberUids: updatedUids,
+      ...(!data.assignedSymbioteId ? { assignedSymbioteId: member.uid } : {}),
       updatedAt: new Date().toISOString(),
     });
 
@@ -307,14 +315,20 @@ export function subscribeToProjectsBySymbiote(
   const colRef = collection(db, PROJECTS_COLLECTION);
   const q1 = query(colRef, where('assignedSymbioteId', '==', symbioteId));
   const q2 = query(colRef, where('symbioteId', '==', symbioteId));
+  const q3 = query(colRef, where('teamMemberUids', 'array-contains', symbioteId));
+  const q4 = query(colRef, where('status', 'in', ['in_progress', 'completed', 'open']));
 
   let list1: Project[] = [];
   let list2: Project[] = [];
+  let list3: Project[] = [];
+  let list4: Project[] = [];
 
   const emitMerged = () => {
     const map = new Map<string, Project>();
     list1.forEach(p => { if (p.id) map.set(p.id, p); });
     list2.forEach(p => { if (p.id) map.set(p.id, p); });
+    list3.forEach(p => { if (p.id) map.set(p.id, p); });
+    list4.forEach(p => { if (p.id) map.set(p.id, p); });
     callback(Array.from(map.values()));
   };
 
@@ -326,7 +340,6 @@ export function subscribeToProjectsBySymbiote(
     },
     (error) => {
       handleFirestoreError(error, OperationType.LIST, PROJECTS_COLLECTION);
-      callback([]);
     }
   );
 
@@ -336,14 +349,39 @@ export function subscribeToProjectsBySymbiote(
       list2 = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Project));
       emitMerged();
     },
-    (error) => {
-      // Graceful fallback for secondary alias query
-    }
+    () => {}
+  );
+
+  const unsub3 = onSnapshot(
+    q3,
+    (snapshot) => {
+      list3 = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Project));
+      emitMerged();
+    },
+    () => {}
+  );
+
+  const unsub4 = onSnapshot(
+    q4,
+    (snapshot) => {
+      list4 = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as Project))
+        .filter(p =>
+          p.assignedSymbioteId === symbioteId ||
+          p.symbioteId === symbioteId ||
+          (p.teamMembers && p.teamMembers.some((m: any) => m.uid === symbioteId)) ||
+          ((p as any).teamMemberUids && (p as any).teamMemberUids.includes(symbioteId))
+        );
+      emitMerged();
+    },
+    () => {}
   );
 
   return () => {
     unsub1();
     unsub2();
+    unsub3();
+    unsub4();
   };
 }
 

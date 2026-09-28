@@ -63,3 +63,8 @@ This document serves as the **Single Source of Truth** for all AI agents working
 7. **Documentation Alignment**:
    - Whenever an issue is resolved and verified, immediately update `documents/BUGS_AND_ISSUES_TRACKER.md` with the verified resolution and date.
    - Never mark an issue as resolved in documentation without real test verification.
+
+8. **Strict Git Push Protocol (Never Push Without User Permission)**:
+   - **NEVER** run `git push` without asking the user first and receiving explicit approval.
+   - User se poochay bina kabhi bhi remote repository (`git push`) par code push nahi karna, kyunke GitHub repo direct Vercel live production deployment se connect hai.
+   - Always present the changes and ask the user before performing any push operation.
