@@ -28,7 +28,7 @@ import {
 // Single InvitationCard component accepting status prop
 interface InvitationCardProps {
   invitation: Invitation;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'pending' | 'accepted' | 'approved' | 'declined';
   onAccept: (invitationId: string) => void;
   onDecline: (invitationId: string) => void;
   onViewDetails: (projectId: string) => void;
@@ -43,29 +43,32 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({
   onViewDetails,
   isProcessing,
 }) => {
-  const matchScore = invitation.aiMatchScore || invitation.matchScore || 90;
-  const projectTitle = (invitation.projectTitle && invitation.projectTitle !== 'Project Invitation' && invitation.projectTitle !== 'Untitled Project')
-    ? invitation.projectTitle
-    : 'Privacy app';
+  const navigate = useNavigate();
+  const rawScore = invitation.matchScore ?? invitation.aiMatchScore;
+  const matchScore = typeof rawScore === 'number' && rawScore > 0 ? rawScore : null;
+  const projectTitle = invitation.projectTitle || 'Project Invitation';
   const clientName = invitation.clientName || 'Client';
   const clientQuote =
     invitation.clientNote ||
     invitation.message ||
     'Invitation received from client.';
-  const budget = invitation.budgetRange || (invitation as any).budget || 'Negotiable';
+  const budget = invitation.budgetRange || (invitation as any).budget || 'Dynamic Per-Task';
   const timeline = invitation.timeline || 'Flexible';
   const tags = invitation.techTags || [];
 
   const isDeclined = status === 'declined';
   const isAccepted = status === 'accepted';
+  const isApproved = status === 'approved';
 
   return (
     <Card
       className={`p-6 border transition-all duration-200 rounded-[12px] space-y-4 flex flex-col justify-between ${
         isDeclined
           ? 'border-[var(--color-border)] bg-[var(--color-surface)]/60 opacity-65 hover:opacity-90'
+          : isApproved
+          ? 'border-emerald-500/40 bg-gradient-to-b from-emerald-950/15 via-[var(--color-surface)] to-[var(--color-surface)] shadow-sm'
           : isAccepted
-          ? 'border-emerald-500/30 bg-gradient-to-b from-emerald-950/10 via-[var(--color-surface)] to-[var(--color-surface)] shadow-sm'
+          ? 'border-amber-500/30 bg-gradient-to-b from-amber-950/10 via-[var(--color-surface)] to-[var(--color-surface)] shadow-sm'
           : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-cyan-500/30 shadow-sm'
       }`}
     >
@@ -81,14 +84,23 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <StatusPill
-              variant={isAccepted ? 'green' : isDeclined ? 'red' : 'cyan'}
-              label={`${matchScore}% Match`}
-            />
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+            {matchScore != null && (
+              <StatusPill
+                variant={isApproved ? 'green' : isAccepted ? 'amber' : isDeclined ? 'red' : 'cyan'}
+                label={`${matchScore}% Match`}
+              />
+            )}
             {isAccepted && (
-              <span className="px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                Accepted
+              <span className="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Waiting for Client Approval
+              </span>
+            )}
+            {isApproved && (
+              <span className="px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                Approved
               </span>
             )}
           </div>
@@ -167,9 +179,37 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({
         )}
 
         {status === 'accepted' && (
-          <div className="w-full py-2.5 px-4 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-semibold text-caption text-center flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Accepted — Contract Active</span>
+          <div className="w-full py-2.5 px-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold text-caption text-center flex items-center justify-center gap-2">
+            <Clock className="w-4 h-4 text-amber-400" />
+            <span>Accepted — Waiting for Client Approval</span>
+          </div>
+        )}
+
+        {status === 'approved' && (
+          <div className="space-y-2.5">
+            <div className="w-full py-2 px-4 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-semibold text-caption text-center flex items-center justify-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Approved — Contract Active</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => onViewDetails(invitation.projectId)}
+                className="flex-1 border-[var(--color-border)] text-[var(--color-text-primary)] hover:text-cyan-300 text-caption py-2"
+              >
+                View Details
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => navigate(`/symbiote/workspace/${invitation.projectId}`)}
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold text-caption py-2 border-0 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>Go to Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
           </div>
         )}
 
@@ -216,7 +256,7 @@ export const SymbioteInvitationsPage: React.FC = () => {
     try {
       setProcessingId(invitationId);
       await updateInvitationStatus(invitationId, 'accepted');
-      setToastMessage('Invitation accepted! Contract has been auto-initiated and project is now In Progress.');
+      setToastMessage('Invitation accepted! Waiting for client final approval to unlock the project workspace.');
       setTimeout(() => setToastMessage(null), 5000);
     } catch (err) {
       console.error('Failed to accept invitation:', err);
@@ -239,11 +279,12 @@ export const SymbioteInvitationsPage: React.FC = () => {
 
   // Live Computed Counts from Firestore Array
   const pendingCount = invitations.filter((i) => i.status === 'pending').length;
-  const acceptedCount = invitations.filter((i) => i.status === 'accepted').length;
+  const acceptedCount = invitations.filter((i) => i.status === 'accepted' || i.status === 'approved').length;
   const declinedCount = invitations.filter((i) => i.status === 'declined').length;
 
   const filteredInvitations = invitations.filter((inv) => {
     if (filter === 'all') return true;
+    if (filter === 'accepted') return inv.status === 'accepted' || inv.status === 'approved';
     return inv.status === filter;
   });
 

@@ -88,6 +88,8 @@ export interface UserProfile {
   billingInfo?: BillingInfo;
   mfaEnabled?: boolean;
   mfaPhoneNumber?: string;
+  mfaType?: 'email' | 'sms' | null;
+  mfaEmail?: string;
   title?: string;
   rating?: number;
   reviewsCount?: number;
@@ -177,6 +179,8 @@ export interface Project {
     matchScore?: number;
     addedAt?: string;
   }>;
+  totalSpent?: number;
+  totalSettledTasks?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -234,6 +238,18 @@ export interface TaskAssignee {
   role?: string;
 }
 
+export interface TaskComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: 'client' | 'symbiote' | 'admin';
+  authorAvatarUrl?: string;
+  authorAvatarInitials?: string;
+  content: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface WorkspaceTask {
   id?: string;
   projectId: string;
@@ -246,6 +262,8 @@ export interface WorkspaceTask {
   milestoneId?: string;
   milestoneTitle?: string;
   estimatedHours?: number;
+  minHours?: number;
+  maxHours?: number;
   actualHours?: number;
   actualTotalHours?: number;
   dependencyTaskId?: string;
@@ -255,12 +273,17 @@ export interface WorkspaceTask {
   assigneeAvatarInitials?: string;
   assigneeAvatarUrl?: string;
   assignees?: TaskAssignee[];
+  comments?: TaskComment[];
   submittedForReviewAt?: string;
   reviewNotes?: string;
   approvedAt?: string;
   approvedBy?: string;
   invoiced?: boolean;
   invoiceId?: string;
+  invoiceNumber?: string;
+  settledAmount?: number;
+  settledRate?: number;
+  settledHours?: number;
   createdAt: string;
   updatedAt?: string;
 }
@@ -468,8 +491,12 @@ export interface ProjectActivityItem {
   projectId?: string;
   title: string;
   description: string;
-  type: 'milestone' | 'file' | 'team' | 'invoice' | 'commit' | 'general';
+  type: 'milestone' | 'file' | 'team' | 'invoice' | 'commit' | 'general' | 'task';
   actorName?: string;
+  actorId?: string;
+  actorAvatarUrl?: string;
+  actorAvatarInitials?: string;
+  actorRole?: string;
   timestamp: string;
   referenceText?: string;
   referenceUrl?: string;

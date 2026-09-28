@@ -106,3 +106,84 @@ export function subscribeToProjectMatches(
     }
   );
 }
+
+export function computeDeterministicMatchScore(
+  candidate: { skills?: string[]; title?: string; jobTitle?: string; bio?: string; experience?: string; availability?: string; rating?: number },
+  project: { skills?: string[]; techTags?: string[]; title?: string; category?: string; description?: string } | null
+): { matchScore: number; subMetrics: MatchSubMetrics; explanation: string } {
+  if (!project) {
+    return {
+      matchScore: 75,
+      subMetrics: { skillsMatch: 75, experienceFit: 75, availabilityFit: 80 },
+      explanation: `${candidate.title || 'Specialist'} with verified engineering capabilities.`,
+    };
+  }
+
+  const rawSkills: any[] = [
+    ...(Array.isArray(project?.skills) ? project.skills : []),
+    ...(Array.isArray(project?.techTags) ? project.techTags : []),
+  ];
+  const projectSkills: string[] = rawSkills
+    .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim().toLowerCase());
+
+  const projectTitle = String(project?.title || 'Project');
+
+  const titleKeywords = projectTitle
+    .toLowerCase()
+    .split(/[\s,/-]+/)
+    .filter((w) => w.length > 2 && !['and', 'the', 'for', 'with', 'from', 'app', 'project', 'brief'].includes(w));
+
+  const effectiveKeywords = projectSkills.length > 0 ? projectSkills : titleKeywords;
+
+  const candSkills: string[] = (Array.isArray(candidate?.skills) ? candidate.skills : [])
+    .filter((s: any): s is string => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim().toLowerCase());
+
+  const candTitle = String(candidate?.title || candidate?.jobTitle || '').toLowerCase();
+  const candBio = String(candidate?.bio || '').toLowerCase();
+
+  const matchingSkills = candSkills.filter((cs) =>
+    effectiveKeywords.some((pk) => pk === cs || cs.includes(pk) || pk.includes(cs))
+  );
+
+  const titleMatches = effectiveKeywords.some((pk) => candTitle.includes(pk));
+  const bioMatches = effectiveKeywords.filter((pk) => candBio.includes(pk)).length;
+
+  const hasAnySkillMatch = matchingSkills.length > 0;
+  const hasDomainMatch = titleMatches || bioMatches > 1;
+
+  let matchScore = 12;
+  let skillsScore = 10;
+
+  if (hasAnySkillMatch || (effectiveKeywords.length > 0 && hasDomainMatch)) {
+    const overlapRatio = effectiveKeywords.length > 0 ? matchingSkills.length / effectiveKeywords.length : 0.5;
+    skillsScore = Math.min(98, Math.round(50 + overlapRatio * 45 + (titleMatches ? 5 : 0)));
+    const expScore = candidate.experience === 'Expert' ? 95 : candidate.experience === 'Senior' ? 88 : 75;
+    const availScore = candidate.availability === 'Immediate' ? 95 : 82;
+
+    matchScore = Math.round((skillsScore * 0.6) + (expScore * 0.25) + (availScore * 0.15));
+    matchScore = Math.min(98, Math.max(45, matchScore));
+  } else {
+    matchScore = Math.min(15, Math.max(8, Math.round((candidate.rating ? candidate.rating * 2 : 10))));
+    skillsScore = 10;
+  }
+
+  const expScore = candidate.experience === 'Expert' ? 95 : candidate.experience === 'Senior' ? 88 : 75;
+  const availScore = candidate.availability === 'Immediate' ? 95 : 80;
+
+  const matchedList = matchingSkills.slice(0, 3).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
+  const explanation = hasAnySkillMatch
+    ? `${candidate.title || 'Specialist'} is a ${matchScore}% match for "${projectTitle}". Verified skills in ${matchedList} with strong alignment.`
+    : `Primary technical focus does not align with required qualifications (${effectiveKeywords.slice(0, 3).join(', ')}).`;
+
+  return {
+    matchScore,
+    subMetrics: {
+      skillsMatch: skillsScore,
+      experienceFit: expScore,
+      availabilityFit: availScore,
+    },
+    explanation,
+  };
+}

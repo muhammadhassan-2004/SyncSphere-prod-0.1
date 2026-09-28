@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Search, Download, FolderKanban, AlertCircle, Eye, X, Calendar, User, DollarSign, Tag, Clock, Layers } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
+import { Avatar } from '@/src/components/ui/avatar';
 import { AvatarStack } from '@/src/components/ui/AvatarStack';
 import {
   getProjectsPage,
@@ -216,7 +217,7 @@ export function ProjectOversightPage() {
                 <th className="p-3.5 font-medium">Project Name</th>
                 <th className="p-3.5 font-medium">Client</th>
                 <th className="p-3.5 font-medium">Freelancers</th>
-                <th className="p-3.5 font-medium">Budget</th>
+                <th className="p-3.5 font-medium">Total Spent</th>
                 <th className="p-3.5 font-medium">Status</th>
                 <th className="p-3.5 font-medium">Category</th>
                 <th className="p-3.5 font-medium">Created</th>
@@ -258,7 +259,7 @@ export function ProjectOversightPage() {
                     {p.businessOwnerName}
                   </td>
                   <td className="p-3.5">
-                    <AvatarStack names={p.professionalNames} />
+                    <AvatarStack items={p.professionals} names={p.professionalNames} />
                   </td>
                   <td className="p-3.5 font-mono">
                     {p.previousBudget != null && p.previousBudget !== p.budget && (
@@ -267,7 +268,7 @@ export function ProjectOversightPage() {
                       </span>
                     )}
                     <span className="text-cyan-400 font-semibold">
-                      {p.budgetDisplay || (p.budget != null ? `$${p.budget.toLocaleString()}` : 'Negotiable')}
+                      {p.budgetDisplay || (p.budget != null ? `$${p.budget.toLocaleString()}` : 'Dynamic Per-Task')}
                     </span>
                   </td>
                   <td className="p-3.5">
@@ -353,7 +354,7 @@ export function ProjectOversightPage() {
 
                 <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
                   <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Budget Range
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Financial Settlement
                   </div>
                   <div className="text-sm font-bold text-cyan-400">
                     {selectedProject.budgetDisplay}
@@ -401,7 +402,37 @@ export function ProjectOversightPage() {
                 <h3 className="text-xs uppercase tracking-wider font-mono text-[var(--color-text-secondary)] font-bold">
                   Assigned Team & Freelancers
                 </h3>
-                {selectedProject.professionalNames.length > 0 ? (
+                {selectedProject.professionals && selectedProject.professionals.length > 0 ? (
+                  <div className="space-y-3 p-3 rounded-lg bg-black/30 border border-[var(--color-border)]">
+                    <div className="flex items-center gap-3">
+                      <AvatarStack items={selectedProject.professionals} names={selectedProject.professionalNames} size="sm" />
+                      <span className="text-xs text-[var(--color-text-secondary)] font-medium">
+                        {selectedProject.professionals.length} assigned member{selectedProject.professionals.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {selectedProject.professionals.map((pro, idx) => (
+                        <div
+                          key={idx}
+                          className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white/5 border border-white/10 text-xs text-[var(--color-text-primary)]"
+                        >
+                          <Avatar
+                            name={pro.name}
+                            src={pro.avatarUrl}
+                            size="xs"
+                            className="w-5 h-5 text-[8.5px]"
+                          />
+                          <span className="font-semibold">{pro.name}</span>
+                          {pro.role && (
+                            <span className="text-[10px] text-cyan-400 font-mono">
+                              • {pro.role}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : selectedProject.professionalNames.length > 0 ? (
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-black/30 border border-[var(--color-border)]">
                     <AvatarStack names={selectedProject.professionalNames} />
                     <span className="text-xs text-[var(--color-text-primary)] font-medium">

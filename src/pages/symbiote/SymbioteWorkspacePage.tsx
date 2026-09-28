@@ -60,6 +60,7 @@ import {
   Paperclip,
   Target,
   Layers,
+  Eye,
 } from 'lucide-react';
 
 type SubTab = 'overview' | 'milestones' | 'workspace' | 'files' | 'progress' | 'updates' | 'activity';
@@ -80,6 +81,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<SubTab>('overview');
+  const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
 
   // Verify whether current symbiote is assigned to active project
   const currentUserId = firebaseUser?.uid || uid;
@@ -633,7 +635,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
             { id: 'overview', label: 'Overview', icon: CheckSquare },
             { id: 'milestones', label: 'Milestones', icon: Target },
             { id: 'workspace', label: 'Workspace', icon: Layers },
-            { id: 'files', label: 'Files', icon: FileText },
+            { id: 'files', label: 'Files & Resources', icon: FileText },
             { id: 'progress', label: 'Progress', icon: TrendingUp },
             { id: 'updates', label: 'Updates', icon: Bell },
             { id: 'activity', label: 'Activity', icon: ActivityIcon },
@@ -758,12 +760,36 @@ export const SymbioteWorkspacePage: React.FC = () => {
                       className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] hover:border-cyan-500/40 transition-all flex items-start justify-between gap-3 group"
                     >
                       <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] group-hover:border-emerald-500/30 transition-colors">
-                          {renderFileIcon()}
-                        </div>
+                        {isImage && file.downloadUrl && file.downloadUrl !== '#' && !file.downloadUrl.startsWith('blob:') ? (
+                          <div
+                            onClick={() => setPreviewFile(file)}
+                            className="w-14 h-14 rounded-lg overflow-hidden border border-[var(--color-border)] bg-slate-950 shrink-0 flex items-center justify-center cursor-pointer group/thumb relative shadow-xs"
+                            title="Click to preview image"
+                          >
+                            <img
+                              src={file.downloadUrl}
+                              alt={file.name}
+                              className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-200"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                              <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] group-hover:border-emerald-500/30 transition-colors">
+                            {renderFileIcon()}
+                          </div>
+                        )}
 
                         <div className="space-y-1 min-w-0 flex-1">
-                          <h4 className="text-body font-bold text-[var(--color-text-primary)] truncate group-hover:text-cyan-400 transition-colors" title={file.name}>
+                          <h4
+                            onClick={() => isImage && file.downloadUrl && setPreviewFile(file)}
+                            className={`text-body font-bold text-[var(--color-text-primary)] truncate transition-colors ${isImage && file.downloadUrl ? 'cursor-pointer hover:text-cyan-400' : ''}`}
+                            title={file.name}
+                          >
                             {file.name}
                           </h4>
                           <p className="text-caption text-[var(--color-text-secondary)] font-medium flex items-center gap-2">
@@ -779,8 +805,18 @@ export const SymbioteWorkspacePage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* ACTIONS: DOWNLOAD ICON + DELETE */}
+                      {/* ACTIONS: PREVIEW + DOWNLOAD ICON + DELETE */}
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {isImage && file.downloadUrl && file.downloadUrl !== '#' && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewFile(file)}
+                            className="p-2 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:border-cyan-500 hover:text-cyan-400 transition-all cursor-pointer"
+                            title="Preview Image"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
                         {file.downloadUrl && file.downloadUrl !== '#' ? (
                           <button
                             type="button"
@@ -960,6 +996,86 @@ export const SymbioteWorkspacePage: React.FC = () => {
       {/* ACTIVITY TAB BODY */}
       {activeTab === 'activity' && (
         <ProjectActivityTab projectId={activeProjectId} />
+      )}
+
+      {/* INTERACTIVE FILE PREVIEW MODAL */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[90vh] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-background)]/70">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileText className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <span className="font-bold text-xs text-[var(--color-text-primary)] truncate block max-w-md">
+                    {previewFile.name}
+                  </span>
+                  <span className="text-[10px] font-mono text-[var(--color-text-secondary)]">
+                    {previewFile.size} · {previewFile.category}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {previewFile.downloadUrl && previewFile.downloadUrl !== '#' && (
+                  <button
+                    type="button"
+                    onClick={() => triggerFileDownload(previewFile.downloadUrl, previewFile.name)}
+                    className="px-2.5 py-1.5 rounded-lg bg-[var(--color-background)] hover:bg-emerald-500/20 text-[var(--color-text-secondary)] hover:text-emerald-400 border border-[var(--color-border)] text-xs font-mono font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewFile(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-auto flex-1 min-h-[300px] flex items-center justify-center bg-black/40 p-4">
+              {previewFile.downloadUrl && (previewFile.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(previewFile.name)) ? (
+                <img
+                  src={previewFile.downloadUrl}
+                  alt={previewFile.name}
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg border border-[var(--color-border)]/40"
+                />
+              ) : previewFile.downloadUrl && (previewFile.type?.includes('pdf') || /\.pdf$/i.test(previewFile.name)) ? (
+                <iframe
+                  src={previewFile.downloadUrl}
+                  className="w-full h-[70vh] rounded-lg border border-[var(--color-border)] bg-white"
+                  title={previewFile.name}
+                />
+              ) : (
+                <div className="text-center space-y-3 py-10">
+                  <FileText className="w-12 h-12 text-emerald-400 mx-auto opacity-80" />
+                  <p className="text-xs text-[var(--color-text-secondary)] font-mono max-w-sm mx-auto">
+                    Direct in-browser preview is not supported for this file format. You can download the file directly to view it locally.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => triggerFileDownload(previewFile.downloadUrl, previewFile.name)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-mono text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Download File
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

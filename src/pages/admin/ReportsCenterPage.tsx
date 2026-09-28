@@ -9,6 +9,7 @@ import {
   generateUserStatusReport,
   generateProjectStatusReport,
   generateProjectCategoryReport,
+  generateRevenueSummaryReport,
   generateActivityReport,
   reportRowsToCsv,
   exportReportToPdf,
@@ -27,6 +28,7 @@ const generators: Record<string, (from?: Date, to?: Date) => Promise<ReportRow[]
   'user-status': (_f, _t) => generateUserStatusReport(),
   'project-status': (_f, _t) => generateProjectStatusReport(),
   'project-category': (_f, _t) => generateProjectCategoryReport(),
+  'revenue-summary': generateRevenueSummaryReport,
   'activity-audit': generateActivityReport,
 };
 

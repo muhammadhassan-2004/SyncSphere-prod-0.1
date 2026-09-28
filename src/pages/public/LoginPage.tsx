@@ -64,28 +64,21 @@ export const LoginPage: React.FC = () => {
     }
   }, [firebaseUser, currentRole, navigate, location.state]);
 
-  // 2. Load remembered credentials/preference on mount
+  // 2. Load remembered email/preference on mount (passwords never persisted to storage)
   useEffect(() => {
     try {
+      // Purge any legacy plaintext/base64 passwords stored in previous versions
+      localStorage.removeItem('syncsphere_remember_password');
+
       const savedEmail = localStorage.getItem('syncsphere_remember_email');
-      const savedPassword = localStorage.getItem('syncsphere_remember_password');
       const savedPref = localStorage.getItem('syncsphere_remember_me');
 
       if (savedPref !== null) {
         setKeepSignedIn(savedPref === 'true');
       }
 
-      if (savedPref === 'true' || savedPref === null) {
-        if (savedEmail) {
-          setEmail(savedEmail);
-        }
-        if (savedPassword) {
-          try {
-            setPassword(atob(savedPassword));
-          } catch {
-            setPassword(savedPassword);
-          }
-        }
+      if ((savedPref === 'true' || savedPref === null) && savedEmail) {
+        setEmail(savedEmail);
       }
     } catch {}
 
@@ -151,11 +144,11 @@ export const LoginPage: React.FC = () => {
       }
       const user = userCredential.user;
 
-      // 3. Persist or clear remembered credentials in browser & Credential Management API
+      // 3. Persist or clear remembered email in browser & Credential Management API
       try {
+        localStorage.removeItem('syncsphere_remember_password');
         if (keepSignedIn) {
           localStorage.setItem('syncsphere_remember_email', cleanEmail);
-          localStorage.setItem('syncsphere_remember_password', btoa(password));
           localStorage.setItem('syncsphere_remember_me', 'true');
 
           // Securely pass to browser's native PasswordCredential store if supported
@@ -173,7 +166,6 @@ export const LoginPage: React.FC = () => {
           }
         } else {
           localStorage.removeItem('syncsphere_remember_email');
-          localStorage.removeItem('syncsphere_remember_password');
           localStorage.setItem('syncsphere_remember_me', 'false');
 
           if (typeof window !== 'undefined' && navigator.credentials?.preventSilentAccess) {
@@ -235,6 +227,30 @@ export const LoginPage: React.FC = () => {
             email: user.email || cleanEmail,
             uid: user.uid,
             role: userRole,
+          },
+          replace: true,
+        });
+      } else if (profileData?.mfaEnabled) {
+        // Trigger Email 2FA security OTP dispatch
+        try {
+          await fetch('/api/auth/send-signup-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email || cleanEmail,
+              uid: user.uid,
+            }),
+          });
+        } catch (mfaSendErr) {
+          console.warn('Could not auto-send 2FA code:', mfaSendErr);
+        }
+
+        navigate('/verify-email', {
+          state: {
+            email: user.email || cleanEmail,
+            uid: user.uid,
+            role: userRole,
+            is2FA: true,
           },
           replace: true,
         });
@@ -597,15 +613,12 @@ export const LoginPage: React.FC = () => {
                     setKeepSignedIn(checked);
                     try {
                       localStorage.setItem('syncsphere_remember_me', checked ? 'true' : 'false');
+                      localStorage.removeItem('syncsphere_remember_password');
                       if (!checked) {
                         localStorage.removeItem('syncsphere_remember_email');
-                        localStorage.removeItem('syncsphere_remember_password');
                       } else {
                         if (email.trim()) {
                           localStorage.setItem('syncsphere_remember_email', email.trim().toLowerCase());
-                        }
-                        if (password) {
-                          localStorage.setItem('syncsphere_remember_password', btoa(password));
                         }
                       }
                     } catch {}
@@ -616,7 +629,7 @@ export const LoginPage: React.FC = () => {
                   htmlFor="keepSignedIn"
                   className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer select-none font-medium"
                 >
-                  Remember me (Keep credentials on this device)
+                  Remember my email on this device
                 </label>
               </div>
 

@@ -1101,6 +1101,8 @@ interface CardItemProps {
 }
 
 const KanbanTaskCardItem: React.FC<CardItemProps> = ({ task, projectTitle, onEdit, onDelete }) => {
+  const { userProfile } = useAuth();
+  const isClient = userProfile?.role === 'client' || userProfile?.role === 'admin';
   const [showMenu, setShowMenu] = useState<boolean>(false);
 
   const {
@@ -1211,46 +1213,56 @@ const KanbanTaskCardItem: React.FC<CardItemProps> = ({ task, projectTitle, onEdi
           </span>
         </div>
 
-        {/* REVIEW APPROVAL / ACTION BUTTONS FOR CLIENT */}
+        {/* REVIEW APPROVAL / ACTION BUTTONS (RESTRICTED TO CLIENT / ADMIN) */}
         {task.status === 'review' && (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!task.id) return;
-                try {
-                  const { approveTaskByClient } = await import('@/src/lib/firestore/workspace');
-                  await approveTaskByClient(task.projectId, task.id);
-                } catch (err) {
-                  console.error('Failed to approve task:', err);
-                }
-              }}
-              title="Approve Task & Mark Complete"
-              className="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-mono font-bold text-[10px] flex items-center gap-1 shadow-sm transition-all"
-            >
-              <CheckCircle2 className="w-3 h-3" />
-              <span>Approve</span>
-            </button>
+          isClient ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!task.id) return;
+                  try {
+                    const { approveTaskByClient } = await import('@/src/lib/firestore/workspace');
+                    await approveTaskByClient(task.projectId, task.id);
+                  } catch (err) {
+                    console.error('Failed to approve task:', err);
+                  }
+                }}
+                title="Approve Task & Mark Complete"
+                className="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-mono font-bold text-[10px] flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Approve</span>
+              </button>
 
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!task.id) return;
-                const reason = window.prompt('Enter feedback / reason for requested changes:');
-                if (reason === null) return;
-                try {
-                  const { requestTaskChanges } = await import('@/src/lib/firestore/workspace');
-                  await requestTaskChanges(task.projectId, task.id, reason);
-                } catch (err) {
-                  console.error('Failed to request changes:', err);
-                }
-              }}
-              title="Request Changes on Task"
-              className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono font-semibold text-[10px] flex items-center gap-1 transition-all"
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!task.id) return;
+                  const reason = window.prompt('Enter feedback / reason for requested changes:');
+                  if (reason === null) return;
+                  try {
+                    const { requestTaskChanges } = await import('@/src/lib/firestore/workspace');
+                    await requestTaskChanges(task.projectId, task.id, reason);
+                  } catch (err) {
+                    console.error('Failed to request changes:', err);
+                  }
+                }}
+                title="Request Changes on Task"
+                className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono font-semibold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <span>↺ Changes</span>
+              </button>
+            </div>
+          ) : (
+            <div
+              title="Deliverable is under review by project client"
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[10px]"
             >
-              <span>↺ Changes</span>
-            </button>
-          </div>
+              <Clock className="w-3 h-3 animate-pulse" />
+              <span>Awaiting Client Review</span>
+            </div>
+          )
         )}
 
         {/* OVERFLOW MENU (⋮) BOTTOM-RIGHT */}

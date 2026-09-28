@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, WorkspaceTask, WorkspaceMilestone, TimeEntry } from '@/src/types/firestore';
-import { getTimeEntries } from '@/src/lib/firestore/timeEntries';
+import { subscribeToTimeEntriesForProject } from '@/src/lib/firestore/timeEntries';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
+import { useAuth } from '@/src/context/AuthContext';
+import { UserProfileModal } from '@/src/components/profile/UserProfileModal';
 import {
   CheckCircle2,
   Clock,
@@ -22,6 +24,20 @@ import {
   Sparkles,
   ExternalLink,
 } from 'lucide-react';
+
+export function formatDurationHuman(hours: number): string {
+  if (!hours || isNaN(hours)) return '0m';
+  const totalMins = Math.round(hours * 60);
+  if (totalMins < 60) {
+    return `${totalMins} min${totalMins === 1 ? '' : 's'}`;
+  }
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (m === 0) {
+    return `${h}h`;
+  }
+  return `${h}h ${m}m`;
+}
 
 interface ApprovalsQueueViewProps {
   project: Project;
@@ -44,11 +60,18 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   onEditTask,
   isReadOnly = false,
 }) => {
+  const { userProfile, firebaseUser } = useAuth();
+  const isClientOrAdmin =
+    userProfile?.role === 'client' ||
+    userProfile?.role === 'admin' ||
+    firebaseUser?.uid === (project.clientId || project.ownerId);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState('all');
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [expandedTaskSessions, setExpandedTaskSessions] = useState<Record<string, boolean>>({});
+  const [profileModalUid, setProfileModalUid] = useState<string | null>(null);
   
   // Feedback state for Request Changes inline form
   const [revisionInputs, setRevisionInputs] = useState<Record<string, string>>({});
@@ -57,7 +80,11 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   // Loading state per task action
   const [processingAction, setProcessingAction] = useState<Record<string, 'approve' | 'revision' | null>>({});
 
-  const hourlyRate = Number(project.hourlyRate) || 50;
+  const defaultSpecialistRate = Number(
+    (project as any)?.teamMembers?.find((m: any) => m.uid === project.assignedSymbioteId)?.hourlyRate ||
+    (project as any)?.teamMembers?.[0]?.hourlyRate ||
+    project.hourlyRate
+  ) || 0;
 
   // Filter tasks in 'review' status
   const reviewTasks = useMemo(() => {
@@ -83,28 +110,17 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
     });
   }, [reviewTasks, searchQuery, selectedMilestoneId]);
 
-  // Fetch all time entries for this project to associate with tasks
+  // Live real-time subscription to time entries for this project
   useEffect(() => {
-    let mounted = true;
     if (!project.id) return;
 
     setLoadingEntries(true);
-    getTimeEntries({ projectId: project.id })
-      .then((entries) => {
-        if (mounted) {
-          setTimeEntries(entries);
-        }
-      })
-      .catch((err) => {
-        console.warn('Could not load time entries for approval queue:', err);
-      })
-      .finally(() => {
-        if (mounted) setLoadingEntries(false);
-      });
+    const unsub = subscribeToTimeEntriesForProject(project.id, (entries) => {
+      setTimeEntries(entries || []);
+      setLoadingEntries(false);
+    });
 
-    return () => {
-      mounted = false;
-    };
+    return () => unsub();
   }, [project.id]);
 
   // Aggregate stats
@@ -113,8 +129,12 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   }, [reviewTasks]);
 
   const totalValueAtReview = useMemo(() => {
-    return Math.round(totalLoggedHours * hourlyRate);
-  }, [totalLoggedHours, hourlyRate]);
+    return reviewTasks.reduce((sum, t) => {
+      const assigned = (project as any)?.teamMembers?.find((m: any) => m.uid === t.assigneeId);
+      const rate = Number(assigned?.hourlyRate) || defaultSpecialistRate;
+      return sum + Math.round((Number(t.actualHours) || 0) * rate);
+    }, 0);
+  }, [reviewTasks, defaultSpecialistRate, project]);
 
   const toggleTaskSessions = (taskId: string) => {
     setExpandedTaskSessions((prev) => ({
@@ -124,7 +144,7 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   };
 
   const handleApprove = async (taskId: string) => {
-    if (isReadOnly) return;
+    if (isReadOnly || !isClientOrAdmin) return;
     setProcessingAction((prev) => ({ ...prev, [taskId]: 'approve' }));
     try {
       await onApproveTask(taskId);
@@ -134,7 +154,7 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   };
 
   const handleSendRevision = async (taskId: string) => {
-    if (isReadOnly) return;
+    if (isReadOnly || !isClientOrAdmin) return;
     const feedback = revisionInputs[taskId] || '';
     setProcessingAction((prev) => ({ ...prev, [taskId]: 'revision' }));
     try {
@@ -189,7 +209,7 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
 
           <div className="px-3.5 py-2 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)]">
             <span className="text-[10px] font-mono text-[var(--color-text-secondary)] block">
-              Value (@${hourlyRate}/h)
+              {defaultSpecialistRate > 0 ? `Value (@$${defaultSpecialistRate}/h)` : 'Review Value'}
             </span>
             <span className="text-sm font-mono font-bold text-[var(--color-accent-cyan)]">
               ${totalValueAtReview.toLocaleString()}
@@ -291,7 +311,7 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
             
             // Specialist agreed rate from teamMembers or fallback to project rate
             const assignedMember = (project as any)?.teamMembers?.find((m: any) => m.uid === task.assigneeId);
-            const taskRate = Number(assignedMember?.hourlyRate) || hourlyRate;
+            const taskRate = Number(assignedMember?.hourlyRate) || defaultSpecialistRate;
             const taskCost = Math.round(effectiveLoggedHours * taskRate);
 
             return (
@@ -335,15 +355,33 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                   </div>
 
                   {/* SPECIALIST ASSIGNEE */}
-                  <div className="flex items-center gap-2.5 bg-[var(--color-background)] px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] shrink-0">
-                    <Avatar
-                      name={task.assigneeName || 'Specialist'}
-                      initials={task.assigneeAvatarInitials || 'SP'}
-                      src={task.assigneeAvatarUrl}
-                      size="sm"
-                    />
+                  <div
+                    onClick={() => {
+                      if (task.assigneeId) setProfileModalUid(task.assigneeId);
+                    }}
+                    className={`flex items-center gap-2.5 bg-[var(--color-background)] px-3 py-1.5 rounded-[8px] border border-[var(--color-border)] shrink-0 transition-all ${
+                      task.assigneeId
+                        ? 'cursor-pointer hover:border-[var(--color-accent-cyan)]/60 hover:bg-slate-900/60 group'
+                        : ''
+                    }`}
+                    title={task.assigneeId ? `View ${task.assigneeName || 'Specialist'}'s Profile` : undefined}
+                  >
+                    <div
+                      className={
+                        task.assigneeId
+                          ? 'shrink-0 rounded-full group-hover:ring-2 group-hover:ring-[var(--color-accent-cyan)] transition-all'
+                          : 'shrink-0'
+                      }
+                    >
+                      <Avatar
+                        name={task.assigneeName || 'Specialist'}
+                        initials={task.assigneeAvatarInitials || 'SP'}
+                        src={task.assigneeAvatarUrl}
+                        size="sm"
+                      />
+                    </div>
                     <div>
-                      <span className="text-xs font-bold text-[var(--color-text-primary)] block">
+                      <span className="text-xs font-bold text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors block">
                         {task.assigneeName || 'Specialist'}
                       </span>
                       <span className="text-[10px] text-[var(--color-text-secondary)] font-mono block">
@@ -382,8 +420,8 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                         Actual Logged Time
                       </span>
                       <span className="text-xs font-mono font-bold text-[var(--color-text-primary)]">
-                        <strong className="text-emerald-400">{effectiveLoggedHours.toFixed(1)}h</strong>
-                        <span className="text-[var(--color-text-secondary)] font-normal text-[10px]"> / {taskEstimatedHours.toFixed(1)}h est</span>
+                        <strong className="text-emerald-400">{formatDurationHuman(effectiveLoggedHours)}</strong>
+                        <span className="text-[var(--color-text-secondary)] font-normal text-[10px]"> / {formatDurationHuman(taskEstimatedHours)} est</span>
                       </span>
                     </div>
                   </div>
@@ -442,7 +480,7 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                             </div>
                             <div className="flex items-center gap-3 shrink-0 font-mono text-xs">
                               <span className="font-bold text-emerald-400">
-                                {Number(entry.hours).toFixed(2)}h
+                                {formatDurationHuman(Number(entry.hours))} <span className="text-[10px] text-emerald-400/70 font-normal">({Number(entry.hours).toFixed(2)}h)</span>
                               </span>
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
                                 {entry.status || 'pending'}
@@ -510,35 +548,52 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                 {/* ACTION BUTTONS ROW */}
                 {!isRevisionOpen && (
                   <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--color-border)]">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isApproving || isRevisionProcessing || isReadOnly}
-                      onClick={() => setActiveRevisionTaskId(taskId)}
-                      className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Request Changes</span>
-                    </Button>
+                    {isClientOrAdmin ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isApproving || isRevisionProcessing || isReadOnly}
+                          onClick={() => setActiveRevisionTaskId(taskId)}
+                          className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Request Changes</span>
+                        </Button>
 
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      disabled={isApproving || isRevisionProcessing || isReadOnly}
-                      onClick={() => handleApprove(taskId)}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isApproving ? 'Approving Task...' : 'Approve Task & Settle Hours'}</span>
-                    </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          disabled={isApproving || isRevisionProcessing || isReadOnly}
+                          onClick={() => handleApprove(taskId)}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{isApproving ? 'Approving Task...' : 'Approve Task & Settle Hours'}</span>
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 px-3 py-1 rounded border border-amber-500/20">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Awaiting Client Verification & Settlement</span>
+                      </span>
+                    )}
                   </div>
                 )}
               </Card>
             );
           })}
         </div>
+      )}
+
+      {profileModalUid && (
+        <UserProfileModal
+          isOpen={!!profileModalUid}
+          onClose={() => setProfileModalUid(null)}
+          userId={profileModalUid}
+        />
       )}
     </div>
   );

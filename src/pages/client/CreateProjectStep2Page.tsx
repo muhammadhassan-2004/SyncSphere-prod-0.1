@@ -28,7 +28,7 @@ import {
 
 const WIZARD_STEPS = [
   { id: '1', label: 'Basic Info', description: 'Title, category & skills' },
-  { id: '2', label: 'Scope & Budget', description: 'Milestones & deliverables' },
+  { id: '2', label: 'Timeline & Schedule', description: 'Dates & work arrangement' },
   { id: '3', label: 'AI Matching', description: 'Preferences & criteria' },
   { id: '4', label: 'Review & Publish', description: 'Final audit & launch' },
 ];
@@ -55,17 +55,11 @@ export const CreateProjectStep2Page: React.FC = () => {
   });
 
   // Step 2 Form State
-  const [budgetType, setBudgetType] = useState<'fixed' | 'hourly'>('fixed');
-  const [minBudget, setMinBudget] = useState<number | ''>('');
-  const [maxBudget, setMaxBudget] = useState<number | ''>('');
-  const [currency, setCurrency] = useState('USD ($)');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [duration, setDuration] = useState('');
   const [priority, setPriority] = useState<'Low' | 'Med' | 'High' | 'Urgent'>('High');
   const [workMode, setWorkMode] = useState<'Remote' | 'Hybrid' | 'Onsite'>('Remote');
-  const [weeklyCommitment, setWeeklyCommitment] = useState<number>(40);
-
   // UI Feedback State
   const [saving, setSaving] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(true);
@@ -89,16 +83,11 @@ export const CreateProjectStep2Page: React.FC = () => {
             description: project.description || '',
           });
 
-          if (project.budgetType) setBudgetType(project.budgetType);
-          if (project.minBudget !== undefined) setMinBudget(project.minBudget);
-          if (project.maxBudget !== undefined) setMaxBudget(project.maxBudget);
-          if (project.currency) setCurrency(project.currency);
           if (project.startDate) setStartDate(project.startDate);
           if (project.endDate) setEndDate(project.endDate);
           if (project.duration) setDuration(project.duration);
           if (project.priority) setPriority(project.priority);
           if (project.workMode) setWorkMode(project.workMode);
-          if (project.weeklyCommitment !== undefined) setWeeklyCommitment(project.weeklyCommitment);
         }
         setLoadingDraft(false);
       })
@@ -111,16 +100,6 @@ export const CreateProjectStep2Page: React.FC = () => {
       isMounted = false;
     };
   }, [draftId, navigate]);
-
-  // Compute live budget range string
-  const formattedBudgetRange = useMemo(() => {
-    const currSymbol = currency.split(' ')[0];
-    const unit = budgetType === 'hourly' ? '/ hr' : 'total';
-    if (!minBudget && !maxBudget) return 'Not set yet';
-    const minStr = minBudget ? `${currSymbol} ${Number(minBudget).toLocaleString()}` : `${currSymbol} 0`;
-    const maxStr = maxBudget ? `${currSymbol} ${Number(maxBudget).toLocaleString()}` : 'Flexible';
-    return `${minStr} – ${maxStr} ${unit}`;
-  }, [minBudget, maxBudget, currency, budgetType]);
 
   // Save Draft Handler
   const handleSaveDraft = async () => {
@@ -135,28 +114,17 @@ export const CreateProjectStep2Page: React.FC = () => {
     try {
       const updatedDraftId = await saveProjectDraft(draftId, {
         ownerId: firebaseUser.uid,
-        budgetType,
-        minBudget,
-        maxBudget,
-        currency,
+        budgetType: 'hourly',
         startDate,
         endDate,
         duration,
         priority,
         workMode,
-        weeklyCommitment,
-        budget: {
-          min: minBudget,
-          max: maxBudget,
-          total: maxBudget,
-          type: budgetType,
-          currency,
-        },
         deadline: endDate,
         status: 'draft',
       });
 
-      setToastMessage({ type: 'success', text: 'Budget & Timeline draft saved successfully!' });
+      setToastMessage({ type: 'success', text: 'Timeline & Work Arrangement saved successfully!' });
       setSaving(false);
       return updatedDraftId;
     } catch (err) {
@@ -179,11 +147,6 @@ export const CreateProjectStep2Page: React.FC = () => {
 
   // Continue to Step 3 Handler
   const handleContinue = async () => {
-    if (minBudget <= 0 || maxBudget <= 0 || maxBudget < minBudget) {
-      setToastMessage({ type: 'error', text: 'Please ensure maximum budget is greater than or equal to minimum budget.' });
-      return;
-    }
-
     const savedDraftId = await handleSaveDraft();
     if (savedDraftId) {
       navigate(`/client/projects/new/step-3?draftId=${savedDraftId}`);
@@ -209,10 +172,10 @@ export const CreateProjectStep2Page: React.FC = () => {
             <span>Project Creation Wizard</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] tracking-tight">
-            Budget & Timeline
+            Timeline & Work Arrangement
           </h1>
           <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-0.5">
-            Step 2 of 4 — Financial parameters, execution window & work arrangements
+            Step 2 of 4 — Execution window, dates & specialist collaboration structure
           </p>
         </div>
 
@@ -265,125 +228,17 @@ export const CreateProjectStep2Page: React.FC = () => {
         <Card className="lg:col-span-2 p-6 space-y-6">
           <div className="border-b border-[var(--color-border)] pb-3">
             <h2 className="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-[var(--color-accent-cyan)]" />
-              Financial & Work Mode Parameters
+              <Calendar className="w-4 h-4 text-[var(--color-accent-cyan)]" />
+              Timeline & Work Arrangement Parameters
             </h2>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Set clear budget bounds and timelines to align with top Symbiote specialists.
+              Configure the execution calendar, work mode, and project priority for specialist collaboration.
             </p>
           </div>
 
           <div className="space-y-6">
-            {/* BUDGET TYPE TOGGLE BUTTON GROUP */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[var(--color-text-primary)] block">
-                Budget Model <span className="text-[var(--color-danger-red)]">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setBudgetType('fixed')}
-                  className={`p-3.5 rounded-[10px] border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                    budgetType === 'fixed'
-                      ? 'border-[var(--color-accent-cyan)] bg-[var(--color-accent-cyan)]/10 text-[var(--color-text-primary)] ring-1 ring-[var(--color-accent-cyan)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-secondary)]'
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                      budgetType === 'fixed'
-                        ? 'border-[var(--color-accent-cyan)] bg-[var(--color-accent-cyan)]'
-                        : 'border-[var(--color-border)]'
-                    }`}
-                  >
-                    {budgetType === 'fixed' && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-[var(--color-text-primary)]">Fixed Price</p>
-                    <p className="text-[10.5px] text-[var(--color-text-secondary)]">
-                      Set milestone total cost for defined deliverable
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setBudgetType('hourly')}
-                  className={`p-3.5 rounded-[10px] border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                    budgetType === 'hourly'
-                      ? 'border-[var(--color-accent-cyan)] bg-[var(--color-accent-cyan)]/10 text-[var(--color-text-primary)] ring-1 ring-[var(--color-accent-cyan)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-secondary)]'
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                      budgetType === 'hourly'
-                        ? 'border-[var(--color-accent-cyan)] bg-[var(--color-accent-cyan)]'
-                        : 'border-[var(--color-border)]'
-                    }`}
-                  >
-                    {budgetType === 'hourly' && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-[var(--color-text-primary)]">Hourly Rate</p>
-                    <p className="text-[10.5px] text-[var(--color-text-secondary)]">
-                      Pay based on logged execution hours & timecard
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* MIN BUDGET, MAX BUDGET, CURRENCY */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--color-text-primary)]">
-                  Min Budget ({budgetType === 'hourly' ? '$/hr' : '$'})
-                </label>
-                <Input
-                  type="number"
-                  placeholder={budgetType === 'hourly' ? 'e.g. 50' : 'e.g. 5000'}
-                  value={minBudget}
-                  onChange={(e) => setMinBudget(e.target.value === '' ? '' : Number(e.target.value))}
-                  min={1}
-                  className="font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--color-text-primary)]">
-                  Max Budget ({budgetType === 'hourly' ? '$/hr' : '$'})
-                </label>
-                <Input
-                  type="number"
-                  placeholder={budgetType === 'hourly' ? 'e.g. 150' : 'e.g. 25000'}
-                  value={maxBudget}
-                  onChange={(e) => setMaxBudget(e.target.value === '' ? '' : Number(e.target.value))}
-                  min={typeof minBudget === 'number' ? minBudget : 1}
-                  className="font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[var(--color-text-primary)]">
-                  Currency
-                </label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] px-3 py-2 text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-cyan)] cursor-pointer"
-                >
-                  {CURRENCIES.map((curr) => (
-                    <option key={curr} value={curr}>
-                      {curr}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             {/* TIMELINE DATES & DURATION */}
-            <div className="border-t border-[var(--color-border)] pt-5 space-y-4">
+            <div className="space-y-4">
               <h3 className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider font-mono flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[var(--color-info-blue)]" />
                 Timeline & Schedule
@@ -477,21 +332,6 @@ export const CreateProjectStep2Page: React.FC = () => {
                 })}
               </div>
             </div>
-
-            {/* WEEKLY COMMITMENT */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[var(--color-text-primary)]">
-                Expected Weekly Commitment (Hours / week)
-              </label>
-              <Input
-                type="number"
-                value={weeklyCommitment}
-                onChange={(e) => setWeeklyCommitment(Number(e.target.value))}
-                min={5}
-                max={80}
-                className="font-mono max-w-xs"
-              />
-            </div>
           </div>
         </Card>
 
@@ -518,24 +358,10 @@ export const CreateProjectStep2Page: React.FC = () => {
                   {step1Data.title || 'Untitled Project Brief'}
                 </p>
                 {step1Data.category && (
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-[4px] text-[10px] font-mono bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-mono bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
                     {step1Data.category}
                   </span>
                 )}
-              </div>
-
-              {/* Budget Parameters Summary */}
-              <div className="p-3 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Budget Model:</span>
-                  <span className="font-bold text-[var(--color-text-primary)] capitalize">{budgetType}</span>
-                </div>
-                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/50">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Range:</span>
-                  <span className="font-mono font-bold text-[var(--color-accent-cyan)]">
-                    {formattedBudgetRange}
-                  </span>
-                </div>
               </div>
 
               {/* Schedule Summary */}
@@ -559,10 +385,6 @@ export const CreateProjectStep2Page: React.FC = () => {
                 <div>
                   <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">Work Mode</p>
                   <p className="font-semibold text-[var(--color-text-primary)]">{workMode}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">Weekly Hours</p>
-                  <p className="font-semibold text-[var(--color-text-primary)] font-mono">{weeklyCommitment} hrs/wk</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">Priority</p>

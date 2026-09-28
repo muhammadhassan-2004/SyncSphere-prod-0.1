@@ -11,7 +11,13 @@ import {
   subscribeToSymbiotesFromFirestore,
 } from '@/src/lib/firestore/users';
 import { UserProfileModal } from '@/src/components/profile/UserProfileModal';
-import { Invitation } from '@/src/types/firestore';
+import {
+  subscribeToProjectMatches,
+  computeDeterministicMatchScore,
+  ProjectMatch,
+} from '@/src/lib/firestore/matches';
+import { Invitation, Project } from '@/src/types/firestore';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   UserPlus,
   UserCheck,
@@ -31,10 +37,14 @@ export interface SymbioteCandidate {
   displayName: string;
   title: string;
   avatarInitials: string;
+  avatarUrl?: string;
   matchScore: number;
   hourlyRate: number;
   skills: string[];
   email: string;
+  isOnline?: boolean;
+  lastActiveAt?: any;
+  lastSeen?: any;
 }
 
 interface AddTeamMemberModalProps {
@@ -60,19 +70,39 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
   const [candidates, setCandidates] = useState<SymbioteCandidate[]>([]);
   const [invitedUids, setInvitedUids] = useState<string[]>([]);
   const [projectTitle, setProjectTitle] = useState<string>(initialProjectTitle || '');
+  const [projectMatches, setProjectMatches] = useState<ProjectMatch[]>([]);
+  const [rawUsers, setRawUsers] = useState<any[]>([]);
+
+  // Subscribe to Project Matches to sync scores with PreSync AI Matching engine
+  useEffect(() => {
+    if (!projectId) {
+      setProjectMatches([]);
+      return;
+    }
+    const unsub = subscribeToProjectMatches(projectId, (mList) => {
+      setProjectMatches(mList);
+    });
+    return () => unsub();
+  }, [projectId]);
 
   const isProjectCompleted = projectStatus === 'completed' || projectStatus === 'closed';
 
   // Modal profile preview state (Requirement 3: in-page profile modal instead of new tab)
   const [profileModalUid, setProfileModalUid] = useState<string | null>(null);
 
+  const [projectData, setProjectData] = useState<Project | null>(null);
+
   useEffect(() => {
     if (initialProjectTitle) {
       setProjectTitle(initialProjectTitle);
-    } else if (projectId) {
+    }
+    if (projectId) {
       import('@/src/lib/firestore/projects').then(({ getProjectById }) => {
         getProjectById(projectId).then((p) => {
-          if (p?.title) setProjectTitle(p.title);
+          if (p) {
+            setProjectData(p);
+            if (p.title) setProjectTitle(p.title);
+          }
         });
       });
     }
@@ -87,6 +117,19 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successText, setSuccessText] = useState<string | null>(null);
 
+  // Dynamic Skill Match Scoring based on actual project requirements vs candidate profile
+  const computeCandidateMatchScore = (u: any, proj: Project | null, storedMatches: ProjectMatch[]): number => {
+    const uid = u.uid || u.id;
+    const foundMatch = storedMatches.find((m) => m.symbioteId === uid);
+    if (foundMatch && typeof foundMatch.matchScore === 'number' && foundMatch.matchScore > 0) {
+      return foundMatch.matchScore;
+    }
+    if (u.matchScore && typeof u.matchScore === 'number' && u.matchScore > 0) return u.matchScore;
+    if (u.aiMatchScore && typeof u.aiMatchScore === 'number' && u.aiMatchScore > 0) return u.aiMatchScore;
+
+    return computeDeterministicMatchScore(u, proj).matchScore;
+  };
+
   // 1. Fetch & Subscribe to real SYMBIOTE users from Firestore
   useEffect(() => {
     if (!isOpen) return;
@@ -94,19 +137,34 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
     setIsLoading(true);
     let isMounted = true;
 
-    const mapUserToCandidate = (u: any): SymbioteCandidate => ({
-      uid: u.uid || u.id,
-      displayName: u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Symbiote Specialist',
-      title: u.title || u.jobTitle || 'AI Engineering Specialist',
-      avatarInitials: u.avatarInitials || u.displayName?.slice(0, 2).toUpperCase() || 'SP',
-      matchScore: u.matchScore || u.aiMatchScore || 96,
-      hourlyRate: u.hourlyRate || 125,
-      skills: Array.isArray(u.skills) && u.skills.length > 0 ? u.skills : ['AI Architecture', 'Python', 'LLMs'],
-      email: u.email || 'specialist@syncsphere.io',
-    });
+    const mapUserToCandidate = (u: any): SymbioteCandidate => {
+      const displayName = u.displayName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Symbiote Specialist';
+      const parts = displayName.trim().split(/\s+/);
+      const computedInitials = u.avatarInitials || (parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : displayName.slice(0, 2).toUpperCase()) || 'SP';
+      const rawUrl = u.avatarUrl || u.photoURL;
+      const cleanUrl = typeof rawUrl === 'string' && rawUrl.trim().length > 5 && rawUrl !== 'null' && rawUrl !== 'undefined'
+        ? rawUrl.trim()
+        : undefined;
+
+      return {
+        uid: u.uid || u.id,
+        displayName,
+        title: u.title || u.jobTitle || 'AI Engineering Specialist',
+        avatarInitials: computedInitials,
+        avatarUrl: cleanUrl,
+        matchScore: computeCandidateMatchScore(u, projectData, projectMatches),
+        hourlyRate: u.hourlyRate || 125,
+        skills: Array.isArray(u.skills) && u.skills.length > 0 ? u.skills : ['AI Architecture', 'Python', 'LLMs'],
+        email: u.email || 'specialist@syncsphere.io',
+        isOnline: u.isOnline,
+        lastActiveAt: u.lastActiveAt,
+        lastSeen: u.lastSeen,
+      };
+    };
 
     getAllSymbiotesFromFirestore().then((users) => {
       if (isMounted) {
+        setRawUsers(users);
         setCandidates(users.map(mapUserToCandidate));
         setIsLoading(false);
       }
@@ -114,16 +172,16 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
 
     const unsubUsers = subscribeToSymbiotesFromFirestore((users) => {
       if (isMounted) {
+        setRawUsers(users);
         setCandidates(users.map(mapUserToCandidate));
         setIsLoading(false);
       }
     });
-
     return () => {
       isMounted = false;
       unsubUsers();
     };
-  }, [isOpen]);
+  }, [isOpen, projectData]);
 
   // 2. Subscribe to invitations for this project to track already invited symbiotes
   useEffect(() => {
@@ -139,14 +197,16 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filteredCandidates = candidates.filter((c) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      c.displayName.toLowerCase().includes(q) ||
-      c.title.toLowerCase().includes(q) ||
-      c.skills.some((s) => s.toLowerCase().includes(q))
-    );
-  });
+  const filteredCandidates = candidates
+    .filter((c) => {
+      const q = searchQuery.toLowerCase();
+      return (
+        c.displayName.toLowerCase().includes(q) ||
+        c.title.toLowerCase().includes(q) ||
+        c.skills.some((s) => s.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => b.matchScore - a.matchScore);
 
   // Action (a): Send Invite (Candidate must accept before client approves onto team)
   const handleSendInvite = async (candidate: SymbioteCandidate, roleToAssign = assignedRole) => {
@@ -161,12 +221,13 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
     try {
       await createInvitation({
         projectId,
-        projectTitle: (projectTitle && projectTitle !== 'Project Invitation') ? projectTitle : 'Privacy app',
+        projectTitle: projectTitle && projectTitle !== 'Project Invitation' ? projectTitle : 'Project',
         clientName: userProfile?.companyName || userProfile?.displayName || 'Client',
         symbioteId: candidate.uid,
         symbioteName: candidate.displayName,
         symbioteTitle: candidate.title,
         symbioteAvatarInitials: candidate.avatarInitials,
+        symbioteAvatarUrl: candidate.avatarUrl,
         clientId: firebaseUser?.uid || '',
         status: 'pending',
         budgetRange: `$${candidate.hourlyRate}/hr`,
@@ -205,6 +266,7 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
         displayName: candidate.displayName,
         role: roleToAssign,
         avatarInitials: candidate.avatarInitials,
+        avatarUrl: candidate.avatarUrl,
         email: candidate.email,
         hourlyRate: candidate.hourlyRate,
         matchScore: candidate.matchScore,
@@ -213,12 +275,13 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
       // Also create an approved invitation record for history/tracking
       await createInvitation({
         projectId,
-        projectTitle: (projectTitle && projectTitle !== 'Project Invitation') ? projectTitle : 'Privacy app',
+        projectTitle: projectTitle && projectTitle !== 'Project Invitation' ? projectTitle : 'Project',
         clientName: userProfile?.companyName || userProfile?.displayName || 'Client',
         symbioteId: candidate.uid,
         symbioteName: candidate.displayName,
         symbioteTitle: candidate.title,
         symbioteAvatarInitials: candidate.avatarInitials,
+        symbioteAvatarUrl: candidate.avatarUrl,
         clientId: firebaseUser?.uid || '',
         status: 'approved',
         budgetRange: `$${candidate.hourlyRate}/hr`,
@@ -341,8 +404,9 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
                           <Avatar
                             name={candidate.displayName}
                             initials={candidate.avatarInitials}
+                            src={candidate.avatarUrl}
                             size="md"
-                            statusDot="online"
+                            statusDot={getUserStatusDot(candidate)}
                           />
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -424,11 +488,19 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
             {/* ROLE ASSIGNMENT & TWO CLEAR ACTION OPTIONS */}
             {selectedCandidate && (
               <div className="p-3.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[10px] space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10.5px] font-mono text-[var(--color-text-secondary)] uppercase font-semibold block">
-                    Target Role for <span className="text-[var(--color-text-primary)] font-bold">{selectedCandidate.displayName}</span>
-                  </label>
-                  <span className="text-[10.5px] font-mono text-[var(--color-accent-cyan)]">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar
+                      name={selectedCandidate.displayName}
+                      initials={selectedCandidate.avatarInitials}
+                      src={selectedCandidate.avatarUrl}
+                      size="xs"
+                    />
+                    <label className="text-[10.5px] font-mono text-[var(--color-text-secondary)] uppercase font-semibold block truncate">
+                      Target Role for <span className="text-[var(--color-text-primary)] font-bold">{selectedCandidate.displayName}</span>
+                    </label>
+                  </div>
+                  <span className="text-[10.5px] font-mono text-[var(--color-accent-cyan)] shrink-0">
                     ${selectedCandidate.hourlyRate}/hr
                   </span>
                 </div>

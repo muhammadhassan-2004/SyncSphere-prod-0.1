@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Project } from '@/src/types/firestore';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { subscribeToWorkspaceMilestones, WorkspaceMilestone } from '@/src/lib/firestore/workspace';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
 import { StatusPill } from '@/src/components/ui/badge';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
+import { UserProfileModal } from '@/src/components/profile/UserProfileModal';
 import {
   FileText,
   DollarSign,
@@ -30,6 +33,8 @@ interface OverviewTabProps {
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeamModal }) => {
   const [realUsersMap, setRealUsersMap] = useState<Map<string, any>>(new Map());
+  const [milestones, setMilestones] = useState<WorkspaceMilestone[]>([]);
+  const [profileModalUid, setProfileModalUid] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snap) => {
@@ -39,8 +44,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
       });
       setRealUsersMap(uMap);
     });
-    return () => unsub();
-  }, []);
+
+    const unsubMilestones = subscribeToWorkspaceMilestones(project.id, (list) => {
+      setMilestones(list || []);
+    });
+
+    return () => {
+      unsub();
+      unsubMilestones();
+    };
+  }, [project.id]);
 
   const rawTeamMembers = project.teamMembers || [];
   const teamMembers = rawTeamMembers
@@ -76,16 +89,24 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
       : project.status === 'completed'
       ? 100
       : 0;
+  const isDraft = project.status === 'draft' || project.status === 'submitted';
   const isCompleted = project.status === 'completed' || project.status === 'closed';
-  const healthStatus = project.healthStatus || 'On Track';
+  const healthStatus = isDraft
+    ? 'Draft Phase'
+    : isCompleted
+    ? 'Completed'
+    : project.healthStatus || 'On Track';
+  const healthVariant: 'green' | 'blue' | 'amber' | 'gray' = isDraft
+    ? 'gray'
+    : isCompleted
+    ? 'blue'
+    : healthStatus === 'Critical'
+    ? 'amber'
+    : 'green';
 
-  // Budget formatting
-  const formattedBudget =
-    typeof project.budget === 'number'
-      ? `$${project.budget.toLocaleString()}`
-      : project.minBudget || project.maxBudget
-      ? `$${(project.minBudget || 0).toLocaleString()} – $${(project.maxBudget || 0).toLocaleString()}`
-      : '$15,000 Total';
+  // Real-time project expenditure tracking
+  const totalSpent = Number(project.totalSpent || 0);
+  const totalSettledTasks = Number(project.totalSettledTasks || 0);
 
   return (
     <div className="space-y-6">
@@ -104,7 +125,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
             </div>
           </div>
           <div className="flex items-center gap-2.5">
-            <StatusPill variant="green" label={`Health: ${healthStatus}`} />
+            <StatusPill variant={healthVariant} label={`Health: ${healthStatus}`} />
             <span className="text-xs font-semibold text-[var(--color-accent-cyan)]">
               {progressPercent}% Completed
             </span>
@@ -119,28 +140,68 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
           />
         </div>
 
-        {/* BALANCED TIMELINE / PHASES CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          <div className="flex items-center gap-3 p-3 rounded-[10px] bg-slate-900/50 border border-slate-800/80">
-            <div className="w-6 h-6 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-slate-200 truncate">Phase 1: Scope & Architecture</p>
-              <p className="text-[11px] text-emerald-400 font-medium">Completed</p>
-            </div>
-          </div>
+        {/* DYNAMIC TIMELINE / PHASES CARDS OR CLEAN STATE */}
+        {milestones.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            {milestones.slice(0, 4).map((ms, idx) => {
+              const msTitle = ms.title || (ms as any).name || `Phase ${idx + 1}`;
+              const isMsCompleted = Boolean(ms.completed || ms.status === 'completed');
+              const isMsInProgress = ms.status === 'in_progress' || ms.status === 'review' || ms.status === 'submitted';
 
-          <div className="flex items-center gap-3 p-3 rounded-[10px] bg-slate-900/50 border border-slate-800/80">
-            <div className="w-6 h-6 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-slate-200 truncate">Phase 2: Core Engineering</p>
-              <p className="text-[11px] text-cyan-400 font-medium">In Progress</p>
-            </div>
+              return (
+                <div
+                  key={ms.id || idx}
+                  className="flex items-center gap-3 p-3 rounded-[10px] bg-slate-900/50 border border-slate-800/80"
+                >
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${
+                      isMsCompleted
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : isMsInProgress
+                        ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {isMsCompleted ? (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    ) : isMsInProgress ? (
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    ) : (
+                      <Clock className="w-3 h-3 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-slate-200 truncate">{msTitle}</p>
+                    <p
+                      className={`text-[11px] font-medium ${
+                        isMsCompleted
+                          ? 'text-emerald-400'
+                          : isMsInProgress
+                          ? 'text-cyan-400'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {isMsCompleted ? 'Completed' : isMsInProgress ? 'In Progress' : 'Pending'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between p-3.5 rounded-[10px] bg-slate-900/40 border border-slate-800/70 text-xs">
+            <div className="flex items-center gap-2.5 text-slate-400">
+              <Layers className="w-4 h-4 text-slate-500 shrink-0" />
+              <span>No milestone phases defined yet. Manage deliverables in the project workspace.</span>
+            </div>
+            <a
+              href={`/client/workspace?projectId=${project.id}`}
+              className="text-xs text-[var(--color-accent-cyan)] hover:underline font-semibold shrink-0 ml-3"
+            >
+              Open Workspace →
+            </a>
+          </div>
+        )}
       </Card>
 
       {/* 2. MAIN TWO COLUMN GRID */}
@@ -260,38 +321,61 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {teamMembers.map((member, idx) => (
-                <div
-                  key={member.uid || idx}
-                  className="p-3 rounded-[10px] bg-slate-900/50 border border-slate-800 flex items-center gap-3"
-                >
-                  <Avatar
-                    name={member.displayName}
-                    initials={member.avatarInitials}
-                    src={(member as any).avatarUrl}
-                    size="sm"
-                    statusDot="online"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs font-semibold text-slate-100 truncate">
-                        {member.displayName}
-                      </p>
-                      {member.matchScore && (
-                        <span className="text-[10px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.2 rounded shrink-0">
-                          {member.matchScore}% Match
-                        </span>
+              {teamMembers.map((member, idx) => {
+                const realUser = member.uid ? realUsersMap.get(member.uid) : null;
+                const avatarSrc = realUser?.avatarUrl || (realUser as any)?.photoURL || (member as any).avatarUrl;
+                const statusDot = getUserStatusDot(realUser || member);
+                const canOpenProfile = !!member.uid;
+
+                return (
+                  <div
+                    key={member.uid || idx}
+                    onClick={() => {
+                      if (canOpenProfile) setProfileModalUid(member.uid);
+                    }}
+                    className={`p-3 rounded-[10px] bg-slate-900/50 border border-slate-800 flex items-center gap-3 transition-all ${
+                      canOpenProfile
+                        ? 'hover:border-[var(--color-accent-cyan)]/50 hover:bg-slate-900/80 cursor-pointer group'
+                        : ''
+                    }`}
+                  >
+                    <div
+                      className={
+                        canOpenProfile
+                          ? 'shrink-0 rounded-full hover:ring-2 hover:ring-[var(--color-accent-cyan)] transition-all'
+                          : 'shrink-0'
+                      }
+                      title={canOpenProfile ? `View ${member.displayName}'s Profile` : member.displayName}
+                    >
+                      <Avatar
+                        name={member.displayName}
+                        initials={member.avatarInitials}
+                        src={avatarSrc}
+                        size="sm"
+                        statusDot={statusDot}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-xs font-semibold text-slate-100 group-hover:text-[var(--color-accent-cyan)] transition-colors truncate">
+                          {member.displayName}
+                        </p>
+                        {member.matchScore && (
+                          <span className="text-[10px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.2 rounded shrink-0">
+                            {member.matchScore}% Match
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 truncate">{member.role || 'Contributor'}</p>
+                      {member.hourlyRate && (
+                        <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                          ${member.hourlyRate}/hr
+                        </p>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 truncate">{member.role || 'Contributor'}</p>
-                    {member.hourlyRate && (
-                      <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                        ${member.hourlyRate}/hr
-                      </p>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         </div>
@@ -302,20 +386,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
             <div className="border-b border-[var(--color-border)] pb-3">
               <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-[var(--color-accent-cyan)]" />
-                Budget & Timeline
+                Project Financials & Schedule
               </h3>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="p-3.5 rounded-[8px] bg-slate-900/50 border border-slate-800 space-y-1.5">
                 <span className="text-xs text-slate-400 block font-medium">
-                  Total Budget Allocation
+                  Total Spent So Far
                 </span>
-                <p className="text-lg font-bold text-slate-100">
-                  {formattedBudget}
+                <p className="text-xl font-bold font-mono text-cyan-400">
+                  ${totalSpent.toLocaleString()}
                 </p>
-                <span className="text-[11px] text-slate-400 capitalize block">
-                  Model: {project.budgetType || 'fixed'}
+                <span className="text-[11px] text-slate-400 block">
+                  {totalSettledTasks > 0
+                    ? `${totalSettledTasks} approved task${totalSettledTasks > 1 ? 's' : ''} settled`
+                    : 'Dynamic Per-Task Billing (No spend yet)'}
                 </span>
               </div>
 
@@ -326,16 +412,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
                     {project.workMode || 'Remote'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Commitment:</span>
-                  <span className="font-medium text-slate-200">
-                    {project.weeklyCommitment || 40} hrs / week
-                  </span>
-                </div>
+                {project.priority && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Priority:</span>
+                    <span className="font-medium text-slate-200">
+                      {project.priority}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-400">Duration:</span>
                   <span className="font-medium text-slate-200">
-                    {project.duration || '3 months'}
+                    {project.duration || 'Flexible'}
                   </span>
                 </div>
               </div>
@@ -358,6 +446,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
           </Card>
         </div>
       </div>
+
+      {profileModalUid && (
+        <UserProfileModal
+          isOpen={!!profileModalUid}
+          onClose={() => setProfileModalUid(null)}
+          userId={profileModalUid}
+        />
+      )}
     </div>
   );
 };

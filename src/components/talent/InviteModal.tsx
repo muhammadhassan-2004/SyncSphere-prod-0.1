@@ -6,8 +6,9 @@ import { Input } from '@/src/components/ui/input';
 import { Avatar } from '@/src/components/ui/avatar';
 import { SymbioteProfile } from '@/src/data/symbiotes';
 import { getProjectsByOwner } from '@/src/lib/firestore/projects';
-import { createInvitation } from '@/src/lib/firestore/invitations';
+import { createInvitation, getInvitationsByClient } from '@/src/lib/firestore/invitations';
 import { Project } from '@/src/types/firestore';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   Send,
   X,
@@ -42,20 +43,46 @@ export const InviteModal: React.FC<InviteModalProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen || !currentUserId) return;
+    if (!isOpen || !currentUserId || !candidate) return;
 
     setLoading(true);
     setErrorText(null);
 
-    getProjectsByOwner(currentUserId)
-      .then((userProjects) => {
-        // Filter active / open / in_progress / draft projects (exclude completed / closed)
-        const activeProjects = userProjects.filter(
-          (p) => p.status !== 'completed' && p.status !== 'closed'
+    Promise.all([
+      getProjectsByOwner(currentUserId),
+      getInvitationsByClient(currentUserId),
+    ])
+      .then(([userProjects, clientInvitations]) => {
+        // Collect project IDs where this specialist already has an active invitation
+        const activeInvitedProjectIds = new Set(
+          clientInvitations
+            .filter(
+              (inv) =>
+                inv.symbioteId === candidate.uid &&
+                (inv.status === 'pending' || inv.status === 'accepted' || inv.status === 'approved')
+            )
+            .map((inv) => inv.projectId)
         );
-        setProjects(activeProjects);
-        if (activeProjects.length > 0) {
-          setSelectedProjectId(activeProjects[0].id || '');
+
+        // Filter active projects:
+        // 1. Exclude completed / closed
+        // 2. Exclude projects where candidate already has an active invitation
+        // 3. Exclude projects where candidate is already in teamMembers
+        const eligibleProjects = userProjects.filter((p) => {
+          if (p.status === 'completed' || p.status === 'closed') return false;
+          if (p.id && activeInvitedProjectIds.has(p.id)) return false;
+          const isInTeam = p.teamMembers?.some(
+            (m: any) => m.uid === candidate.uid || m.id === candidate.uid
+          );
+          if (isInTeam) return false;
+          return true;
+        });
+
+        setProjects(eligibleProjects);
+        if (eligibleProjects.length > 0) {
+          setSelectedProjectId(eligibleProjects[0].id || '');
+        } else {
+          setSelectedProjectId('');
         }
       })
       .catch((err) => {
@@ -63,13 +90,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({
         setErrorText('Failed to load your active projects. Please try again.');
       })
       .finally(() => setLoading(false));
-  }, [isOpen, currentUserId]);
+  }, [isOpen, currentUserId, candidate]);
 
   if (!isOpen || !candidate) return null;
 
   const handleSendInvite = async () => {
     if (!selectedProjectId) {
-      setErrorText('Please select a project to invite this specialist to.');
+      setErrorText('Please select an eligible project to invite this specialist to.');
       return;
     }
 
@@ -89,12 +116,31 @@ export const InviteModal: React.FC<InviteModalProps> = ({
     setErrorText(null);
 
     try {
+      // Re-verify no active duplicate invitation exists
+      const existingInvites = await getInvitationsByClient(currentUserId);
+      const isAlreadyInvited = existingInvites.some(
+        (inv) =>
+          inv.projectId === selectedProjectId &&
+          inv.symbioteId === candidate.uid &&
+          (inv.status === 'pending' || inv.status === 'accepted' || inv.status === 'approved')
+      );
+
+      if (isAlreadyInvited) {
+        setErrorText('This specialist already has an active invitation for this project.');
+        setSubmitting(false);
+        return;
+      }
+
       const budgetFormatted =
-        typeof selectedProj?.budget === 'number'
+        typeof selectedProj?.budget === 'number' && selectedProj.budget > 0
           ? `$${selectedProj.budget.toLocaleString()}`
-          : selectedProj?.minBudget
-          ? `$${selectedProj.minBudget} - $${selectedProj.maxBudget || ''}`
-          : '$10,000 - $25,000';
+          : selectedProj?.minBudget && selectedProj?.maxBudget
+          ? `$${Number(selectedProj.minBudget).toLocaleString()} - $${Number(selectedProj.maxBudget).toLocaleString()}`
+          : candidate.hourlyRate
+          ? `$${candidate.hourlyRate}/hr`
+          : selectedProj?.budgetType === 'hourly'
+          ? 'Hourly Rate'
+          : 'Dynamic Per-Task';
 
       const invId = await createInvitation({
         projectId: selectedProjectId,
@@ -160,7 +206,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
         {/* CANDIDATE MINI BANNER */}
         <div className="p-4 bg-[var(--color-background)] border-b border-[var(--color-border)] flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Avatar name={candidate.displayName} initials={candidate.avatarInitials} src={candidate.avatarUrl} size="sm" statusDot="online" />
+            <Avatar name={candidate.displayName} initials={candidate.avatarInitials} src={candidate.avatarUrl} size="sm" statusDot={getUserStatusDot(candidate)} />
             <div>
               <p className="text-xs font-bold text-[var(--color-text-primary)]">{candidate.displayName}</p>
               <p className="text-[11px] text-[var(--color-text-secondary)]">{candidate.title}</p>
@@ -203,10 +249,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({
                 Loading your client projects...
               </div>
             ) : projects.length === 0 ? (
-              <div className="p-4 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] text-center space-y-2">
-                <p className="text-xs text-[var(--color-text-secondary)]">You do not have any active project listings yet.</p>
-                <p className="text-[11px] text-[var(--color-text-secondary)] font-mono">
-                  Create a new project first to invite candidates.
+              <div className="p-4 rounded-[10px] bg-amber-500/10 border border-amber-500/30 text-center space-y-2">
+                <div className="flex items-center justify-center gap-1.5 text-amber-400 font-semibold text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>No Eligible Projects Available</span>
+                </div>
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  {candidate.displayName} is already a team member or has an active invitation for all your current projects.
                 </p>
               </div>
             ) : (

@@ -28,7 +28,15 @@ export const PublicNavbar: React.FC = () => {
   const rawRole = activeUser?.role || currentRole || 'client';
   const effectiveRole = (rawRole === 'freelancer' ? 'symbiote' : rawRole) as 'client' | 'symbiote' | 'admin';
 
-  const dashboardPath = `/${effectiveRole}/dashboard`;
+  const isEmailUnverified =
+    activeUser?.emailVerified === false ||
+    (firebaseUser && firebaseUser.emailVerified === false && activeUser?.emailVerified !== true);
+
+  const dashboardPath = isEmailUnverified
+    ? `/verify-email?email=${encodeURIComponent(activeUser?.email || firebaseUser?.email || '')}&role=${effectiveRole}`
+    : `/${effectiveRole}/dashboard`;
+
+  const dashboardLabel = isEmailUnverified ? 'Verify Email' : 'Dashboard';
 
   const roleMeta = {
     client: {
@@ -234,7 +242,7 @@ export const PublicNavbar: React.FC = () => {
               </Button>
               <Link to={dashboardPath} id="nav-dashboard-btn">
                 <Button variant="primary" size="sm" className="font-semibold px-3.5 sm:px-4 text-xs sm:text-sm">
-                  Dashboard
+                  {dashboardLabel}
                 </Button>
               </Link>
             </>
@@ -374,7 +382,7 @@ export const PublicNavbar: React.FC = () => {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   <Button variant="primary" size="sm" className="w-full justify-center font-bold">
-                    Dashboard
+                    {dashboardLabel}
                   </Button>
                 </Link>
               </div>

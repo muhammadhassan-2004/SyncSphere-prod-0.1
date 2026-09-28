@@ -5,8 +5,8 @@ import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { StatusPill } from '@/src/components/ui/badge';
 import { EmptyState } from '@/src/components/ui/EmptyState';
-import { subscribeToOpenProjects } from '@/src/lib/firestore';
-import { Project } from '@/src/types/firestore';
+import { subscribeToOpenProjects, subscribeToSymbioteInvitations } from '@/src/lib/firestore';
+import { Project, Invitation } from '@/src/types/firestore';
 import {
   Search,
   Filter,
@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Building,
   Check,
+  Mail,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -64,6 +65,25 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
 
   // Mobile Filter Drawer Toggle
   const [mobileFilterOpen, setMobileFilterOpen] = useState<boolean>(false);
+
+  // Live Invitations for this symbiote
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+
+  useEffect(() => {
+    if (!currentUid) return;
+    const unsubInvs = subscribeToSymbioteInvitations(currentUid, (invList) => {
+      setInvitations(invList || []);
+    });
+    return () => unsubInvs();
+  }, [currentUid]);
+
+  const invitationsByProjectId = useMemo(() => {
+    const map = new Map<string, Invitation>();
+    invitations.forEach((inv) => {
+      if (inv.projectId) map.set(inv.projectId, inv);
+    });
+    return map;
+  }, [invitations]);
 
   // Live Firestore Subscription (Scoped to open/published marketplace projects)
   useEffect(() => {
@@ -113,6 +133,11 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
   // REAL FIRESTORE FILTERING LOGIC
   const filteredProjects = useMemo(() => {
     return projects.filter((proj) => {
+      // 0. Exclude inactive projects (completed, closed, archived)
+      if (proj.status === 'completed' || proj.status === 'closed' || proj.status === 'archived') {
+        return false;
+      }
+
       // 1. Search Query Filter (Title, Description, Category, TechTags)
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
@@ -145,36 +170,28 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
 
       // 3. Budget Range Filter
       if (budgetRange !== 'any') {
-        const minB = proj.minBudget ?? 0;
-        const maxB = proj.maxBudget ?? (typeof proj.budget === 'number' ? proj.budget : 0);
-
-        if (budgetRange === 'under5k') {
-          if (maxB > 5000 && minB > 5000) return false;
-        } else if (budgetRange === '5k-10k') {
-          if (maxB < 5000 || minB > 10000) return false;
-        } else if (budgetRange === 'over10k') {
-          if (maxB < 10000 && minB < 10000) return false;
-        }
+        const pBudget = typeof proj.budget === 'number' ? proj.budget : (proj.maxBudget || 0);
+        if (budgetRange === 'under5k' && pBudget > 5000) return false;
+        if (budgetRange === '5k-10k' && (pBudget < 5000 || pBudget > 10000)) return false;
+        if (budgetRange === 'over10k' && pBudget < 10000) return false;
       }
 
       // 4. Timeline Filter
-      if (selectedTimelines.length > 0 && !selectedTimelines.includes('Any Length')) {
-        const projTimeline = (proj.timeline || proj.duration || '').toLowerCase();
-        const matchesTimeline = selectedTimelines.some((tl) => {
-          if (tl === '<4 weeks') return projTimeline.includes('<4') || projTimeline.includes('2 week') || projTimeline.includes('3 week') || projTimeline.includes('1 month');
-          if (tl === '4–8 weeks') return projTimeline.includes('4-8') || projTimeline.includes('4–8') || projTimeline.includes('1-2 month') || projTimeline.includes('6 week');
-          if (tl === '8+ weeks') return projTimeline.includes('8+') || projTimeline.includes('3 month') || projTimeline.includes('6 month') || projTimeline.includes('long term');
+      if (selectedTimelines.length > 0) {
+        const dur = (proj.duration || proj.timeline || '').toLowerCase();
+        const matchesDuration = selectedTimelines.some((tl) => {
+          if (tl === '<4 weeks') return dur.includes('1') || dur.includes('2') || dur.includes('3') || dur.includes('4') || dur.includes('month');
+          if (tl === '4–8 weeks') return dur.includes('month') || dur.includes('weeks') || dur.includes('6') || dur.includes('8');
+          if (tl === '8+ weeks') return dur.includes('months') || dur.includes('quarter') || dur.includes('12');
           return true;
         });
-        if (!matchesTimeline) return false;
+        if (!matchesDuration) return false;
       }
 
-      // 5. Experience Level Filter
+      // 5. Experience Filter
       if (selectedExperience.length > 0) {
-        const projExp = (proj.experienceLevel || '').toLowerCase();
-        const matchesExp = selectedExperience.some((exp) =>
-          projExp.includes(exp.toLowerCase())
-        );
+        const exp = (proj.experienceLevel || proj.experience || '').toLowerCase();
+        const matchesExp = selectedExperience.some((e) => exp.includes(e.toLowerCase()));
         if (!matchesExp) return false;
       }
 
@@ -184,6 +201,13 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
 
   // Deterministic Match % calculation or Pending AI Assessment
   const calculateMatchScore = (proj: Project): { score: number | null; label: string } => {
+    // If client directly invited this symbiote, match score remains synchronized with invitation
+    const directInv = proj.id ? invitationsByProjectId.get(proj.id) : null;
+    if (directInv && (directInv.matchScore || directInv.aiMatchScore)) {
+      const s = directInv.matchScore || directInv.aiMatchScore!;
+      return { score: s, label: `${s}% Match` };
+    }
+
     if ((proj as any).matchScore !== undefined) {
       return { score: (proj as any).matchScore, label: `${(proj as any).matchScore}% Match` };
     }
@@ -196,7 +220,10 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
       const matchCount = projSkills.filter((ps) =>
         userSkills.some((us) => us.toLowerCase() === ps.toLowerCase())
       ).length;
-      const calculated = Math.min(98, Math.max(60, Math.round((matchCount / projSkills.length) * 100)));
+      if (matchCount === 0) {
+        return { score: 25, label: '25% Match' };
+      }
+      const calculated = Math.min(98, Math.max(45, Math.round((matchCount / projSkills.length) * 100)));
       return { score: calculated, label: `${calculated}% Skill Match` };
     }
 
@@ -204,8 +231,28 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
     return { score: null, label: 'AI Match Pending' };
   };
 
+  const sortedProjects = useMemo(() => {
+    return [...filteredProjects].sort((a, b) => {
+      const aInv = a.id ? invitationsByProjectId.get(a.id) : null;
+      const bInv = b.id ? invitationsByProjectId.get(b.id) : null;
+      const aHasPending = aInv?.status === 'pending' ? 1 : 0;
+      const bHasPending = bInv?.status === 'pending' ? 1 : 0;
+      return bHasPending - aHasPending;
+    });
+  }, [filteredProjects, invitationsByProjectId]);
+
   // Helper for budget display
   const formatBudget = (proj: Project): string => {
+    const isHourly = proj.budgetType === 'hourly' || (proj as any).pricingModel === 'hourly';
+    if (isHourly) {
+      if (proj.minBudget && proj.maxBudget) {
+        return `$${proj.minBudget.toLocaleString()} – $${proj.maxBudget.toLocaleString()}/hr`;
+      }
+      if (proj.maxBudget) {
+        return `$${proj.maxBudget.toLocaleString()}/hr`;
+      }
+      return 'Dynamic Per-Task';
+    }
     if (proj.minBudget && proj.maxBudget) {
       return `$${proj.minBudget.toLocaleString()} – $${proj.maxBudget.toLocaleString()}`;
     }
@@ -218,7 +265,7 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
     if (typeof proj.budget === 'object' && proj.budget?.total) {
       return `$${proj.budget.total.toLocaleString()}`;
     }
-    return 'Budget Negotiable';
+    return 'Dynamic Per-Task';
   };
 
   return (
@@ -415,7 +462,7 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
               <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-body font-medium">Fetching open client projects...</p>
             </div>
-          ) : filteredProjects.length === 0 ? (
+          ) : sortedProjects.length === 0 ? (
             <EmptyState
               icon={Compass}
               title="No projects match your filters"
@@ -424,15 +471,30 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
               onAction={resetFilters}
             />
           ) : (
-            filteredProjects.map((proj) => {
+            sortedProjects.map((proj) => {
               const match = calculateMatchScore(proj);
               const budgetDisplay = formatBudget(proj);
               const tags = proj.techTags || proj.skills || ['React', 'TypeScript', 'Node.js'];
+              const inv = proj.id ? invitationsByProjectId.get(proj.id) : null;
+              const isInvited = !!(inv?.status === 'pending');
+              const isAcceptedWaiting = !!(inv?.status === 'accepted');
+              const isApprovedOrHired = Boolean(
+                currentUid && (
+                  proj.symbioteId === currentUid ||
+                  proj.assignedSymbioteId === currentUid ||
+                  (proj.teamMembers || []).some((m) => m.uid === currentUid) ||
+                  inv?.status === 'approved'
+                )
+              );
 
               return (
                 <div
                   key={proj.id}
-                  className="group relative p-6 border border-[var(--color-border)] hover:border-cyan-500/40 bg-[var(--color-surface)] hover:bg-[var(--color-surface-elevated)]/90 rounded-[14px] space-y-4.5 transition-all duration-200 hover:shadow-[0_8px_30px_-8px_rgba(6,182,212,0.14)] hover:-translate-y-0.5"
+                  className={`group relative p-6 border rounded-[14px] space-y-4.5 transition-all duration-200 hover:-translate-y-0.5 ${
+                    isInvited
+                      ? 'border-amber-500/50 bg-gradient-to-b from-amber-950/15 via-[var(--color-surface)] to-[var(--color-surface)] shadow-[0_8px_30px_-8px_rgba(245,158,11,0.18)] ring-1 ring-amber-500/30'
+                      : 'border-[var(--color-border)] hover:border-cyan-500/40 bg-[var(--color-surface)] hover:bg-[var(--color-surface-elevated)]/90 hover:shadow-[0_8px_30px_-8px_rgba(6,182,212,0.14)]'
+                  }`}
                 >
                   {/* TOP ROW: TITLE + META + BUDGET + MATCH BADGE */}
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -444,6 +506,14 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
                         >
                           {proj.title}
                         </h3>
+
+                        {/* INVITATION BADGE IF INVITED BY CLIENT */}
+                        {isInvited && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-500/50 text-[11.5px] font-mono font-bold text-amber-300 bg-amber-500/20 select-none shadow-xs animate-pulse">
+                            <Mail className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Invited by Client</span>
+                          </span>
+                        )}
 
                         {/* OUTLINED AI MATCH / COMPATIBILITY BADGE */}
                         {match.score === null ? (
@@ -492,28 +562,28 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* BUDGET PRESENTATION */}
-                    <div className="sm:text-right shrink-0">
-                      <div className="text-base sm:text-lg font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400">
+                    {/* BUDGET DISPLAY */}
+                    <div className="text-right shrink-0">
+                      <p className="text-sm sm:text-base font-bold text-emerald-400 font-mono">
                         {budgetDisplay}
-                      </div>
-                      <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
-                        {proj.budgetType === 'hourly' ? 'Hourly Rate' : 'Fixed Price'}
-                      </span>
+                      </p>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                        {proj.budgetType === 'hourly' || (proj as any).pricingModel === 'hourly' ? 'Hourly / Per Task' : 'Fixed / Milestones'}
+                      </p>
                     </div>
                   </div>
 
-                  {/* PROJECT DESCRIPTION SNIPPET */}
-                  <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] line-clamp-2 leading-relaxed">
-                    {proj.description}
+                  {/* DESCRIPTION */}
+                  <p className="text-body text-[var(--color-text-secondary)] leading-relaxed line-clamp-2">
+                    {proj.description || 'No description provided.'}
                   </p>
 
-                  {/* TECH / SKILL TAGS (CYAN-TO-GREEN GRADIENT ACCENT TREATMENT) */}
-                  <div className="flex flex-wrap gap-2 pt-0.5">
+                  {/* TECH TAGS */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {tags.map((tag, idx) => (
                       <span
                         key={idx}
-                        className="px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-gradient-to-r from-cyan-500/[0.08] to-emerald-500/[0.08] border border-cyan-500/25 text-cyan-200/90 hover:text-cyan-100 hover:border-emerald-500/40 hover:from-cyan-500/[0.14] hover:to-emerald-500/[0.14] transition-all cursor-default shadow-[0_1px_4px_rgba(6,182,212,0.04)]"
+                        className="px-2.5 py-1 text-[11px] font-mono rounded-[6px] bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
                       >
                         {tag}
                       </span>
@@ -537,19 +607,41 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
                         View Details
                       </Button>
 
-                      {currentUid && (
-                        proj.symbioteId === currentUid ||
-                        (proj.teamMembers || []).some((m) => m.uid === currentUid)
-                      ) ? (
-                        <span className="h-8 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-3 rounded-[8px] flex items-center gap-1.5">
-                          <Check className="w-3.5 h-3.5" /> Hired
+                      {isApprovedOrHired ? (
+                        <>
+                          <span className="h-8 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-3 rounded-[8px] flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5" /> Hired
+                          </span>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => navigate(`/symbiote/workspace/${proj.id}`)}
+                            className="h-8 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold px-3.5 text-xs shadow-sm border-0 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>Open Workspace</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      ) : isAcceptedWaiting ? (
+                        <span className="h-8 text-xs font-mono font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-3 rounded-[8px] flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" /> Accepted · Awaiting Approval
                         </span>
+                      ) : isInvited ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => navigate(`/symbiote/browse/${proj.id}`)}
+                          className="h-8 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-600 hover:to-emerald-600 text-slate-950 font-bold px-3.5 text-xs shadow-sm border-0 animate-pulse flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Review Invitation</span>
+                        </Button>
                       ) : (
                         <Button
                           variant="primary"
                           size="sm"
                           onClick={() => navigate(`/symbiote/browse/${proj.id}`)}
-                          className="h-8 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white font-bold px-4 text-xs shadow-sm border-0 group/btn"
+                          className="h-8 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white font-bold px-4 text-xs shadow-sm border-0 group/btn cursor-pointer"
                         >
                           <span>Apply Now</span>
                           <ArrowRight className="w-3.5 h-3.5 ml-1 transition-transform group-hover/btn:translate-x-0.5" />

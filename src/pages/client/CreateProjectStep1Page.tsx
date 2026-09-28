@@ -6,6 +6,13 @@ import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { WizardStepIndicator } from '@/src/components/widgets/WizardStepIndicator';
 import { saveProjectDraft, getProjectById } from '@/src/lib/firestore/projects';
+import {
+  createProjectFile,
+  deleteProjectFile,
+  subscribeToProjectFilesForProject,
+} from '@/src/lib/firestore/projectFiles';
+import { uploadFileToCloudinary } from '@/src/lib/storage/cloudinary';
+import { ProjectFile } from '@/src/types/firestore';
 import { getPlatformOperationsSettings } from '@/src/lib/firestore/adminSettings';
 import { INDUSTRIES } from '@/src/lib/constants';
 import { FieldError } from '@/src/lib/validation/formValidators';
@@ -26,7 +33,7 @@ import {
 
 const WIZARD_STEPS = [
   { id: '1', label: 'Basic Info', description: 'Title, category & skills' },
-  { id: '2', label: 'Scope & Budget', description: 'Milestones & deliverables' },
+  { id: '2', label: 'Timeline & Schedule', description: 'Dates & work arrangement' },
   { id: '3', label: 'AI Matching', description: 'Preferences & criteria' },
   { id: '4', label: 'Review & Publish', description: 'Final audit & launch' },
 ];
@@ -67,9 +74,17 @@ const SKILL_SUGGESTIONS = [
   'Docker',
   'Llama 3',
   'OpenAI API',
-  'TensorFlow',
-  'Kubernetes',
 ];
+
+interface AttachmentItem {
+  id?: string;
+  name: string;
+  size: string;
+  type?: string;
+  file?: File;
+  previewUrl?: string;
+  downloadUrl?: string;
+}
 
 export const CreateProjectStep1Page: React.FC = () => {
   const { firebaseUser, userProfile } = useAuth();
@@ -86,7 +101,7 @@ export const CreateProjectStep1Page: React.FC = () => {
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState('');
   const [description, setDescription] = useState('');
-  const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
 
   // UI Feedback State
   const [saving, setSaving] = useState(false);
@@ -117,8 +132,26 @@ export const CreateProjectStep1Page: React.FC = () => {
       }
     });
 
+    const unsubFiles = subscribeToProjectFilesForProject(draftId, (filesList) => {
+      if (isMounted && filesList && filesList.length > 0) {
+        setAttachments((prev) => {
+          const localFiles = prev.filter((p) => p.file);
+          const savedItems: AttachmentItem[] = filesList.map((f) => ({
+            id: f.id,
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            downloadUrl: f.downloadUrl,
+            previewUrl: f.downloadUrl && (f.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name)) ? f.downloadUrl : undefined,
+          }));
+          return [...savedItems, ...localFiles];
+        });
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubFiles();
     };
   }, [draftId]);
 
@@ -154,19 +187,58 @@ export const CreateProjectStep1Page: React.FC = () => {
     }
   };
 
-  // Handle File Dropzone Mock Upload
+  // Handle File Dropzone Upload with local thumbnail preview & validation
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const filesArray = Array.from(e.target.files).map((f: File) => ({
-        name: f.name,
-        size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-      }));
-      setAttachments([...attachments, ...filesArray]);
+      const selectedFiles = Array.from(e.target.files) as File[];
+      const newItems: AttachmentItem[] = [];
+
+      for (const f of selectedFiles) {
+        const sizeMb = f.size / (1024 * 1024);
+        if (sizeMb > maxUploadMb) {
+          setToastMessage({
+            type: 'error',
+            text: `File "${f.name}" exceeds the maximum allowed size of ${maxUploadMb}MB.`,
+          });
+          continue;
+        }
+
+        const sizeFormatted = f.size > 1024 * 1024 ? `${sizeMb.toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`;
+        const isImage = f.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name);
+        let previewUrl: string | undefined = undefined;
+        try {
+          if (isImage) {
+            previewUrl = URL.createObjectURL(f);
+          }
+        } catch {
+          // Graceful fallback for environments where createObjectURL is restricted
+        }
+
+        newItems.push({
+          name: f.name,
+          size: sizeFormatted,
+          type: f.type || f.name.split('.').pop() || 'file',
+          file: f,
+          previewUrl,
+        });
+      }
+
+      if (newItems.length > 0) {
+        setAttachments((prev) => [...prev, ...newItems]);
+      }
     }
   };
 
-  const handleRemoveAttachment = (index: number) => {
-    setAttachments(attachments.filter((_, i) => i !== index));
+  const handleRemoveAttachment = async (index: number) => {
+    const item = attachments[index];
+    if (item?.id) {
+      try {
+        await deleteProjectFile(item.id);
+      } catch (err) {
+        console.warn('Failed to delete project file from repository:', err);
+      }
+    }
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Save Draft Handler
@@ -204,11 +276,48 @@ export const CreateProjectStep1Page: React.FC = () => {
         status: 'draft',
       });
 
+      // Persist any newly selected files to Cloudinary storage and Firestore projectFiles repository
+      const pendingFiles = attachments.filter((att) => att.file);
+      if (pendingFiles.length > 0 && currentDraftId) {
+        for (const att of pendingFiles) {
+          if (!att.file) continue;
+          try {
+            const uploadRes = await uploadFileToCloudinary(att.file, {
+              projectId: currentDraftId,
+              folder: `syncsphere/projects/${currentDraftId}`,
+              fileName: att.name,
+            });
+
+            const filePayload: Omit<ProjectFile, 'id'> = {
+              projectId: currentDraftId,
+              projectName: title || 'Untitled Project Brief',
+              clientId: firebaseUser.uid,
+              name: att.name,
+              size: att.size,
+              sizeBytes: uploadRes.bytes || att.file.size,
+              type: att.type || att.file.type || att.name.split('.').pop() || 'file',
+              category: 'requirements',
+              downloadUrl: uploadRes.url,
+              uploadedBy: firebaseUser.uid,
+              uploadedByName: clientName,
+              uploadedAt: new Date().toISOString(),
+            };
+
+            const createdId = await createProjectFile(filePayload);
+            att.id = createdId;
+            att.downloadUrl = uploadRes.url;
+            delete att.file;
+          } catch (fileErr) {
+            console.error(`Failed to upload attachment ${att.name} to Cloudinary:`, fileErr);
+          }
+        }
+      }
+
       if (!draftId) {
         setSearchParams({ draftId: currentDraftId });
       }
 
-      setToastMessage({ type: 'success', text: 'Project draft saved successfully!' });
+      setToastMessage({ type: 'success', text: 'Project draft and attached documents saved successfully!' });
       setSaving(false);
       return currentDraftId;
     } catch (err) {
@@ -522,25 +631,47 @@ export const CreateProjectStep1Page: React.FC = () => {
                 </p>
               </label>
 
-              {/* File Attachment List */}
+              {/* File Attachment List with Image Thumbnails */}
               {attachments.length > 0 && (
-                <div className="space-y-1.5 pt-2">
-                  <p className="text-[11px] font-semibold text-[var(--color-text-secondary)]">Attached Documents:</p>
-                  <div className="space-y-1.5">
+                <div className="space-y-2 pt-2">
+                  <p className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                    Attached Documents ({attachments.length}):
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {attachments.map((file, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center justify-between p-2 rounded-[8px] bg-[var(--color-surface)] border border-[var(--color-border)] text-xs"
+                        className="flex items-center justify-between p-2.5 rounded-[10px] bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-cyan)]/40 transition-colors text-xs gap-2"
                       >
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText className="w-4 h-4 text-[var(--color-accent-cyan)] shrink-0" />
-                          <span className="font-medium text-[var(--color-text-primary)] truncate">{file.name}</span>
-                          <span className="text-[10px] text-[var(--color-text-secondary)] font-mono">{file.size}</span>
+                        <div className="flex items-center gap-2.5 truncate min-w-0">
+                          {file.previewUrl ? (
+                            <img
+                              src={file.previewUrl}
+                              alt={file.name}
+                              className="w-10 h-10 object-cover rounded-[6px] border border-[var(--color-border)] shrink-0 shadow-xs"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-[6px] bg-[var(--color-background)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                              <FileText className="w-5 h-5 text-[var(--color-accent-cyan)]" />
+                            </div>
+                          )}
+                          <div className="min-w-0 truncate">
+                            <span className="font-medium text-[var(--color-text-primary)] truncate block leading-snug">
+                              {file.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-secondary)] font-mono mt-0.5">
+                              <span>{file.size}</span>
+                              {file.id && (
+                                <span className="text-emerald-400 font-bold">✓ Saved</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => handleRemoveAttachment(idx)}
-                          className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-danger-red)] transition-colors cursor-pointer"
+                          className="p-1.5 text-[var(--color-text-secondary)] hover:text-rose-400 hover:bg-rose-500/10 rounded-[6px] transition-colors cursor-pointer shrink-0"
+                          title="Remove attachment"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>

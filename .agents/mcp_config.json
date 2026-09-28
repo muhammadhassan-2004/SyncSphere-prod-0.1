@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "novamira-lyvile-com": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@automattic/mcp-wordpress-remote@latest"
+      ],
+      "env": {
+        "WP_API_URL": "https://lyvile.com/wp-json/mcp/novamira",
+        "WP_API_USERNAME": "admin",
+        "WP_API_PASSWORD": "ElBIwVM9hSHRwDAlkxusAei2"
+      }
+    }
+  }
+}

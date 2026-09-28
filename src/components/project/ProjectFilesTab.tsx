@@ -19,6 +19,11 @@ import {
   Download,
   Trash2,
   FolderOpen,
+  Eye,
+  X,
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface ProjectFilesTabProps {
@@ -38,6 +43,18 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
+
+  // Close preview modal on ESC key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && previewFile) {
+        setPreviewFile(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewFile]);
 
   const TABS: Array<{ id: string; label: string; category?: FileCategory }> = [
     { id: 'all', label: 'All Files' },
@@ -222,6 +239,9 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
           {filteredFiles.map((file) => {
             const iconInfo = getFileTypeIconInfo(file.name, file.category, file.type);
             const IconComp = iconInfo.icon;
+            const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name);
+            const isPdf = file.type?.includes('pdf') || /\.pdf$/i.test(file.name);
+            const hasDownloadUrl = !!file.downloadUrl && file.downloadUrl !== '#' && !file.downloadUrl.startsWith('blob:');
 
             return (
               <Card
@@ -229,23 +249,70 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                 className="p-4 bg-[var(--color-surface)] border-[var(--color-border)] hover:border-[var(--color-accent-cyan)]/50 rounded-[12px] space-y-3.5 transition-all shadow-sm hover:shadow-md group relative flex flex-col justify-between"
               >
                 <div className="space-y-3">
-                  {/* TOP ROW: ICON + CATEGORY BADGE */}
-                  <div className="flex items-start justify-between gap-2">
+                  {/* IMAGE THUMBNAIL IF IMAGE */}
+                  {isImage && hasDownloadUrl ? (
                     <div
-                      className={`p-2.5 rounded-[10px] border ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}
+                      onClick={() => setPreviewFile(file)}
+                      className="relative w-full h-36 rounded-[10px] overflow-hidden bg-slate-950/60 border border-[var(--color-border)] cursor-pointer group/thumb"
                     >
-                      <IconComp className="w-5 h-5" />
+                      <img
+                        src={file.downloadUrl}
+                        alt={file.name}
+                        className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                        <span className="px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-xs text-white text-[11px] font-mono flex items-center gap-1 shadow-sm">
+                          <Eye className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
+                          <span>Preview</span>
+                        </span>
+                      </div>
+                      <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-black/60 backdrop-blur-xs text-white border border-white/10">
+                        {file.category}
+                      </span>
                     </div>
+                  ) : isPdf ? (
+                    <div
+                      onClick={() => setPreviewFile(file)}
+                      className="relative w-full h-24 rounded-[10px] bg-gradient-to-br from-rose-950/30 to-slate-900/60 border border-rose-500/20 p-3 flex flex-col justify-between cursor-pointer group/pdf hover:border-rose-500/40 transition-colors"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="p-2 rounded-[8px] bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                          PDF · {file.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10.5px] text-[var(--color-text-secondary)] font-mono">
+                        <span>Document Spec</span>
+                        <span className="text-rose-400 group-hover/pdf:underline flex items-center gap-1">
+                          <Eye className="w-3 h-3" /> Click Preview
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* TOP ROW: ICON + CATEGORY BADGE */
+                    <div className="flex items-start justify-between gap-2">
+                      <div
+                        className={`p-2.5 rounded-[10px] border ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}
+                      >
+                        <IconComp className="w-5 h-5" />
+                      </div>
 
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
-                      {file.category}
-                    </span>
-                  </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
+                        {file.category}
+                      </span>
+                    </div>
+                  )}
 
                   {/* FILENAME & METADATA */}
                   <div>
-                    <h3 className="font-bold text-xs text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors break-words leading-snug">
-                      {file.name}
+                    <h3
+                      onClick={() => setPreviewFile(file)}
+                      className="font-bold text-xs text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors break-words leading-snug cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{file.name}</span>
                     </h3>
 
                     <div className="flex items-center gap-2 text-[11px] font-mono text-[var(--color-text-secondary)] mt-1">
@@ -258,12 +325,20 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
 
                 {/* BOTTOM ROW: UPLOADED BY & ACTIONS */}
                 <div className="pt-3 border-t border-[var(--color-border)]/60 flex items-center justify-between text-[10px] font-mono text-[var(--color-text-secondary)]">
-                  <span className="truncate max-w-[150px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                  <span className="truncate max-w-[140px] text-[var(--color-text-secondary)] flex items-center gap-1">
                     <Folder className="w-3 h-3 shrink-0 text-[var(--color-accent-cyan)]" />
                     {file.uploadedByName || 'Client Admin'}
                   </span>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPreviewFile(file)}
+                      className="p-1.5 rounded bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] transition-colors cursor-pointer"
+                      title="Preview Document"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+
                     <button
                       onClick={(e) => handleDownload(file, e)}
                       className="p-1.5 rounded bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] transition-colors cursor-pointer"
@@ -306,13 +381,32 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
               {filteredFiles.map((file) => {
                 const iconInfo = getFileTypeIconInfo(file.name, file.category, file.type);
                 const IconComp = iconInfo.icon;
+                const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name);
+                const hasDownloadUrl = !!file.downloadUrl && file.downloadUrl !== '#' && !file.downloadUrl.startsWith('blob:');
 
                 return (
                   <tr key={file.id} className="hover:bg-[var(--color-background)]/50 transition-colors">
                     <td className="py-2.5 px-3">
-                      <div className={`p-1.5 rounded border inline-block ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}>
-                        <IconComp className="w-3.5 h-3.5" />
-                      </div>
+                      {isImage && hasDownloadUrl ? (
+                        <div
+                          onClick={() => setPreviewFile(file)}
+                          className="w-8 h-8 rounded overflow-hidden border border-[var(--color-border)] bg-slate-950 shrink-0 cursor-pointer hover:border-[var(--color-accent-cyan)] transition-colors"
+                          title="Click to preview image"
+                        >
+                          <img
+                            src={file.downloadUrl}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className={`p-1.5 rounded border inline-block ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}>
+                          <IconComp className="w-3.5 h-3.5" />
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-3 font-bold text-[var(--color-text-primary)]">{file.name}</td>
@@ -333,6 +427,13 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
 
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setPreviewFile(file)}
+                          className="p-1 rounded bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] cursor-pointer"
+                          title="Preview Document"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={(e) => handleDownload(file, e)}
                           className="p-1 rounded bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] cursor-pointer"
@@ -365,6 +466,113 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
         project={project}
         onClose={() => setIsUploadModalOpen(false)}
       />
+
+      {/* INTERACTIVE LIGHTBOX / DOCUMENT PREVIEW MODAL */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* MODAL HEADER */}
+            <div className="p-4 sm:px-6 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-background)]/60">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-[8px] bg-[var(--color-accent-cyan)]/15 border border-[var(--color-accent-cyan)]/30 text-[var(--color-accent-cyan)] shrink-0">
+                  {previewFile.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(previewFile.name) ? (
+                    <ImageIcon className="w-5 h-5" />
+                  ) : (
+                    <FileText className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-[var(--color-text-primary)] truncate">
+                    {previewFile.name}
+                  </h3>
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-[var(--color-text-secondary)] mt-0.5">
+                    <span className="capitalize">{previewFile.category}</span>
+                    <span>·</span>
+                    <span>{previewFile.size}</span>
+                    <span>·</span>
+                    <span>Uploaded by {previewFile.uploadedByName || 'Client Admin'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={(e) => handleDownload(previewFile, e)}
+                  className="px-3 py-1.5 rounded-[8px] bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] text-xs font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download Document"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
+
+                {previewFile.downloadUrl && previewFile.downloadUrl !== '#' && (
+                  <a
+                    href={previewFile.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 rounded-[8px] bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] transition-colors cursor-pointer"
+                    title="Open full file in new tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+
+                <button
+                  onClick={() => setPreviewFile(null)}
+                  className="p-2 rounded-[8px] bg-[var(--color-background)] hover:bg-rose-500/20 text-[var(--color-text-secondary)] hover:text-rose-400 border border-[var(--color-border)] transition-colors cursor-pointer"
+                  title="Close Preview (ESC)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* MODAL PREVIEW BODY */}
+            <div className="p-4 sm:p-6 overflow-auto flex-1 flex items-center justify-center bg-slate-950/40 min-h-[320px]">
+              {previewFile.downloadUrl && (previewFile.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(previewFile.name)) ? (
+                <img
+                  src={previewFile.downloadUrl}
+                  alt={previewFile.name}
+                  className="max-h-[70vh] max-w-full object-contain rounded-lg shadow-lg border border-[var(--color-border)]/50"
+                />
+              ) : previewFile.downloadUrl && (previewFile.type?.includes('pdf') || /\.pdf$/i.test(previewFile.name)) ? (
+                <iframe
+                  src={previewFile.downloadUrl}
+                  className="w-full h-[70vh] rounded-lg border border-[var(--color-border)] bg-white"
+                  title={previewFile.name}
+                />
+              ) : (
+                <div className="text-center space-y-3 py-12">
+                  <div className="w-16 h-16 rounded-full bg-[var(--color-accent-cyan)]/15 border border-[var(--color-accent-cyan)]/30 flex items-center justify-center mx-auto text-[var(--color-accent-cyan)]">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    Direct In-Browser Preview Not Supported For This Format
+                  </p>
+                  <p className="text-xs text-[var(--color-text-secondary)] font-mono max-w-md mx-auto">
+                    This file format can be downloaded securely for inspection with your local desktop application.
+                  </p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={(e) => handleDownload(previewFile, e)}
+                    className="bg-[var(--color-accent-cyan)] text-slate-950 font-mono font-bold mt-2"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download File
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

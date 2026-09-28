@@ -9,6 +9,7 @@ import { getUserProfile } from '@/src/lib/firestore/users';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   Star,
   CheckCircle2,
@@ -553,7 +554,7 @@ export const LeaveReviewPage: React.FC = () => {
                     initials={displayInitials}
                     src={symbiote?.avatarUrl}
                     size="md"
-                    statusDot={hasSpecialist ? 'online' : undefined}
+                    statusDot={getUserStatusDot(symbiote)}
                     className="shrink-0 ring-2 ring-[var(--color-accent-cyan)]/40"
                   />
                   <div>

@@ -20,6 +20,7 @@ import {
   LayoutDashboard,
   PlusCircle,
   FolderKanban,
+  Folder,
   Search,
   Sparkles,
   FileText,
@@ -194,7 +195,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
       { label: 'Applications', path: '/client/applications', icon: <FileText className="w-4 h-4" />, badge: appBadgeCount > 0 ? appBadgeCount : undefined },
       { label: 'Messages', path: '/client/messages', icon: <MessageSquare className="w-4 h-4" />, badge: msgBadgeCount > 0 ? msgBadgeCount : undefined },
       { label: 'Time Tracking', path: '/client/time-tracking', icon: <Clock className="w-4 h-4" /> },
-      { label: 'Files & Docs', path: '/client/files', icon: <FileCode className="w-4 h-4" /> },
+      { label: 'Files & Resources', path: '/client/files', icon: <Folder className="w-4 h-4" /> },
       { label: 'Invoices', path: '/client/invoices', icon: <CreditCard className="w-4 h-4" /> },
       { label: 'Reviews', path: '/client/reviews', icon: <Star className="w-4 h-4" /> },
       { label: 'Notifications', path: '/client/notifications', icon: <Bell className="w-4 h-4" />, badge: notifBadgeCount > 0 ? notifBadgeCount : undefined },
@@ -566,9 +567,10 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
                             if (!n.read && n.id) {
                               markNotificationRead(n.id);
                             }
-                            if (n.link) {
+                            const destination = n.relatedItemLink || (n as any).link;
+                            if (destination) {
                               setNotifDropdownOpen(false);
-                              navigate(n.link);
+                              navigate(destination);
                             }
                           }}
                           className={cn(

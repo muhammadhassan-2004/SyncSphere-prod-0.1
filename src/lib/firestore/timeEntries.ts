@@ -259,6 +259,41 @@ export function subscribeToTimeEntriesForClient(
   };
 }
 
+export function subscribeToTimeEntriesForProject(
+  projectId: string,
+  callback: (entries: TimeEntry[]) => void
+): () => void {
+  if (!auth.currentUser || !projectId) {
+    callback([]);
+    return () => {};
+  }
+  const colRef = collection(db, TIME_ENTRIES_COLLECTION);
+  const q = query(colRef, where('projectId', '==', projectId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const entries = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TimeEntry));
+      const overrides = getPersistedTimeStatusOverrides();
+      const merged = entries.map(e => {
+        if (e.id && overrides[e.id]) {
+          return { ...e, status: overrides[e.id].status };
+        }
+        return e;
+      });
+      callback(merged);
+    },
+    (error) => {
+      if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+        console.warn(`[Firestore] Permission warning for project time entries:`, error.message);
+        callback([]);
+        return;
+      }
+      handleFirestoreError(error, OperationType.LIST, TIME_ENTRIES_COLLECTION);
+      callback([]);
+    }
+  );
+}
+
 export function subscribeToAllTimeEntries(
   callback: (entries: TimeEntry[]) => void
 ): () => void {
@@ -319,34 +354,6 @@ export async function deleteTimeEntry(entryId: string): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${TIME_ENTRIES_COLLECTION}/${entryId}`);
   }
-}
-
-export function subscribeToTimeEntriesForProject(
-  projectId: string,
-  callback: (entries: TimeEntry[]) => void
-): () => void {
-  if (!auth.currentUser || !projectId) {
-    callback([]);
-    return () => {};
-  }
-  const colRef = collection(db, TIME_ENTRIES_COLLECTION);
-  const q = query(colRef, where('projectId', '==', projectId));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const entries = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as TimeEntry));
-      callback(entries);
-    },
-    (error) => {
-      if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
-        console.warn(`[Firestore] Permission warning for ${TIME_ENTRIES_COLLECTION}:`, error.message);
-        callback([]);
-        return;
-      }
-      console.warn(`[Firestore] Project time entries snapshot notice:`, error);
-      callback([]);
-    }
-  );
 }
 
 export function subscribeToTimeEntries(

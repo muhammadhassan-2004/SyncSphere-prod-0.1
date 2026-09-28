@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
 import { useAuth } from '@/src/context/AuthContext';
 import { Project } from '@/src/types/firestore';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   subscribeToProjectsByOwner,
   getProjectById,
@@ -12,11 +13,12 @@ import {
 import {
   saveProjectMatches,
   subscribeToProjectMatches,
+  computeDeterministicMatchScore,
   ProjectMatch,
 } from '@/src/lib/firestore/matches';
 import { createInvitation, getInvitationsByClient } from '@/src/lib/firestore/invitations';
 import { createNotification } from '@/src/lib/firestore/notifications';
-import { getAllSymbiotesFromFirestore } from '@/src/lib/firestore/users';
+import { getAllSymbiotesFromFirestore, subscribeToSymbiotesFromFirestore } from '@/src/lib/firestore/users';
 import { getPlatformOperationsSettings } from '@/src/lib/firestore/adminSettings';
 import { SymbioteProfile } from '@/src/data/symbiotes';
 import {
@@ -58,6 +60,7 @@ export const AIMatchingPage: React.FC = () => {
   const [matches, setMatches] = useState<ProjectMatch[]>([]);
   const [loadingMatches, setLoadingMatches] = useState<boolean>(false);
   const [minScoreThreshold, setMinScoreThreshold] = useState<number>(70);
+  const [sortBy, setSortBy] = useState<'fit' | 'rate_asc' | 'rate_desc' | 'name'>('fit');
   const [realSymbiotes, setRealSymbiotes] = useState<SymbioteProfile[]>([]);
   const [invitedSymbioteIds, setInvitedSymbioteIds] = useState<Set<string>>(new Set());
   const [invitingId, setInvitingId] = useState<string | null>(null);
@@ -79,17 +82,12 @@ export const AIMatchingPage: React.FC = () => {
     loadOpsSettings();
   }, []);
 
-  // Load real symbiotes on mount for accurate profile linking
+  // Subscribe to real symbiotes from Firestore for accurate profile linking & live presence
   useEffect(() => {
-    async function fetchSymbiotes() {
-      try {
-        const users = await getAllSymbiotesFromFirestore();
-        setRealSymbiotes(users);
-      } catch (err) {
-        console.warn('Error loading symbiotes for matching:', err);
-      }
-    }
-    fetchSymbiotes();
+    const unsub = subscribeToSymbiotesFromFirestore((users) => {
+      setRealSymbiotes(users);
+    });
+    return () => unsub();
   }, []);
 
   // 1. Subscribe to Client Projects
@@ -232,6 +230,7 @@ export const AIMatchingPage: React.FC = () => {
         // Enriched matches with candidate profiles
         const enrichedMatches: ProjectMatch[] = data.matches.map((m: any) => {
           const candidate = realCandidates.find((s) => s.uid === m.symbioteId) || realCandidates[0];
+          const score = typeof m.matchScore === 'number' ? m.matchScore : 50;
           return {
             projectId: proj.id!,
             symbioteId: candidate.uid,
@@ -240,11 +239,11 @@ export const AIMatchingPage: React.FC = () => {
             symbioteAvatarInitials: candidate.avatarInitials,
             symbioteAvatarUrl: candidate.avatarUrl || '',
             symbioteHourlyRate: candidate.hourlyRate,
-            matchScore: m.matchScore || 90,
+            matchScore: score,
             subMetrics: {
-              skillsMatch: m.subMetrics?.skillsMatch || 92,
-              experienceFit: m.subMetrics?.experienceFit || 88,
-              availabilityFit: m.subMetrics?.availabilityFit || 90,
+              skillsMatch: typeof m.subMetrics?.skillsMatch === 'number' ? m.subMetrics.skillsMatch : score,
+              experienceFit: typeof m.subMetrics?.experienceFit === 'number' ? m.subMetrics.experienceFit : Math.max(10, score - 2),
+              availabilityFit: typeof m.subMetrics?.availabilityFit === 'number' ? m.subMetrics.availabilityFit : 85,
             },
             explanation: m.explanation || `${candidate.displayName} is recommended based on verified technical alignment.`,
             generatedAt: new Date().toISOString(),
@@ -266,36 +265,21 @@ export const AIMatchingPage: React.FC = () => {
         ...(Array.isArray(proj?.skills) ? proj.skills : []),
         ...(Array.isArray(proj?.techTags) ? proj.techTags : []),
       ];
-      const projSkills = rawProjSkills
-        .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-        .map((s: string) => s.trim().toLowerCase());
 
       const scoredCandidates = dbUsers.map((cand) => {
-        const candSkills = (Array.isArray(cand?.skills) ? cand.skills : [])
-          .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-          .map((s: string) => s.trim().toLowerCase());
-
-        const matchingSkills = candSkills.filter((cs: string) =>
-          projSkills.some((ps: string) => ps.includes(cs) || cs.includes(ps))
-        );
-        const matchRatio = projSkills.length > 0 ? matchingSkills.length / projSkills.length : 0;
-        let score = 0;
-        if (matchingSkills.length === 0) {
-          score = Math.floor(Math.random() * 6) + 10; // 10-15%
-        } else {
-          score = Math.min(98, Math.round(52 + matchRatio * 44));
-        }
+        const computed = computeDeterministicMatchScore(cand, proj);
         return {
           cand,
-          score,
-          matchingSkills,
+          score: computed.matchScore,
+          subMetrics: computed.subMetrics,
+          explanation: computed.explanation,
         };
       });
 
       // Sort descending by score
       scoredCandidates.sort((a, b) => b.score - a.score);
 
-      const fallbackMatches: ProjectMatch[] = scoredCandidates.slice(0, 4).map(({ cand, score, matchingSkills }) => ({
+      const fallbackMatches: ProjectMatch[] = scoredCandidates.slice(0, 4).map(({ cand, score, subMetrics, explanation }) => ({
         projectId: proj.id!,
         symbioteId: cand.uid,
         symbioteName: cand.displayName || `${cand.firstName || ''} ${cand.lastName || ''}`.trim() || 'AI Specialist',
@@ -304,14 +288,8 @@ export const AIMatchingPage: React.FC = () => {
         symbioteAvatarUrl: cand.avatarUrl || (cand as any).photoURL || '',
         symbioteHourlyRate: cand.hourlyRate || 150,
         matchScore: score,
-        subMetrics: {
-          skillsMatch: score,
-          experienceFit: Math.max(30, Math.min(95, score - 2)),
-          availabilityFit: 90,
-        },
-        explanation: matchingSkills.length > 0
-          ? `${cand.displayName || 'Specialist'} matches skills: ${matchingSkills.join(', ')}.`
-          : `${cand.displayName || 'Specialist'} does not have verified matching skills for this technical brief.`,
+        subMetrics,
+        explanation,
         generatedAt: new Date().toISOString(),
       }));
 
@@ -346,14 +324,17 @@ export const AIMatchingPage: React.FC = () => {
           if (selectedProject.minBudget && selectedProject.maxBudget) {
             return `$${Number(selectedProject.minBudget).toLocaleString()} - $${Number(selectedProject.maxBudget).toLocaleString()}`;
           }
-          if (typeof selectedProject.budget === 'number') {
+          if (typeof selectedProject.budget === 'number' && selectedProject.budget > 0) {
             return `$${selectedProject.budget.toLocaleString()}`;
           }
           if (typeof selectedProject.budget === 'object' && selectedProject.budget) {
             const val = selectedProject.budget.total ?? selectedProject.budget.max ?? selectedProject.budget.min;
-            if (val) return `$${Number(val).toLocaleString()}`;
+            if (val && Number(val) > 0) return `$${Number(val).toLocaleString()}`;
           }
-          return '$5,000';
+          if (selectedProject.budgetType === 'hourly') {
+            return 'Hourly Rate';
+          }
+          return 'Dynamic Per-Task';
         })(),
         timeline: selectedProject.duration || '3 months',
         techTags: selectedProject.skills || ['AI', 'Python'],
@@ -380,9 +361,68 @@ export const AIMatchingPage: React.FC = () => {
   };
 
   // Filter and sort candidates meeting or exceeding platform matching threshold
-  const qualifiedMatches = matches
-    .filter((m) => (m.matchScore || 0) >= minScoreThreshold)
-    .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+  const qualifiedMatches = useMemo(() => {
+    return matches
+      .filter((m) => (m.matchScore || 0) >= minScoreThreshold)
+      .sort((a, b) => {
+        if (sortBy === 'rate_asc') {
+          return (a.symbioteHourlyRate || 0) - (b.symbioteHourlyRate || 0);
+        }
+        if (sortBy === 'rate_desc') {
+          return (b.symbioteHourlyRate || 0) - (a.symbioteHourlyRate || 0);
+        }
+        if (sortBy === 'name') {
+          return (a.symbioteName || '').localeCompare(b.symbioteName || '');
+        }
+        return (b.matchScore || 0) - (a.matchScore || 0);
+      });
+  }, [matches, minScoreThreshold, sortBy]);
+
+  // Real tech stack tags without synthetic fallback
+  const projectTechStack = useMemo(() => {
+    if (!selectedProject) return [];
+    const raw = [
+      ...(Array.isArray(selectedProject.skills) ? selectedProject.skills : []),
+      ...(Array.isArray(selectedProject.techTags) ? selectedProject.techTags : []),
+      ...(Array.isArray(selectedProject.aiBrief?.recommendedSkills) ? selectedProject.aiBrief.recommendedSkills : []),
+    ];
+    return Array.from(
+      new Set(raw.filter((s): s is string => typeof s === 'string' && s.trim().length > 0))
+    );
+  }, [selectedProject]);
+
+  // Formatted budget without synthetic $5,000 fallback
+  const formattedBudget = useMemo(() => {
+    if (!selectedProject) return 'Not specified';
+    if (selectedProject.minBudget && selectedProject.maxBudget) {
+      return `$${Number(selectedProject.minBudget).toLocaleString()} - $${Number(selectedProject.maxBudget).toLocaleString()}`;
+    }
+    if (typeof selectedProject.budget === 'number' && selectedProject.budget > 0) {
+      return `$${selectedProject.budget.toLocaleString()}`;
+    }
+    if (typeof selectedProject.budget === 'object' && selectedProject.budget) {
+      const val = selectedProject.budget.total ?? selectedProject.budget.max ?? selectedProject.budget.min;
+      if (val && Number(val) > 0) return `$${Number(val).toLocaleString()}`;
+    }
+    return 'Flexible / Open';
+  }, [selectedProject]);
+
+  // Formatted timeline without hardcoded 3 Months
+  const formattedTimeline = useMemo(() => {
+    if (!selectedProject) return 'Flexible';
+    return selectedProject.duration || selectedProject.timeline || 'Flexible';
+  }, [selectedProject]);
+
+  // Relative evaluated time formatter
+  const formatEvaluatedTime = (isoString?: string) => {
+    if (!isoString) return 'Just now';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Just now';
+    const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="space-y-8 pb-16 max-w-7xl mx-auto px-4 sm:px-6">
@@ -476,7 +516,7 @@ export const AIMatchingPage: React.FC = () => {
                   Last Evaluated
                 </span>
                 <span className="text-xs font-mono font-medium text-[var(--color-text-primary)]">
-                  {new Date(matches[0].generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatEvaluatedTime(matches[0].generatedAt)}
                 </span>
               </div>
             )}
@@ -497,44 +537,36 @@ export const AIMatchingPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[var(--color-text-secondary)] font-bold">Required Tech Stack:</span>
-              {(selectedProject.skills || selectedProject.techTags || ['Python', 'PyTorch', 'LangChain', 'FastAPI']).map(
-                (skill) => (
+              {projectTechStack.length > 0 ? (
+                projectTechStack.map((skill) => (
                   <span
                     key={skill}
                     className="px-2.5 py-1 rounded-[6px] bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-accent-cyan)] font-semibold"
                   >
                     {skill}
                   </span>
-                )
+                ))
+              ) : (
+                <span className="text-xs italic text-[var(--color-text-secondary)] font-mono">
+                  General AI / Flexible
+                </span>
               )}
             </div>
 
-            <div className="flex items-center gap-4 text-[var(--color-text-secondary)]">
+            <div className="flex items-center gap-4 text-[var(--color-text-secondary)] flex-wrap">
               <span className="flex items-center gap-1">
                 <DollarSign className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
                 Budget:{' '}
-                <strong className="text-[var(--color-text-primary)]">
-                  {(() => {
-                    if (selectedProject.minBudget && selectedProject.maxBudget) {
-                      return `$${Number(selectedProject.minBudget).toLocaleString()} - $${Number(selectedProject.maxBudget).toLocaleString()}`;
-                    }
-                    if (typeof selectedProject.budget === 'number') {
-                      return `$${selectedProject.budget.toLocaleString()}`;
-                    }
-                    if (typeof selectedProject.budget === 'object' && selectedProject.budget) {
-                      const val = selectedProject.budget.total ?? selectedProject.budget.max ?? selectedProject.budget.min;
-                      if (val) return `$${Number(val).toLocaleString()}`;
-                    }
-                    return '$5,000';
-                  })()}
+                <strong className="text-[var(--color-text-primary)] font-mono">
+                  {formattedBudget}
                 </strong>
               </span>
 
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
                 Timeline:{' '}
-                <strong className="text-[var(--color-text-primary)]">
-                  {selectedProject.duration || '3 Months'}
+                <strong className="text-[var(--color-text-primary)] font-mono">
+                  {formattedTimeline}
                 </strong>
               </span>
             </div>
@@ -555,13 +587,41 @@ export const AIMatchingPage: React.FC = () => {
               Top PreSync AI Recommended Candidates ({qualifiedMatches.length})
             </h2>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] text-[11px] font-mono font-semibold bg-[var(--color-accent-cyan)]/10 border border-[var(--color-accent-cyan)]/30 text-[var(--color-accent-cyan)]">
-              Threshold Filter: ≥ {minScoreThreshold}% Match
-            </span>
-            <span className="text-xs font-mono text-[var(--color-text-secondary)] hidden sm:inline">
-              Sorted by PreSync Fit Index
-            </span>
+
+          {/* INTERACTIVE THRESHOLD & SORT CONTROLS */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* THRESHOLD FILTER DROPDOWN */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-[var(--color-surface)] border border-[var(--color-border)] text-xs font-mono">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--color-accent-cyan)] shrink-0" />
+              <label htmlFor="ai-threshold-select" className="text-[11px] text-[var(--color-text-secondary)]">Threshold Filter: ≥</label>
+              <select
+                id="ai-threshold-select"
+                value={minScoreThreshold}
+                onChange={(e) => setMinScoreThreshold(Number(e.target.value))}
+                className="bg-transparent text-[var(--color-accent-cyan)] font-bold text-xs focus:outline-none cursor-pointer"
+              >
+                <option value={50} className="bg-slate-900 text-white">50% Match (All)</option>
+                <option value={60} className="bg-slate-900 text-white">60% Match</option>
+                <option value={70} className="bg-slate-900 text-white">70% Match (Standard)</option>
+                <option value={80} className="bg-slate-900 text-white">80% Match (High)</option>
+                <option value={90} className="bg-slate-900 text-white">90% Match (Elite)</option>
+              </select>
+            </div>
+
+            {/* SORT BY DROPDOWN */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-[var(--color-surface)] border border-[var(--color-border)] text-xs font-mono">
+              <span className="text-[11px] text-[var(--color-text-secondary)]">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-transparent text-[var(--color-text-primary)] font-medium text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="fit" className="bg-slate-900 text-white">PreSync Fit Index (High → Low)</option>
+                <option value="rate_asc" className="bg-slate-900 text-white">Hourly Rate: Low to High</option>
+                <option value="rate_desc" className="bg-slate-900 text-white">Hourly Rate: High to Low</option>
+                <option value="name" className="bg-slate-900 text-white">Specialist Name</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -614,6 +674,9 @@ export const AIMatchingPage: React.FC = () => {
                 bio: matchItem.explanation,
                 email: matchedSymbiote?.email || '',
                 completedProjects: matchedSymbiote?.completedProjects || 0,
+                isOnline: matchedSymbiote?.isOnline,
+                lastActiveAt: matchedSymbiote?.lastActiveAt,
+                lastSeen: matchedSymbiote?.lastSeen,
               };
 
               const isInvited = invitedSymbioteIds.has(candidate.uid);
@@ -635,7 +698,7 @@ export const AIMatchingPage: React.FC = () => {
                             initials={candidate.avatarInitials}
                             src={candidate.avatarUrl}
                             size="md"
-                            statusDot="online"
+                            statusDot={getUserStatusDot(matchedSymbiote || candidate)}
                             className="ring-2 ring-[var(--color-accent-cyan)]/60 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
                           />
                         </div>

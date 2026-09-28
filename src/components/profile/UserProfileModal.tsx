@@ -4,6 +4,7 @@ import { UserProfile } from '@/src/types/firestore';
 import { subscribeToUserProfile } from '@/src/lib/firestore/users';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { getUserPresence } from '@/src/lib/utils/presence';
 import {
   X,
   User,
@@ -96,44 +97,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Compute presence status
-  const getPresence = () => {
-    if (!profile?.lastActiveAt) {
-      return { isOnline: false, label: 'Offline' };
-    }
-    let date: Date | null = null;
-    const val: any = profile.lastActiveAt;
-    if (typeof val.toDate === 'function') {
-      date = val.toDate();
-    } else if (val.seconds) {
-      date = new Date(val.seconds * 1000);
-    } else if (typeof val === 'string' || typeof val === 'number') {
-      date = new Date(val);
-    }
-
-    if (!date || isNaN(date.getTime())) {
-      return { isOnline: false, label: 'Offline' };
-    }
-
-    const diffMs = Date.now() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 3) {
-      return { isOnline: true, label: 'Active now' };
-    } else if (diffMins < 60) {
-      return { isOnline: false, label: `Last seen ${diffMins}m ago` };
-    } else {
-      const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) {
-        return { isOnline: false, label: `Last seen ${diffHours}h ago` };
-      } else {
-        const diffDays = Math.floor(diffHours / 24);
-        return { isOnline: false, label: `Last seen ${diffDays}d ago` };
-      }
-    }
-  };
-
-  const presence = getPresence();
+  const presence = getUserPresence(profile);
   
   // Check if profile is Symbiote or Client
   const isSymbiote =

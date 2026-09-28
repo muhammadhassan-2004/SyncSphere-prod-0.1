@@ -23,6 +23,9 @@ export interface SymbioteProfile {
   certifications?: CertificationItem[];
   createdAt?: string;
   updatedAt?: string;
+  isOnline?: boolean;
+  lastActiveAt?: any;
+  lastSeen?: any;
 }
 
 export const DEFAULT_SYMBIOTES: SymbioteProfile[] = [];

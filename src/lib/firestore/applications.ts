@@ -33,8 +33,17 @@ export async function createApplication(appData: Omit<Application, 'id'>): Promi
     }
 
     const colRef = collection(db, APPLICATIONS_COLLECTION);
+    
+    // Sanitize any undefined properties so Firestore never throws invalid data error
+    const cleanAppData: Record<string, any> = {};
+    Object.entries(appData).forEach(([k, v]) => {
+      if (v !== undefined) {
+        cleanAppData[k] = v;
+      }
+    });
+
     const docRef = await addDoc(colRef, {
-      ...appData,
+      ...cleanAppData,
       clientId: targetClientId || appData.clientId || '',
       appliedAt: appData.appliedAt || new Date().toISOString(),
     });

@@ -139,12 +139,31 @@ export async function createProjectFile(
     const docRef = await addDoc(colRef, payload);
 
     if (fileData.projectId) {
+      let actorAvatarUrl = '';
+      let actorAvatarInitials = '';
+      let actorName = fileData.uploadedByName || 'Team Member';
+      if (fileData.uploadedBy) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', fileData.uploadedBy));
+          if (userSnap.exists()) {
+            const ud = userSnap.data();
+            actorAvatarUrl = ud.avatarUrl || (ud as any).photoURL || '';
+            actorAvatarInitials = ud.avatarInitials || '';
+            actorName = ud.displayName || actorName;
+          }
+        } catch {
+          // Non-blocking lookup fallback
+        }
+      }
+
       await logProjectActivity(fileData.projectId, {
         title: 'File Uploaded',
         description: `Uploaded file "${fileData.name}" (${fileData.size || 'Attachment'})`,
         type: 'file',
-        actorName: fileData.uploadedByName || 'Team Member',
+        actorName,
         actorId: fileData.uploadedBy,
+        actorAvatarUrl,
+        actorAvatarInitials,
       });
     }
 

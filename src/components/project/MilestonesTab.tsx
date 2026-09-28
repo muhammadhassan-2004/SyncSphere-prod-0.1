@@ -7,11 +7,10 @@ import {
   createMilestone,
   toggleMilestone,
   updateTaskStatus,
+  approveTaskByClient,
   completeEntireProjectManually,
   syncProjectCompletionAndProgress,
-  approveMilestoneByClient,
 } from '@/src/lib/firestore/workspace';
-import { SubmitDeliverableModal } from '@/src/components/project/SubmitDeliverableModal';
 import { triggerFileDownload } from '@/src/lib/storage/download';
 import { useAuth } from '@/src/context/AuthContext';
 import { TaskDrawer } from '@/src/components/project/TaskDrawer';
@@ -136,9 +135,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
   // Active milestone detail view (null = all milestones folder hierarchy)
   const [selectedMilestone, setSelectedMilestone] = useState<WorkspaceMilestone | null>(null);
 
-  // Deliverable Submission & Review Modal State
-  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState<boolean>(false);
-  const [isApprovingMilestone, setIsApprovingMilestone] = useState<boolean>(false);
+  // Action feedback message
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
   // Task Side-Drawer State
@@ -224,34 +221,17 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
     }
   };
 
-  // Client approve submitted milestone & generate itemized invoice
-  const handleApproveMilestone = async (ms: WorkspaceMilestone) => {
-    if (!projectId || !ms.id || isReadOnly || project.status === 'completed') return;
-    setIsApprovingMilestone(true);
-    setActionSuccessMsg(null);
-    try {
-      await approveMilestoneByClient(projectId, ms.id, firebaseUser?.uid);
-      setActionSuccessMsg(
-        `Milestone "${ms.title || 'Milestone'}" approved! Itemized invoice has been automatically generated.`
-      );
-      if (onProjectUpdated) onProjectUpdated();
-      setTimeout(() => setActionSuccessMsg(null), 6000);
-    } catch (err: any) {
-      console.error('Failed to approve milestone:', err);
-      setActionSuccessMsg(err?.message || 'Failed to approve milestone.');
-    } finally {
-      setIsApprovingMilestone(false);
-    }
-  };
 
-  // Quick complete a single task inside milestone folder
-  const handleQuickCompleteTask = async (e: React.MouseEvent, task: WorkspaceTask) => {
+  // Quick approve a single task inside milestone folder (Client only -> direct settlement)
+  const handleQuickApproveTask = async (e: React.MouseEvent, task: WorkspaceTask) => {
     e.stopPropagation();
-    if (!projectId || !task.id || isReadOnly || project.status === 'completed') return;
+    if (!projectId || !task.id || isReadOnly || project.status === 'completed' || !isClient) return;
     try {
-      await updateTaskStatus(projectId, task.id, 'completed');
+      await approveTaskByClient(projectId, task.id, firebaseUser?.uid);
+      setActionSuccessMsg(`Task "${task.title}" approved and direct settlement invoice generated.`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
     } catch (err) {
-      console.error('Failed to complete task:', err);
+      console.error('Failed to approve task:', err);
     }
   };
 
@@ -605,7 +585,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                           {(ms.completed || ms.status === 'approved') && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" />
-                              <span>Approved ✓</span>
+                              <span>Completed ✓</span>
                             </span>
                           )}
                           {ms.deliverables && ms.deliverables.length > 0 && (
@@ -650,42 +630,6 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                           />
                         </div>
                       </div>
-
-                      {/* SPECIALIST SUBMIT DELIVERABLES BUTTON */}
-                      {isSpecialist && !ms.completed && ms.status !== 'approved' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedMilestone(ms);
-                            setIsSubmitModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 rounded-[6px] text-[11px] font-mono flex items-center gap-1.5 shrink-0 border bg-[var(--color-accent-cyan)]/15 text-[var(--color-accent-cyan)] border-[var(--color-accent-cyan)]/40 hover:bg-[var(--color-accent-cyan)]/25 transition-all cursor-pointer"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>{ms.status === 'submitted' ? 'Update Files' : 'Submit'}</span>
-                        </button>
-                      )}
-
-                      {/* CLIENT APPROVE & ISSUE INVOICE BUTTON */}
-                      {isClient && ms.status === 'submitted' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApproveMilestone(ms);
-                          }}
-                          disabled={isApprovingMilestone}
-                          className="px-2.5 py-1 rounded-[6px] text-[11px] font-mono flex items-center gap-1.5 shrink-0 border bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 transition-all cursor-pointer"
-                        >
-                          {isApprovingMilestone ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-3 h-3" />
-                          )}
-                          <span>Approve & Invoice</span>
-                        </button>
-                      )}
 
                       {/* TOGGLE MILESTONE COMPLETED */}
                       {!isReadOnly && !isSpecialist && (
@@ -765,7 +709,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                   {(selectedMilestone.completed || selectedMilestone.status === 'approved') && (
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Approved & Verified ✓</span>
+                      <span>Phase Completed ✓</span>
                     </span>
                   )}
                   {selectedMilestone.status !== 'submitted' && !selectedMilestone.completed && selectedMilestone.status !== 'approved' && (
@@ -784,37 +728,6 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
 
               {/* ACTION BUTTONS */}
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                {/* SPECIALIST SUBMIT DELIVERABLES BUTTON */}
-                {isSpecialist && !selectedMilestone.completed && selectedMilestone.status !== 'approved' && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setIsSubmitModalOpen(true)}
-                    className="bg-[var(--color-accent-cyan)] text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{selectedMilestone.status === 'submitted' ? 'Update Submission' : 'Submit for Client Review'}</span>
-                  </Button>
-                )}
-
-                {/* CLIENT APPROVE & ISSUE INVOICE BUTTON */}
-                {isClient && selectedMilestone.status === 'submitted' && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleApproveMilestone(selectedMilestone)}
-                    disabled={isApprovingMilestone}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    {isApprovingMilestone ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    )}
-                    <span>Approve Milestone & Release Invoice</span>
-                  </Button>
-                )}
-
                 {/* CLIENT MARK MILESTONE DONE */}
                 {!isReadOnly && !isSpecialist && (
                   <Button
@@ -869,74 +782,24 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
             </div>
           )}
 
-          {/* DELIVERABLE SUBMISSION & REVIEW CARD */}
-          {(selectedMilestone.status === 'submitted' ||
-            selectedMilestone.status === 'approved' ||
-            (selectedMilestone.deliverables && selectedMilestone.deliverables.length > 0) ||
-            selectedMilestone.repositoryUrl ||
-            selectedMilestone.summaryNotes) && (
-            <Card
-              className={`p-5 rounded-[12px] space-y-4 border ${
-                selectedMilestone.status === 'submitted'
-                  ? 'bg-amber-500/5 border-amber-500/30'
-                  : 'bg-emerald-500/5 border-emerald-500/30'
-              }`}
-            >
-              {/* DELIVERABLE HEADER */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
+          {/* PHASE SUMMARY CARD (Repository / Attached Files) */}
+          {(selectedMilestone.repositoryUrl ||
+            selectedMilestone.summaryNotes ||
+            (selectedMilestone.deliverables && selectedMilestone.deliverables.length > 0)) && (
+            <Card className="p-5 rounded-[12px] space-y-4 border bg-emerald-500/5 border-emerald-500/20">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    {selectedMilestone.status === 'submitted' ? (
-                      <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    )}
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <h4 className="text-sm font-bold text-[var(--color-text-primary)]">
-                      {selectedMilestone.status === 'submitted'
-                        ? 'Deliverables Submitted for Client Review'
-                        : 'Milestone Deliverables Verified & Approved'}
+                      Phase Resources & Notes
                     </h4>
                   </div>
                   <p className="text-xs text-[var(--color-text-secondary)]">
-                    {selectedMilestone.submittedByName
-                      ? `Submitted by ${selectedMilestone.submittedByName}`
-                      : 'Submitted by Specialist'}
-                    {selectedMilestone.submittedAt &&
-                      ` on ${new Date(selectedMilestone.submittedAt).toLocaleDateString()}`}
-                    {selectedMilestone.approvedAt &&
-                      ` • Approved on ${new Date(selectedMilestone.approvedAt).toLocaleDateString()}`}
+                    {selectedMilestone.completed
+                      ? 'Phase completed (all tasks finished & approved)'
+                      : 'Phase in progress'}
                   </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {isSpecialist && selectedMilestone.status === 'submitted' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsSubmitModalOpen(true)}
-                      className="border-[var(--color-accent-cyan)]/50 text-[var(--color-accent-cyan)] text-xs flex items-center gap-1.5"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>Update Files</span>
-                    </Button>
-                  )}
-
-                  {isClient && selectedMilestone.status === 'submitted' && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleApproveMilestone(selectedMilestone)}
-                      disabled={isApprovingMilestone}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5"
-                    >
-                      {isApprovingMilestone ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      )}
-                      <span>Approve & Release Invoice</span>
-                    </Button>
-                  )}
                 </div>
               </div>
 
@@ -969,7 +832,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                 <div className="p-3.5 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] space-y-1.5 text-xs">
                   <p className="font-mono font-bold text-[var(--color-text-secondary)] uppercase text-[10px] flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
-                    <span>Specialist Deliverable Notes</span>
+                    <span>Phase Notes</span>
                   </p>
                   <p className="text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">
                     {selectedMilestone.summaryNotes}
@@ -982,7 +845,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                 <div className="space-y-2">
                   <p className="font-mono font-bold text-[var(--color-text-secondary)] uppercase text-[10px] flex items-center gap-1.5">
                     <FileCheck className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
-                    <span>Deliverable Files ({selectedMilestone.deliverables.length})</span>
+                    <span>Attached Files ({selectedMilestone.deliverables.length})</span>
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {selectedMilestone.deliverables.map((file, fIdx) => (
@@ -1018,33 +881,6 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
               )}
             </Card>
           )}
-
-          {/* SPECIALIST CALLOUT WHEN DELIVERABLES NOT SUBMITTED YET */}
-          {isSpecialist &&
-            !selectedMilestone.completed &&
-            selectedMilestone.status !== 'approved' &&
-            selectedMilestone.status !== 'submitted' && (
-              <div className="p-4 rounded-[12px] bg-[var(--color-accent-cyan)]/5 border border-[var(--color-accent-cyan)]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="space-y-1">
-                  <p className="font-bold text-[var(--color-text-primary)] flex items-center gap-1.5">
-                    <Send className="w-3.5 h-3.5 text-[var(--color-accent-cyan)]" />
-                    <span>Ready to submit this milestone?</span>
-                  </p>
-                  <p className="text-[var(--color-text-secondary)]">
-                    Upload your build archives, code repository links, and notes. The client will be notified to review tasks and approve the milestone.
-                  </p>
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setIsSubmitModalOpen(true)}
-                  className="bg-[var(--color-accent-cyan)] text-black font-bold text-xs flex items-center gap-1.5 shrink-0"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Submit Deliverables</span>
-                </Button>
-              </div>
-            )}
 
           {/* TASKS INSIDE MILESTONE (FOLDER CONTENTS) (§1) */}
           {(() => {
@@ -1087,6 +923,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                         uid: task.assigneeId,
                         displayName: task.assigneeName || 'Specialist',
                         avatarInitials: task.assigneeAvatarInitials || 'SP',
+                        avatarUrl: task.assigneeAvatarUrl,
                       }] : []);
 
                       return (
@@ -1141,6 +978,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                                     <Avatar
                                       name={a.displayName}
                                       initials={a.avatarInitials}
+                                      src={(a as any).avatarUrl}
                                       size="sm"
                                     />
                                   </div>
@@ -1148,13 +986,13 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                               )}
                             </div>
 
-                            {/* QUICK COMPLETE TASK BUTTON */}
-                            {!isReadOnly && task.status !== 'completed' && (
+                            {/* QUICK APPROVE TASK BUTTON (Client Only) */}
+                            {!isReadOnly && isClient && task.status !== 'completed' && (
                               <button
                                 type="button"
-                                onClick={(e) => handleQuickCompleteTask(e, task)}
+                                onClick={(e) => handleQuickApproveTask(e, task)}
                                 className="px-2 py-1 rounded-[6px] text-[10px] font-mono flex items-center gap-1 text-[var(--color-text-secondary)] hover:text-emerald-400 hover:bg-emerald-500/10 border border-[var(--color-border)] hover:border-emerald-500/30 transition-all cursor-pointer shrink-0"
-                                title="Approve and mark task completed"
+                                title="Approve and issue direct task invoice"
                               >
                                 <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>Approve</span>
@@ -1325,24 +1163,6 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
         initialMilestoneId={drawerInitialMilestoneId}
         onOpenCreateMilestoneModal={() => setIsCreateMilestoneModalOpen(true)}
       />
-
-      {/* SUBMIT MILESTONE DELIVERABLES MODAL */}
-      {selectedMilestone && isSubmitModalOpen && (
-        <SubmitDeliverableModal
-          isOpen={isSubmitModalOpen}
-          onClose={() => setIsSubmitModalOpen(false)}
-          project={project}
-          milestone={selectedMilestone}
-          tasks={getMilestoneTasks(selectedMilestone)}
-          onSubmitted={() => {
-            setActionSuccessMsg(
-              `Deliverables for "${selectedMilestone.title || 'Milestone'}" submitted for client review!`
-            );
-            if (onProjectUpdated) onProjectUpdated();
-            setTimeout(() => setActionSuccessMsg(null), 6000);
-          }}
-        />
-      )}
     </div>
   );
 };

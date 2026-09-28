@@ -3,6 +3,7 @@ import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
 import { SymbioteProfile } from '@/src/data/symbiotes';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   MessageSquare,
   Send,
@@ -47,7 +48,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
             initials={symbiote.avatarInitials}
             src={symbiote.avatarUrl}
             size="lg"
-            statusDot="online"
+            statusDot={getUserStatusDot(symbiote)}
             className="w-16 h-16 sm:w-20 sm:h-20 text-lg border-2 border-[var(--color-accent-cyan)]/30 shrink-0"
           />
 

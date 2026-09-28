@@ -3,24 +3,60 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { cloudinary } from "../cloudinary";
+import { requireAuth } from "../middleware/auth";
 
 export const uploadRouter = Router();
+
+const ALLOWED_MIME_TYPES = new Set([
+  // Images
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  // Documents
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+  "application/json",
+  "application/zip",
+  "application/x-zip-compressed",
+]);
+
+const ALLOWED_EXTENSIONS = new Set([
+  ".jpg", ".jpeg", ".png", ".webp", ".gif",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".txt", ".csv", ".json", ".zip"
+]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext) || !ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error("File type not allowed. Supported formats: images (JPG, PNG, WebP, GIF) and documents (PDF, DOC/X, XLS/X, PPT/X, TXT, CSV, JSON, ZIP)."));
+    }
+    cb(null, true);
+  },
 });
 
 const uploadsDir = path.join(process.cwd(), "public", "uploads");
 
-// Helper to save locally as fallback
+// Helper to save locally as fallback with collision-free naming
 function saveBufferLocally(buffer: Buffer, originalName: string): { url: string; publicId: string; fileName: string } {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
-  const ext = path.extname(originalName) || ".bin";
+  const ext = path.extname(originalName).toLowerCase() || ".bin";
   const baseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fileName = `${Date.now()}_${baseName}${ext}`;
+  const randomSuffix = Math.random().toString(36).substring(2, 9);
+  const fileName = `${Date.now()}_${randomSuffix}_${baseName}${ext}`;
   const filePath = path.join(uploadsDir, fileName);
   fs.writeFileSync(filePath, buffer);
   return {
@@ -31,7 +67,7 @@ function saveBufferLocally(buffer: Buffer, originalName: string): { url: string;
 }
 
 // 1. Multipart Form Upload
-uploadRouter.post("/", upload.single("file") as any, async (req: Request, res: Response) => {
+uploadRouter.post("/", requireAuth, upload.single("file") as any, async (req: Request, res: Response) => {
   try {
     const file = req.file;
     if (!file) {
@@ -40,7 +76,8 @@ uploadRouter.post("/", upload.single("file") as any, async (req: Request, res: R
 
     const folder = req.body.folder || "syncsphere/general";
     const customFileName = req.body.fileName || file.originalname || "document";
-    const cleanPublicId = `${Date.now()}_${customFileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const cleanPublicId = `${Date.now()}_${randomSuffix}_${customFileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
     // Attempt Cloudinary upload
     try {
@@ -94,13 +131,14 @@ uploadRouter.post("/", upload.single("file") as any, async (req: Request, res: R
 });
 
 // 2. Base64 Upload
-uploadRouter.post("/base64", async (req: Request, res: Response) => {
+uploadRouter.post("/base64", requireAuth, async (req: Request, res: Response) => {
   try {
     const { base64Data, fileName, folder = "syncsphere/general" } = req.body;
     if (!base64Data) {
       return res.status(400).json({ success: false, error: "No base64 data provided" });
     }
-    const cleanPublicId = `${Date.now()}_${(fileName || "file").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    const cleanPublicId = `${Date.now()}_${randomSuffix}_${(fileName || "file").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
     try {
       const result = await cloudinary.uploader.upload(base64Data, {

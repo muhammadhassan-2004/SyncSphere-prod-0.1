@@ -28,6 +28,7 @@ interface ProjectHeaderProps {
   onOpenAddTeamModal: () => void;
   onEditProject?: () => void;
   onCompleteProject?: () => void;
+  onReopenProject?: () => void;
   approvedTeamCount?: number;
   filesCount?: number;
   pendingReviewsCount?: number;
@@ -40,6 +41,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   onOpenAddTeamModal,
   onEditProject,
   onCompleteProject,
+  onReopenProject,
   approvedTeamCount,
   filesCount,
   pendingReviewsCount,
@@ -88,16 +90,11 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
       })
     : 'Recently';
 
-  // Format budget inline text
-  const budgetText =
-    typeof project.budget === 'number'
-      ? `$${project.budget.toLocaleString()}`
-      : project.minBudget || project.maxBudget
-      ? `$${(project.minBudget || 0).toLocaleString()} - $${(project.maxBudget || 0).toLocaleString()}`
-      : '$15,000 Total';
+  // Formatted total spent so far
+  const totalSpent = Number(project.totalSpent || 0);
 
   const healthStatus = project.healthStatus || 'On Track';
-  const progressPercent = project.progressPercent ?? 35;
+  const progressPercent = typeof project.progressPct === 'number' ? project.progressPct : (project.progressPercent ?? (project.status === 'completed' ? 100 : 0));
   const navigate = useNavigate();
 
   const tabs: Array<{ id: ProjectTabType; label: string; icon: React.ReactNode; badge?: number }> = [
@@ -117,7 +114,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
     },
     {
       id: 'files',
-      label: 'Files',
+      label: 'Files & Resources',
       icon: <Folder className="w-3.5 h-3.5" />,
       badge: filesCount !== undefined ? filesCount : undefined,
     },
@@ -160,12 +157,14 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           {/* BUDGET & HEALTH STATS */}
           <div className="hidden sm:flex items-center gap-4 px-3.5 py-2 rounded-[10px] bg-slate-900/60 border border-slate-800 text-xs">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-md bg-[var(--color-accent-cyan)]/10 text-[var(--color-accent-cyan)]">
+              <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
                 <DollarSign className="w-3.5 h-3.5" />
               </div>
               <div>
-                <span className="text-[10.5px] text-slate-400 block font-medium">Budget</span>
-                <span className="font-semibold text-slate-100 text-xs">{budgetText}</span>
+                <span className="text-[10.5px] text-slate-400 block font-medium">Spent So Far</span>
+                <span className="font-semibold text-emerald-400 text-xs font-mono">
+                  ${totalSpent.toLocaleString()}
+                </span>
               </div>
             </div>
 
@@ -187,19 +186,35 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           {/* ACTIONS */}
           <div className="flex items-center gap-2">
             {project.status === 'completed' || project.status === 'closed' ? (
-              <Button
-                size="sm"
-                onClick={() => navigate(`/client/projects/${project.id}/review?from=workspace`)}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 shadow-[0_0_12px_rgba(251,191,36,0.3)] transition-all cursor-pointer"
-              >
-                <Star className="w-3.5 h-3.5 fill-slate-950" />
-                <span>Leave Review</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/client/projects/${project.id}/review?from=workspace`)}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 shadow-[0_0_12px_rgba(251,191,36,0.3)] transition-all cursor-pointer"
+                >
+                  <Star className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Leave Review</span>
+                </Button>
+
+                {onReopenProject && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onReopenProject}
+                    className="text-xs border-[var(--color-border)] hover:bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] cursor-pointer"
+                    title="Reopen project to In Progress mode"
+                  >
+                    <span>Reopen Project</span>
+                  </Button>
+                )}
+              </div>
             ) : (
               <>
-                {/* COMPLETE PROJECT BUTTON: Only visible when project is actively in_progress with assigned talent */}
+                {/* COMPLETE PROJECT BUTTON: Only visible when project is actively in_progress, has assigned talent, deliverables/progress are 100% complete, and no reviews pending */}
                 {onCompleteProject &&
                   project.status === 'in_progress' &&
+                  progressPercent >= 100 &&
+                  (!pendingReviewsCount || pendingReviewsCount === 0) &&
                   ((project.teamMembers && project.teamMembers.length > 0) ||
                     project.assignedSymbioteId ||
                     (project as any).specialistId ||
@@ -207,7 +222,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
                     <Button
                       size="sm"
                       onClick={onCompleteProject}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse cursor-pointer"
                     >
                       <Target className="w-3.5 h-3.5" />
                       <span>Complete Project</span>

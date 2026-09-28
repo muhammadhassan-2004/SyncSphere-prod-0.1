@@ -9,6 +9,7 @@ import { Button } from '@/src/components/ui/button';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
 import { useToast } from '@/src/lib/toast/ToastProvider';
 import { sanitizePhoneNumber, handlePhoneKeyDown, validators } from '@/src/lib/validation/formValidators';
+import { TIMEZONES, getDetectedTimezone } from '@/src/lib/constants';
 import {
   ArrowLeft,
   User,
@@ -71,7 +72,7 @@ export const EditProfilePage: React.FC = () => {
 
   const [companyName, setCompanyName] = useState<string>(userProfile?.companyName || '');
   const [location, setLocation] = useState<string>(userProfile?.location || '');
-  const [timeZone, setTimeZone] = useState<string>(userProfile?.timeZone || '');
+  const [timeZone, setTimeZone] = useState<string>(getDetectedTimezone(userProfile?.timeZone));
 
   const [linkedInUrl, setLinkedInUrl] = useState<string>(userProfile?.linkedInUrl || '');
   const [websiteUrl, setWebsiteUrl] = useState<string>(userProfile?.websiteUrl || '');
@@ -97,6 +98,7 @@ export const EditProfilePage: React.FC = () => {
         const nameParts = (profile.fullName || profile.displayName || '').split(' ').filter(Boolean);
         const initialFirst = profile.firstName || nameParts[0] || (firebaseUser?.email ? firebaseUser.email.split('@')[0] : '');
         const initialLast = profile.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
+        const detectedTz = getDetectedTimezone(profile.timeZone);
 
         if (isInitialLoadRef.current) {
           setAvatarUrl(profile.avatarUrl || '');
@@ -108,7 +110,7 @@ export const EditProfilePage: React.FC = () => {
         setBio(profile.bio || '');
         setCompanyName(profile.companyName || '');
         setLocation(profile.location || '');
-        setTimeZone(profile.timeZone || '');
+        setTimeZone(detectedTz);
         setLinkedInUrl(profile.linkedInUrl || '');
         setWebsiteUrl(profile.websiteUrl || '');
 
@@ -121,7 +123,7 @@ export const EditProfilePage: React.FC = () => {
           bio: profile.bio || '',
           companyName: profile.companyName || '',
           location: profile.location || '',
-          timeZone: profile.timeZone || '',
+          timeZone: detectedTz,
           linkedInUrl: profile.linkedInUrl || '',
           websiteUrl: profile.websiteUrl || '',
         });
@@ -504,14 +506,14 @@ export const EditProfilePage: React.FC = () => {
           </div>
         </Card>
 
-        {/* CARD 3: WORK INFORMATION */}
+        {/* CARD 3: COMPANY & LOCATION */}
         <Card className="p-6 bg-[var(--color-surface)] border-[var(--color-border)] rounded-[14px] space-y-4 shadow-md">
           <div className="border-b border-[var(--color-border)] pb-3">
             <h3 className="text-sm font-bold font-mono text-[var(--color-text-primary)] uppercase tracking-wider">
-              Work & Position
+              Company & Location
             </h3>
             <p className="text-xs font-mono text-[var(--color-text-secondary)] mt-0.5">
-              Information regarding your role and geographical presence.
+              Information regarding your organization and geographical presence.
             </p>
           </div>
 
@@ -556,14 +558,18 @@ export const EditProfilePage: React.FC = () => {
                 Primary Time Zone
               </label>
               <div className="relative">
-                <Clock className="w-4 h-4 text-[var(--color-text-secondary)] absolute left-3 top-2.5" />
-                <input
-                  type="text"
+                <Clock className="w-4 h-4 text-[var(--color-text-secondary)] absolute left-3 top-2.5 pointer-events-none z-10" />
+                <select
                   value={timeZone}
                   onChange={(e) => setTimeZone(e.target.value)}
-                  placeholder="America/Los_Angeles (PST)"
-                  className="w-full h-9 pl-9 pr-3 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-mono text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)]"
-                />
+                  className="w-full h-9 pl-9 pr-3 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-mono text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] cursor-pointer"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz} className="bg-[var(--color-surface)] text-[var(--color-text-primary)]">
+                      {tz}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

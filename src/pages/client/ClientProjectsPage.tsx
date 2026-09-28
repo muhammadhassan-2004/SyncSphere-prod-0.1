@@ -10,6 +10,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { Project } from '@/src/types/firestore';
 import { subscribeToProjectsByOwner } from '@/src/lib/firestore/projects';
 import { subscribeToSymbiotesFromFirestore } from '@/src/lib/firestore/users';
+import { syncProjectCompletionAndProgress } from '@/src/lib/firestore/workspace';
 import { ResponsiveStatValue } from '@/src/components/ui/ResponsiveStatValue';
 import {
   FolderKanban,
@@ -31,7 +32,7 @@ import {
 
 export const ClientProjectsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { userProfile, firebaseUser } = useAuth();
+  const { userProfile, firebaseUser, loading: authLoading } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,10 +40,11 @@ export const ClientProjectsPage: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
-  const clientId = userProfile?.uid || firebaseUser?.uid || 'JjfXnPNY79UmemDet5aP8yyBdRf2';
+  const clientId = userProfile?.uid || firebaseUser?.uid || '';
 
   // Subscribe to real-time Firestore projects for this client
   useEffect(() => {
+    if (authLoading) return;
     if (!clientId) {
       setProjects([]);
       setLoading(false);
@@ -52,12 +54,19 @@ export const ClientProjectsPage: React.FC = () => {
     const unsub = subscribeToProjectsByOwner(clientId, (clientProjects) => {
       setProjects(clientProjects);
       setLoading(false);
+
+      // Auto-heal legacy projects that are completed with missing totalSpent
+      clientProjects.forEach((p) => {
+        if (p.id && p.status === 'completed' && (!p.totalSpent || p.totalSpent === 0)) {
+          syncProjectCompletionAndProgress(p.id).catch(() => {});
+        }
+      });
     });
 
     return () => {
       unsub();
     };
-  }, [clientId]);
+  }, [clientId, authLoading]);
 
   // Subscribe to specialists to resolve assigned talent profiles by UID
   const [symbiotes, setSymbiotes] = useState<any[]>([]);
@@ -180,9 +189,9 @@ export const ClientProjectsPage: React.FC = () => {
     const active = projects.filter((p) => p.status === 'active' || p.status === 'in_progress').length;
     const matching = projects.filter((p) => p.status === 'matching' || p.status === 'submitted').length;
     const completed = projects.filter((p) => p.status === 'completed').length;
-    const totalBudget = projects.reduce((acc, p) => acc + (p.budget?.total || p.budgetMin || 0), 0);
+    const totalSpent = projects.reduce((acc, p) => acc + (p.totalSpent || 0), 0);
 
-    return { total, active, matching, completed, totalBudget };
+    return { total, active, matching, completed, totalSpent };
   }, [projects]);
 
   const getStatusVariant = (status?: string): 'cyan' | 'green' | 'amber' | 'blue' | 'purple' | 'red' | 'gray' => {
@@ -292,15 +301,15 @@ export const ClientProjectsPage: React.FC = () => {
         <Card className="p-4 bg-[var(--color-surface)] border-[var(--color-border)] min-w-0 overflow-hidden">
           <div className="flex items-center justify-between gap-2">
             <span className="text-caption text-[var(--color-text-secondary)] uppercase tracking-wider font-semibold truncate">
-              Total Budget
+              Total Spent So Far
             </span>
             <DollarSign className="w-4 h-4 text-[var(--color-warning-amber)] shrink-0" />
           </div>
           <div className="mt-2">
             <ResponsiveStatValue
-              value={`$${stats.totalBudget.toLocaleString()}`}
+              value={`$${stats.totalSpent.toLocaleString()}`}
               mono
-              tooltip={`Exact Total Budget: $${stats.totalBudget.toLocaleString()}`}
+              tooltip={`Total Spent Across Projects: $${stats.totalSpent.toLocaleString()}`}
             />
           </div>
         </Card>
@@ -372,7 +381,7 @@ export const ClientProjectsPage: React.FC = () => {
       </div>
 
       {/* CONTENT LIST / TABLE */}
-      {loading ? (
+      {loading || authLoading ? (
         <Card className="p-12 text-center bg-[var(--color-surface)] border-[var(--color-border)]">
           <div className="flex flex-col items-center justify-center space-y-3">
             <div className="w-8 h-8 border-2 border-[var(--color-accent-cyan)] border-t-transparent rounded-full animate-spin" />
@@ -412,7 +421,7 @@ export const ClientProjectsPage: React.FC = () => {
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/50 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
                   <th className="py-3 px-4">Project Name & Category</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Budget</th>
+                  <th className="py-3 px-4">Spent So Far</th>
                   <th className="py-3 px-4">Progress</th>
                   <th className="py-3 px-4">Assigned Specialist</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -420,7 +429,7 @@ export const ClientProjectsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)] text-xs">
                 {filteredProjects.map((project) => {
-                  const budgetAmount = project.budget?.total || project.budgetMin || 0;
+                  const spentAmount = Number(project.totalSpent || 0);
                   const progressPct = getProjectProgress(project);
                   const specialist = getProjectSpecialist(project);
 
@@ -453,9 +462,10 @@ export const ClientProjectsPage: React.FC = () => {
                         />
                       </td>
 
-                      {/* Budget */}
+                      {/* Spent */}
                       <td className="py-4 px-4 whitespace-nowrap font-mono font-bold text-[var(--color-text-primary)]">
-                        ${budgetAmount.toLocaleString()}
+                        ${spentAmount.toLocaleString()}
+                        <span className="text-[10px] text-[var(--color-text-secondary)] font-normal ml-1">spent</span>
                       </td>
 
                       {/* Progress */}
@@ -530,7 +540,7 @@ export const ClientProjectsPage: React.FC = () => {
         /* GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredProjects.map((project) => {
-            const budgetAmount = project.budget?.total || project.budgetMin || 0;
+            const spentAmount = Number(project.totalSpent || 0);
             const progressPct = getProjectProgress(project);
             const specialist = getProjectSpecialist(project);
 
@@ -574,9 +584,9 @@ export const ClientProjectsPage: React.FC = () => {
                 <div className="pt-3 border-t border-[var(--color-border)] space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <div>
-                      <span className="text-caption text-[var(--color-text-secondary)] block">Budget</span>
+                      <span className="text-caption text-[var(--color-text-secondary)] block">Spent So Far</span>
                       <span className="font-mono font-bold text-[var(--color-text-primary)]">
-                        ${budgetAmount.toLocaleString()}
+                        ${spentAmount.toLocaleString()}
                       </span>
                     </div>
 

@@ -3,12 +3,109 @@ import { GoogleGenAI } from "@google/genai";
 
 export const aiRouter = Router();
 
+// Helper to query Gemini with fallback models
+async function generateGeminiContent(ai: GoogleGenAI, promptText: string): Promise<string> {
+  const candidateModels = ['gemini-3.8-flash', 'gemini-3.7-flash'];
+  let lastError: any = null;
+  for (const model of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: promptText,
+      });
+      if (response && response.text) {
+        return response.text;
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Gemini] Model ${model} failed:`, err?.message || err);
+    }
+  }
+  throw lastError || new Error("All Gemini models failed or unavailable");
+}
+
+// Intelligent fallback brief generator that synthesizes detailed architecture & domain-specific risks
+export function computeFallbackBrief(projectData: any, conversation?: any[]) {
+  const title = (projectData?.title || 'Modern Software Application').trim();
+  const synthesizedTitle = title.toLowerCase().startsWith('ai brief:') || title.toLowerCase().startsWith('[presync')
+    ? title
+    : `[PreSync AI Brief] ${title}`;
+
+  const category = projectData?.category || 'Full Stack Development';
+  const industry = projectData?.industry || 'Technology & SaaS';
+  const duration = projectData?.duration || '3 months';
+  const workMode = projectData?.workMode || 'Remote';
+  const weeklyHours = projectData?.weeklyCommitment || 40;
+  const userDesc = typeof projectData?.description === 'string' ? projectData.description.trim() : '';
+
+  // Extract user remarks from consultation conversation
+  const userRemarks = (conversation || [])
+    .filter((c: any) => c.role === 'user' && typeof c.text === 'string' && c.text.trim())
+    .map((c: any) => c.text.trim());
+
+  // Determine intelligent recommended skills
+  const existingSkills = Array.isArray(projectData?.skills) ? projectData.skills.filter(Boolean) : [];
+  let recommendedSkills = [...existingSkills];
+  if (recommendedSkills.length === 0) {
+    if (/mobile/i.test(title + ' ' + category)) {
+      recommendedSkills = ['React Native', 'TypeScript', 'Redux Toolkit', 'REST APIs', 'Firebase'];
+    } else if (/ai|machine learning|ml/i.test(title + ' ' + category)) {
+      recommendedSkills = ['Python', 'FastAPI', 'PyTorch', 'LangChain', 'Docker', 'Vector DB'];
+    } else if (/design|ui|ux/i.test(title + ' ' + category)) {
+      recommendedSkills = ['Figma', 'Design Systems', 'Prototyping', 'User Research', 'TailwindCSS'];
+    } else {
+      recommendedSkills = ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'TailwindCSS', 'REST APIs'];
+    }
+  }
+
+  // Synthesize executive brief
+  let executiveScope = `The primary objective of this initiative is to architect, develop, and deploy an enterprise-grade ${title} solution tailored for the ${industry} ecosystem. Designed with high reliability, scalable architectural patterns, and responsive user-centric workflows, this project addresses mission-critical platform requirements while ensuring technical agility and code maintainability.`;
+
+  if (userDesc.length > 25 && !/^(need|require|pls|please)?\s*br(ie|ei)f$/i.test(userDesc)) {
+    executiveScope += `\n\nClient Specifications & Directives:\n"${userDesc}"`;
+  } else {
+    executiveScope += `\n\nClient Specifications & Directives:\nDeliver an end-to-end technical foundation featuring responsive user interfaces, modular backend services, persistent data caching, and comprehensive end-to-end test coverage.`;
+  }
+
+  if (userRemarks.length > 0) {
+    executiveScope += `\n\nKey Stakeholder Directives from Consultation:\n` + userRemarks.map((r) => `• ${r}`).join('\n');
+  }
+
+  const technicalArchitecture = `Core Objectives & Technical Architecture:
+• Frontend & Experience: Deliver a responsive, component-driven client architecture leveraging modern reactive state management and robust client-side validation.
+• Backend Services & APIs: Build resilient, strictly-typed API services ensuring sub-100ms response times, secure token authentication, and data consistency.
+• Data Architecture & Integration: Implement optimized database schema indexing, structured queries, and secure integration with external vendor systems.
+• Quality, Security & Compliance: Integrate comprehensive automated test suites, input sanitization, OWASP security best practices, and CI/CD automation.
+• Execution Cadence: Phased sprint deliveries with milestone reviews within the ${duration} timeframe under a dedicated ${weeklyHours} hrs/week ${workMode} workflow.`;
+
+  const fullDescription = `${executiveScope}\n\n${technicalArchitecture}`.trim();
+
+  const keyRisks = [
+    'Timeline compression during third-party integration phases - Mitigated by establishing standardized mock services and phased sprint milestones.',
+    'System throughput and API rate-limiting under peak concurrency - Mitigated through server-side in-memory caching and resilient retry mechanisms.',
+    'Security and role-based data isolation vulnerabilities - Mitigated by enforcing strict RBAC middleware, JWT rotation, and comprehensive schema validations.',
+    'Cross-environment consistency and deployment variance - Mitigated by containerized staging pipelines and rigorous automated edge-case test suites.'
+  ];
+
+  return {
+    title: synthesizedTitle,
+    description: fullDescription,
+    keyRisks,
+    recommendedSkills
+  };
+}
+
 // 1. AI Brief Generator
 aiRouter.post("/generate-project-brief", async (req: Request, res: Response) => {
-  try {
-    const { projectData, conversation } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
+  const { projectData, conversation } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY;
 
+  if (!apiKey) {
+    const brief = computeFallbackBrief(projectData, conversation);
+    return res.json({ success: true, brief });
+  }
+
+  try {
     const formattedTranscript = (conversation || [])
       .map((c: { role: string; text: string }) => `${c.role.toUpperCase()}: ${c.text}`)
       .join("\n");
@@ -40,66 +137,22 @@ Respond with ONLY a JSON object in this exact format (no markdown formatting aro
 }
 `;
 
-    if (!apiKey) {
-      const synthesizedTitle = projectData?.title
-        ? `[PreSync AI Brief] ${projectData.title}`
-        : 'Autonomous AI Engineering Pipeline';
-
-      const synthesizedDescription = `
-Executive Project Scope:
-${projectData?.description || 'To build a high-performance system adhering to strict enterprise standards.'}
-
-Key Objectives & Architecture:
-- Implement end-to-end ${projectData?.category || 'AI Engineering'} solution utilizing ${
-        (projectData?.skills || ['Python', 'React']).join(', ')
-      }.
-- Ensure deployment compatibility within ${projectData?.duration || '3 months'} timeline (${projectData?.workMode || 'Remote'} execution).
-- Target operational velocity maintaining high quality and strict compliance guidelines.
-
-Additional Client Constraints:
-${(conversation || []).filter((c: any) => c.role === 'user').map((c: any) => c.text).join(' ')}
-`.trim();
-
-      return res.json({
-        success: true,
-        brief: {
-          title: synthesizedTitle,
-          description: synthesizedDescription,
-          keyRisks: [
-            'Timeline compression due to integration complexity - Mitigated by phased milestone releases.',
-            'API rate limits and throughput bottlenecks - Mitigated by response caching & queue management.',
-            'Vector index latency - Mitigated by approximate nearest neighbors (ANN) optimization.'
-          ],
-          recommendedSkills: projectData?.skills || ['Python', 'PyTorch', 'LangChain', 'FastAPI']
-        }
-      });
-    }
-
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: promptText,
-    });
-
-    const responseText = response.text || '';
+    const responseText = await generateGeminiContent(ai, promptText);
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsedBrief = JSON.parse(jsonMatch[0]);
-      return res.json({ success: true, brief: parsedBrief });
-    } else {
-      throw new Error("Failed to parse JSON response from Gemini");
+      if (parsedBrief && parsedBrief.title && parsedBrief.description) {
+        return res.json({ success: true, brief: parsedBrief });
+      }
     }
-
+    throw new Error("Failed to parse valid JSON response from Gemini");
   } catch (error: any) {
-    console.error("Gemini API Brief Error:", error);
+    console.error("Gemini API Brief Error (falling back to intelligent synthesizer):", error?.message || error);
+    const fallbackBrief = computeFallbackBrief(projectData, conversation);
     return res.json({
       success: true,
-      brief: {
-        title: req.body?.projectData?.title ? `AI Brief: ${req.body.projectData.title}` : 'AI Technical Brief',
-        description: req.body?.projectData?.description || 'Synthesized brief based on user requirements and project parameters.',
-        keyRisks: ['Integration dependencies', 'Resource availability'],
-        recommendedSkills: req.body?.projectData?.skills || ['Python', 'React']
-      }
+      brief: fallbackBrief
     });
   }
 });
@@ -167,9 +220,10 @@ export function computeFallbackMatches(project: any, candidates: any[]) {
     const expScore = cand.experience === 'Expert' ? 95 : cand.experience === 'Senior' ? 88 : 75;
     const availScore = cand.availability === 'Immediate' ? 95 : 80;
 
+    const matchedList = matchingSkills.slice(0, 3).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ');
     const explanation = hasAnySkillMatch
-      ? `${cand.displayName || 'Specialist'} is a ${matchScore}% match for "${projectTitle}". Demonstrates verified expertise in ${matchingSkills.join(', ')} with a solid background as ${cand.title || 'specialist'}.`
-      : `${cand.displayName || 'Specialist'} has a ${matchScore}% match index. Primary expertise (${candSkills.slice(0, 3).join(', ') || candTitle || 'General'}) does not align with required qualifications (${effectiveKeywords.slice(0, 3).join(', ')}).`;
+      ? `${cand.displayName || 'Specialist'} is a ${matchScore}% match for "${projectTitle}". Verified skills in ${matchedList} with strong alignment.`
+      : `${cand.displayName || 'Specialist'} has a ${matchScore}% match index. Primary expertise does not align with required project stack (${effectiveKeywords.slice(0, 3).join(', ')}).`;
 
     return {
       symbioteId: cand.uid || cand.id || 'specialist',
@@ -236,6 +290,7 @@ CRITICAL MATCHING RULES:
 1. Strict Skill Verification: If a candidate has ZERO matching skills or belongs to an unrelated discipline (e.g., Video Editor for DevOps, Copywriter for Machine Learning), their matchScore MUST be strictly below 20%.
 2. Only specialists with genuine technical qualification and skill overlap should score >= 70%.
 3. Rank the highest matching specialists at the top.
+4. Short & Crisp Explanation: Keep explanation to 1-2 punchy, insightful sentences. Highlight specific core skills and role alignment. Never output repetitive boilerplate text.
 
 Return ONLY a valid JSON object in this exact format (no markdown around it):
 {
@@ -248,7 +303,7 @@ Return ONLY a valid JSON object in this exact format (no markdown around it):
         "experienceFit": 95,
         "availabilityFit": 92
       },
-      "explanation": "Natural language paragraph explaining specifically why this candidate is ideal for ${projectTitle}, highlighting matching skills and background."
+      "explanation": "Concise 1-2 sentence explanation of why this specialist excels for this project."
     }
   ]
 }
@@ -260,12 +315,7 @@ Return ONLY a valid JSON object in this exact format (no markdown around it):
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: promptText,
-    });
-
-    const responseText = response.text || '';
+    const responseText = await generateGeminiContent(ai, promptText);
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -390,12 +440,7 @@ I am available to begin immediately and commit full focus toward meeting your ${
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: promptText,
-    });
-
-    const responseText = response.text || '';
+    const responseText = await generateGeminiContent(ai, promptText);
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);

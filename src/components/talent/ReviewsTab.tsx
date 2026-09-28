@@ -146,6 +146,9 @@ export const ReviewsTab: React.FC<ReviewsTabProps> = ({ symbiote }) => {
                 })
               : 'Recent';
 
+            const clientName = rev.clientName || 'Enterprise Client';
+            const projectName = rev.projectName;
+
             return (
               <div
                 key={rev.id}
@@ -154,14 +157,14 @@ export const ReviewsTab: React.FC<ReviewsTabProps> = ({ symbiote }) => {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-full bg-[var(--color-accent-cyan)]/15 border border-[var(--color-accent-cyan)]/30 text-[var(--color-accent-cyan)] flex items-center justify-center font-bold text-xs font-mono shrink-0">
-                      <User className="w-4 h-4" />
+                      {clientName.slice(0, 1).toUpperCase()}
                     </div>
                     <div>
                       <h5 className="text-xs font-bold text-[var(--color-text-primary)]">
-                        Verified Enterprise Client
+                        {clientName}
                       </h5>
                       <p className="text-[10px] font-mono text-[var(--color-text-secondary)]">
-                        Verified Contract
+                        {projectName ? `Project: ${projectName}` : 'Verified Contract'}
                       </p>
                     </div>
                   </div>

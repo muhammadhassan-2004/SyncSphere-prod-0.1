@@ -34,6 +34,7 @@ export const VerifyEmailPage: React.FC = () => {
     email?: string;
     uid?: string;
     role?: UserRole;
+    is2FA?: boolean;
   } | null;
 
   // SessionStorage backup fallback in case of page reload (F5)
@@ -52,6 +53,7 @@ export const VerifyEmailPage: React.FC = () => {
   const urlCode = searchParams.get('code');
   const urlUid = searchParams.get('uid');
   const urlRole = searchParams.get('role') as UserRole | null;
+  const is2FA = Boolean(navState?.is2FA || backupState?.is2FA || searchParams.get('is2FA') === 'true');
 
   const email = navState?.email || urlEmail || firebaseUser?.email || backupState?.email || '';
   const uid = navState?.uid || urlUid || firebaseUser?.uid || backupState?.uid || '';
@@ -63,13 +65,13 @@ export const VerifyEmailPage: React.FC = () => {
       try {
         sessionStorage.setItem(
           'syncsphere_pending_verification',
-          JSON.stringify({ email, uid, role })
+          JSON.stringify({ email, uid, role, is2FA })
         );
       } catch (err) {
         console.warn('Could not cache pending verification to sessionStorage:', err);
       }
     }
-  }, [email, uid, role]);
+  }, [email, uid, role, is2FA]);
 
   // Completion guard ref to prevent multiple executions
   const hasCompletedRef = useRef(false);
@@ -141,15 +143,31 @@ export const VerifyEmailPage: React.FC = () => {
 
         setRole(role);
 
+        let onboardingDone = false;
+        if (userId) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', userId));
+            if (userSnap.exists() && userSnap.data()?.onboardingCompleted) {
+              onboardingDone = true;
+            }
+          } catch (e) {
+            console.warn('Could not check onboarding status:', e);
+          }
+        }
+
         setTimeout(() => {
-          navigate(`/onboarding?role=${role}`, { replace: true });
+          if (is2FA || onboardingDone) {
+            navigate(`/${role}/dashboard`, { replace: true });
+          } else {
+            navigate(`/onboarding?role=${role}`, { replace: true });
+          }
         }, 1200);
       } catch (err: any) {
         console.error('Failed to complete verification state:', err);
-        navigate(`/onboarding?role=${role}`, { replace: true });
+        navigate(is2FA ? `/${role}/dashboard` : `/onboarding?role=${role}`, { replace: true });
       }
     },
-    [navigate, role, setRole]
+    [is2FA, navigate, role, setRole]
   );
 
   // Check real Firebase Auth verification status (supports email link clicks)
@@ -368,22 +386,20 @@ export const VerifyEmailPage: React.FC = () => {
             <SyncSphereLogo iconSize={32} textSize="lg" />
           </Link>
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
+            <button
+              type="button"
               id="verify-back-login"
-              className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors inline-flex items-center gap-1.5"
+              onClick={async () => {
+                try {
+                  await auth.signOut();
+                } catch {}
+                navigate('/login');
+              }}
+              className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to sign in</span>
-            </Link>
-            <span className="text-[var(--color-border)]">•</span>
-            <Link
-              to="/"
-              id="verify-back-home"
-              className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors inline-flex items-center gap-1"
-            >
-              <span>Home</span>
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -395,14 +411,26 @@ export const VerifyEmailPage: React.FC = () => {
 
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              Verify your email address
+              {is2FA ? 'Two-Factor Authentication' : 'Verify your email address'}
             </h1>
             <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] max-w-md mx-auto leading-relaxed">
-              We sent a verification email to{' '}
-              <span className="font-semibold text-[var(--color-text-primary)] break-all underline decoration-[var(--color-accent-cyan)]/40 underline-offset-2">
-                {email || 'your email address'}
-              </span>
-              . You can verify using either method below.
+              {is2FA ? (
+                <>
+                  Enter the 6-digit security code sent to{' '}
+                  <span className="font-semibold text-[var(--color-text-primary)] break-all underline decoration-[var(--color-accent-cyan)]/40 underline-offset-2">
+                    {email || 'your registered email'}
+                  </span>{' '}
+                  to access your account.
+                </>
+              ) : (
+                <>
+                  We sent a verification email to{' '}
+                  <span className="font-semibold text-[var(--color-text-primary)] break-all underline decoration-[var(--color-accent-cyan)]/40 underline-offset-2">
+                    {email || 'your email address'}
+                  </span>
+                  . You can verify using either method below.
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -411,7 +439,7 @@ export const VerifyEmailPage: React.FC = () => {
         {isVerified && (
           <div className="p-4 rounded-xl bg-[var(--color-success-green)]/15 border border-[var(--color-success-green)]/40 text-[var(--color-success-green)] text-sm flex items-center justify-center gap-2.5 font-bold shadow-lg animate-fade-in">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-            <span>Email Verified ✓ Proceeding to workspace...</span>
+            <span>{is2FA ? 'Identity Confirmed ✓ Proceeding to dashboard...' : 'Email Verified ✓ Proceeding to workspace...'}</span>
           </div>
         )}
 

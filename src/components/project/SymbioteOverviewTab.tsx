@@ -3,6 +3,7 @@ import { Project, UserProfile } from '@/src/types/firestore';
 import { Card } from '@/src/components/ui/card';
 import { StatusPill } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
+import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   FileText,
   DollarSign,
@@ -44,13 +45,9 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
     : (project.progressPercent ?? 35);
   const healthStatus = project.healthStatus || 'On Track';
 
-  // Budget formatting
-  const formattedBudget =
-    typeof project.budget === 'number'
-      ? `$${project.budget.toLocaleString()}`
-      : project.minBudget || project.maxBudget
-      ? `$${(project.minBudget || 0).toLocaleString()} – $${(project.maxBudget || 0).toLocaleString()}`
-      : '$15,000 Total';
+  // Real-time project expenditure tracking
+  const totalSpent = Number(project.totalSpent || 0);
+  const totalSettledTasks = Number(project.totalSettledTasks || 0);
 
   const teamMembers = project.teamMembers || [];
 
@@ -227,7 +224,7 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
                         name={member.displayName}
                         initials={member.avatarInitials}
                         size="sm"
-                        statusDot="online"
+                        statusDot={getUserStatusDot(member)}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
@@ -257,20 +254,22 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
             <div className="border-b border-[var(--color-border)] pb-3">
               <h3 className="text-xs font-bold text-[var(--color-text-primary)] uppercase tracking-wider font-mono flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
-                Budget & Execution Window
+                Project Financials & Schedule
               </h3>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-1">
                 <span className="text-[10px] text-[var(--color-text-secondary)] font-mono uppercase">
-                  Total Budget Allocation
+                  Total Project Settlement
                 </span>
                 <p className="text-base font-mono font-bold text-emerald-400">
-                  {formattedBudget}
+                  ${totalSpent.toLocaleString()}
                 </p>
-                <span className="text-[10px] text-[var(--color-text-secondary)] capitalize block">
-                  Model: {project.budgetType || 'fixed'}
+                <span className="text-[10px] text-[var(--color-text-secondary)] block">
+                  {totalSettledTasks > 0
+                    ? `${totalSettledTasks} approved task${totalSettledTasks > 1 ? 's' : ''} settled`
+                    : 'Dynamic Per-Task Billing'}
                 </span>
               </div>
 
@@ -281,16 +280,18 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
                     {project.workMode || 'Remote'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--color-text-secondary)]">Commitment:</span>
-                  <span className="font-mono text-[var(--color-text-primary)]">
-                    {project.weeklyCommitment || 40} hrs / week
-                  </span>
-                </div>
+                {project.priority && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[var(--color-text-secondary)]">Priority:</span>
+                    <span className="font-bold text-[var(--color-text-primary)]">
+                      {project.priority}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-[var(--color-text-secondary)]">Duration:</span>
                   <span className="font-bold text-[var(--color-text-primary)]">
-                    {project.duration || '3 months'}
+                    {project.duration || 'Flexible'}
                   </span>
                 </div>
               </div>

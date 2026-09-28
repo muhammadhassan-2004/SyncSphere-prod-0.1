@@ -8,6 +8,7 @@ interface SyncSphereLogoProps {
   textSize?: 'sm' | 'md' | 'lg' | 'xl';
   showSubtitle?: boolean;
   subtitle?: string;
+  iconSrc?: string;
 }
 
 export const SyncSphereLogo: React.FC<SyncSphereLogoProps> = ({
@@ -16,6 +17,7 @@ export const SyncSphereLogo: React.FC<SyncSphereLogoProps> = ({
   textSize = 'lg',
   showSubtitle = false,
   subtitle,
+  iconSrc,
 }) => {
   const textSizeClasses = {
     sm: 'text-base font-bold',
@@ -26,7 +28,7 @@ export const SyncSphereLogo: React.FC<SyncSphereLogoProps> = ({
 
   return (
     <div className={cn('flex items-center gap-2.5 select-none', className)}>
-      <SyncSphereLogoIcon size={iconSize} />
+      <SyncSphereLogoIcon size={iconSize} src={iconSrc} />
       <div className="flex flex-col">
         <div className={cn('flex items-center leading-none', textSizeClasses)}>
           <span className="text-[var(--color-text-primary)] font-bold">Sync</span>
