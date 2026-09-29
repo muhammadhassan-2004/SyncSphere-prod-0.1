@@ -78,20 +78,16 @@ export async function getUsersPage(
 ): Promise<{ rows: AdminUserRow[]; nextCursor: QueryDocumentSnapshot | null; hasMore: boolean }> {
   try {
     const hasSearch = Boolean(filters.search && filters.search.trim());
-    const constraints: any[] = [];
-    if (!hasSearch) {
-      constraints.push(orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
-      if (cursor) constraints.push(startAfter(cursor));
-    }
-    if (filters.role) constraints.unshift(where('role', '==', filters.role));
-    if (filters.status) constraints.unshift(where('status', '==', filters.status));
-
     let snap;
     try {
-      const q = query(collection(db, 'users'), ...constraints);
+      const constraints: any[] = [];
+      if (filters.role) constraints.push(where('role', '==', filters.role));
+      if (filters.status) constraints.push(where('status', '==', filters.status));
+
+      const q = constraints.length > 0 ? query(collection(db, 'users'), ...constraints) : collection(db, 'users');
       snap = await getDocs(q);
     } catch {
-      // Fallback query without specific sorting if index is missing
+      // Fallback query if constraints fail
       snap = await getDocs(collection(db, 'users'));
     }
 
@@ -106,8 +102,9 @@ export async function getUsersPage(
       const role = data.role === 'freelancer' ? 'symbiote' : (data.role || 'client');
       const status = data.status === 'suspended' || data.status === 'disabled' || data.status === 'inactive' ? 'suspended' : 'active';
 
-      const registeredAt = parseTimestamp(data.createdAt);
-      const lastLoginAt = parseTimestamp(data.lastActiveAt || data.lastLoginAt);
+      // Fall back to updatedAt or lastActiveAt if createdAt is missing on legacy/OAuth docs
+      const registeredAt = parseTimestamp(data.createdAt || data.updatedAt || data.lastActiveAt);
+      const lastLoginAt = parseTimestamp(data.lastActiveAt || data.lastLoginAt || data.updatedAt);
 
       const avatarInitials = (name === '—' ? 'SS' : name)
         .split(' ')
