@@ -121,9 +121,17 @@ export default function App() {
                 </PublicOnlyRoute>
               }
             />
-            <Route path="/signup" element={<SignupPage />} />
+            <Route
+              path="/signup"
+              element={
+                <PublicOnlyRoute>
+                  <SignupPage />
+                </PublicOnlyRoute>
+              }
+            />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
+
             <Route
               path="/login"
               element={
