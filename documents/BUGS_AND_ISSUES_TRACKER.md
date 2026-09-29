@@ -2592,6 +2592,46 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 
 ---
 
+### #88 ✅ [P0] Authentication Bypass — New Account Creation Allows Dashboard Access Without Email Verification or Onboarding
+
+* **Category**: Security / Authentication / Route Protection
+* **Location**: `src/components/ProtectedRoute.tsx`, `src/App.tsx`
+* **Reported By**: Client (external) — identified as a critical security regression
+* **Original Problem**:
+  A newly created account could bypass both email verification and onboarding, gaining direct dashboard access. Steps to reproduce:
+  1. Register a new account at `/signup`
+  2. Navigate back to the landing page (do NOT complete OTP verification)
+  3. Navigate directly to `/client/dashboard` — access was granted without any email verification or onboarding
+  This made it trivially easy to create bot/spam accounts that could access portal dashboards.
+* **Root Cause (3 separate vulnerabilities)**:
+  1. **`ProtectedRoute.tsx` — `emailVerified` undefined bypass**: The email check used `activeUser.emailVerified === false`. If the Firestore doc was not fully written yet (or `emailVerified` field was absent), this evaluated to `false` — treating the user as verified. Fix: changed to require `emailVerified === true` strictly.
+  2. **`ProtectedRoute.tsx` — `onboardingCompleted` undefined bypass**: The onboarding check used `onboardingCompleted === false`. Same logic flaw — if the field was `undefined` or missing, the guard was skipped and the user reached the dashboard. Fix: changed to `onboardingCompleted !== true`.
+  3. **`App.tsx` — `/signup` route unprotected**: The `/signup` route had no `PublicOnlyRoute` wrapper, meaning an already-authenticated user with an active Firebase session could reload `/signup`, create another account, and exploit the flow again. Fix: wrapped `/signup` in `PublicOnlyRoute`.
+* **Resolution & Implementation**:
+  1. **`ProtectedRoute.tsx` — Email check hardened**:
+     ```tsx
+     // BEFORE (BROKEN): undefined treated as verified
+     const isEmailUnverified = activeUser.emailVerified === false || ...
+     // AFTER (FIXED): undefined treated as unverified
+     const isEmailVerified = activeUser.emailVerified === true ||
+       (firebaseUser?.emailVerified === true && activeUser.emailVerified !== false);
+     if (!isEmailVerified) { return <Navigate to="/verify-email" ... /> }
+     ```
+  2. **`ProtectedRoute.tsx` — Onboarding check hardened**:
+     ```tsx
+     // BEFORE (BROKEN): undefined bypasses guard
+     if (activeUser.onboardingCompleted === false && ...) { ... }
+     // AFTER (FIXED): only strictly true is allowed through
+     if (activeUser.onboardingCompleted !== true) { return <Navigate to="/onboarding" /> }
+     ```
+  3. **`App.tsx` — `/signup` wrapped in `PublicOnlyRoute`**: Prevents authenticated sessions from re-entering signup flow.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite production build succeeded, 13.88s)
+* **Status**: Resolved & Verified ✅ (2026-09-29)
+
+---
+
 ## 📝 How to Log New Bugs in this File
 
 When identifying a new issue:

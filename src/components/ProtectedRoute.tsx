@@ -34,13 +34,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, ch
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Strictly enforce email verification across all roles (Client, Freelancer/Symbiote, Admin)
-  // If email is not verified, user cannot access any dashboard or portal route
-  const isEmailUnverified =
-    activeUser.emailVerified === false ||
-    (firebaseUser && firebaseUser.emailVerified === false && activeUser.emailVerified !== true);
+  // Strictly enforce email verification across all roles (Client, Freelancer/Symbiote, Admin).
+  // SECURITY: emailVerified must be STRICTLY true. If the field is missing (undefined) or false,
+  // the user is treated as unverified. This prevents newly created accounts from bypassing
+  // email verification by exploiting a race condition where Firestore doc is not yet written.
+  const isEmailVerified =
+    activeUser.emailVerified === true ||
+    (firebaseUser?.emailVerified === true && activeUser.emailVerified !== false);
 
-  if (isEmailUnverified && location.pathname !== '/verify-email') {
+  if (!isEmailVerified) {
     return (
       <Navigate
         to={`/verify-email?email=${encodeURIComponent(activeUser.email || firebaseUser?.email || '')}&role=${activeRole}`}
@@ -54,8 +56,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, ch
     );
   }
 
-  // If a brand new user explicitly has not completed onboarding, redirect to onboarding screen
-  if (activeUser.onboardingCompleted === false && location.pathname !== '/onboarding') {
+  // SECURITY: onboardingCompleted must be STRICTLY true. If the field is missing (undefined) or
+  // false, the user is redirected to onboarding. This prevents new accounts from jumping directly
+  // to the dashboard without completing the required onboarding flow.
+  if (activeUser.onboardingCompleted !== true) {
     return <Navigate to={`/onboarding?role=${activeRole}`} replace />;
   }
 
