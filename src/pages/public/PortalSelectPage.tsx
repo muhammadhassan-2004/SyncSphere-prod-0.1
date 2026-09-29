@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, UserCheck, Check, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
@@ -11,7 +11,14 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export const PortalSelectPage: React.FC = () => {
   const navigate = useNavigate();
-  const { firebaseUser, setRole } = useAuth();
+  const { firebaseUser, userProfile, setRole } = useAuth();
+
+  // If user is already authenticated with an existing completed role, redirect to dashboard
+  useEffect(() => {
+    if (firebaseUser && userProfile?.role && userProfile.onboardingCompleted === true) {
+      navigate(`/${userProfile.role}/dashboard`, { replace: true });
+    }
+  }, [firebaseUser, userProfile, navigate]);
 
   const handleSelectRole = async (role: 'client' | 'symbiote') => {
     // If the user already authenticated via Google OAuth without a role:

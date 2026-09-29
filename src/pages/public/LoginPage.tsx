@@ -52,9 +52,13 @@ export const LoginPage: React.FC = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Auto-redirect if user already has an active valid auth token / session
+  // 1. Auto-redirect if user already has an active valid auth token / session with completed onboarding
   useEffect(() => {
-    if (firebaseUser && currentRole) {
+    if (firebaseUser && currentRole && userProfile?.role) {
+      if (userProfile.onboardingCompleted === false) {
+        navigate(`/onboarding?role=${currentRole}`, { replace: true });
+        return;
+      }
       const from = (location.state as { from?: { pathname?: string } })?.from?.pathname;
       if (from && from.startsWith(`/${currentRole}`)) {
         navigate(from, { replace: true });
@@ -62,7 +66,7 @@ export const LoginPage: React.FC = () => {
         navigate(`/${currentRole}/dashboard`, { replace: true });
       }
     }
-  }, [firebaseUser, currentRole, navigate, location.state]);
+  }, [firebaseUser, currentRole, userProfile, navigate, location.state]);
 
   // 2. Load remembered email/preference on mount (passwords never persisted to storage)
   useEffect(() => {
@@ -326,9 +330,9 @@ export const LoginPage: React.FC = () => {
       // Check user document
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
+      const userData = userSnap.exists() ? userSnap.data() : null;
 
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
+      if (userData && userData.role) {
         const rawRole = userData.role;
         const userRole: UserRole =
           rawRole === 'freelancer' ? 'symbiote' : rawRole === 'client' || rawRole === 'symbiote' || rawRole === 'admin' ? rawRole : 'client';
@@ -350,15 +354,16 @@ export const LoginPage: React.FC = () => {
           navigate(`/${userRole}/dashboard`, { replace: true });
         }
       } else {
-        // Query param or location state fallback if available
+        // User has NO role yet (brand new or role pending selection)
         const urlParams = new URLSearchParams(location.search);
         const specifiedRole = (urlParams.get('role') || location.state?.role) as UserRole;
-        if (specifiedRole === 'client' || specifiedRole === 'symbiote' || specifiedRole === 'admin') {
-          const nameParts = (user.displayName || '').trim().split(' ').filter(Boolean);
-          const gFirstName = nameParts[0] || (user.email ? user.email.split('@')[0] : 'User');
-          const gLastName = nameParts.slice(1).join(' ') || '';
-          const gFullName = user.displayName || `${gFirstName} ${gLastName}`.trim() || 'User';
 
+        const nameParts = (user.displayName || '').trim().split(' ').filter(Boolean);
+        const gFirstName = nameParts[0] || (user.email ? user.email.split('@')[0] : 'User');
+        const gLastName = nameParts.slice(1).join(' ') || '';
+        const gFullName = user.displayName || `${gFirstName} ${gLastName}`.trim() || 'User';
+
+        if (specifiedRole === 'client' || specifiedRole === 'symbiote' || specifiedRole === 'admin') {
           await setDoc(userDocRef, {
             uid: user.uid,
             firstName: gFirstName,
@@ -374,11 +379,29 @@ export const LoginPage: React.FC = () => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             lastActiveAt: serverTimestamp(),
-          });
+          }, { merge: true });
           setRole(specifiedRole);
           navigate(`/onboarding?role=${specifiedRole}`, { replace: true });
         } else {
-          // First-time OAuth user with no preselected role: Route to portal-select
+          // Brand new OAuth user with NO preselected role:
+          // Create document with profile details so user appears in Admin panel,
+          // but leave role unset until user chooses on /portal-select!
+          await setDoc(userDocRef, {
+            uid: user.uid,
+            firstName: gFirstName,
+            lastName: gLastName,
+            displayName: gFullName,
+            fullName: gFullName,
+            email: (user.email || '').toLowerCase(),
+            phoneNumber: user.phoneNumber || undefined,
+            emailVerified: user.emailVerified ?? true,
+            avatarUrl: user.photoURL || undefined,
+            onboardingCompleted: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastActiveAt: serverTimestamp(),
+          }, { merge: true });
+
           navigate('/portal-select');
         }
       }

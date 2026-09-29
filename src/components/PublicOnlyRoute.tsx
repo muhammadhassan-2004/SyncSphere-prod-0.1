@@ -27,11 +27,12 @@ export const PublicOnlyRoute: React.FC<PublicOnlyRouteProps> = ({ children }) =>
 
   const activeUser = authenticatedUser || userProfile;
   
-  // Only redirect if user has an active, verified session and completed onboarding
+  // Only redirect if user has an active, verified session, assigned role, and completed onboarding
   const isFullyAuthenticated = Boolean(
     (firebaseUser?.emailVerified || activeUser?.emailVerified) &&
     activeUser &&
-    activeUser.onboardingCompleted !== false
+    Boolean(activeUser.role) &&
+    activeUser.onboardingCompleted === true
   );
 
   if (isFullyAuthenticated) {
