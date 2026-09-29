@@ -2542,6 +2542,31 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 
 ---
 
+### #86 ✅ [P0] Admin Role Overwritten to Client via `users.ts` Auto-Heal & Listener Fallbacks
+
+* **Category**: Authentication / User State & RBAC Integrity
+* **Location**: `src/lib/firestore/users.ts` (`getUserProfile`, `subscribeToUserProfile`)
+* **Original Problem**: 
+  When an administrator (`dev.pixelgenesys@gmail.com`) logged into the platform, their Firestore document role was overwritten from `"admin"` to `"client"`. This routed the admin into the Client Portal (`/client/dashboard`) and caused access-denied errors across administrative routes.
+* **Root Cause**:
+  1. `getUserProfile()` contained an email-fallback lookup that normalized missing/falsy roles to `'client'` (`foundData.role || 'client'`) and saved the document back with `{ merge: true }`.
+  2. `getUserProfile()` contained a ghost account auto-heal block (lines 56–76) that hardcoded `role: 'client'` and wrote it to Firestore whenever a document was partial or missing a role.
+  3. `subscribeToUserProfile()` real-time listener also contained the `foundData.role || 'client'` fallback which persisted `role: 'client'` on snapshot changes.
+  4. If an account had partial session sync, these fallback paths systematically forced `role: 'client'`, corrupting administrator and freelancer roles.
+* **Resolution & Implementation**:
+  1. **Safe Role Normalization in `getUserProfile`**: Removed `|| 'client'`. Only normalizes if `foundData.role` actually exists; merges without injecting a role if absent, preventing corruption of existing roles.
+  2. **Ghost Account Skeleton Decoupling**: Removed hardcoded `role: 'client'` from the ghost auto-heal block. The skeleton document saves basic identifiers (`email`, `displayName`, `fullName`) with zero role assignment; role selection must happen explicitly via `/portal-select`.
+  3. **Safe Real-Time Listener in `subscribeToUserProfile`**: Removed `|| 'client'` from the real-time snapshot fallback sync.
+  4. **Restored Admin Document**: Restored `dev.pixelgenesys@gmail.com` (UID: `Bb72Vp4xBDYso9BhdGg7tAvk8Pj1`) `role: "admin"` directly in Cloud Firestore via Firebase Admin SDK.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite production build succeeded)
+  * `npm test` → ✅ 144/144 tests passed (100%)
+  * Admin document verified in Firestore: `role: "admin"`
+* **Status**: Resolved & Verified ✅ (2026-09-29)
+
+---
+
 ## 📝 How to Log New Bugs in this File
 
 When identifying a new issue:

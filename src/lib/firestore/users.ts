@@ -35,14 +35,16 @@ export async function getUserProfile(uid: string, email?: string): Promise<UserP
       if (!querySnap.empty) {
         const foundDoc = querySnap.docs[0];
         const foundData = foundDoc.data() as UserProfile;
-        const normalizedRole = foundData.role === 'freelancer' ? 'symbiote' : (foundData.role || 'client');
-        const mergedProfile: UserProfile = {
+        // SAFE: Only normalize role if it actually exists — NEVER default to 'client'
+        // This prevents corrupting admin/symbiote roles for accounts whose doc was partial
+        const normalizedRole = foundData.role === 'freelancer' ? 'symbiote' : foundData.role;
+        const mergedProfile = {
           ...foundData,
           uid,
-          role: normalizedRole,
+          ...(normalizedRole ? { role: normalizedRole } : {}),
           updatedAt: new Date().toISOString(),
-        };
-        // Auto-heal / sync document to users/{uid}
+        } as UserProfile;
+        // Auto-heal / sync document to users/{uid} — preserves role if already set
         await setDoc(docRef, mergedProfile, { merge: true });
         return mergedProfile;
       }
@@ -53,23 +55,22 @@ export async function getUserProfile(uid: string, email?: string): Promise<UserP
       return { ...data, uid: snap.id };
     }
 
-    // Auto-heal / auto-provision fallback for half-created or ghost accounts
+    // Ghost account skeleton — save basic info WITHOUT role assignment
+    // Role MUST be chosen by user via /portal-select; never auto-assign 'client'
     if (uid && searchEmail) {
       const fallbackName = searchEmail.split('@')[0];
-      const fallbackProfile: UserProfile = {
+      const skeletonDoc = {
         uid,
         email: searchEmail.toLowerCase(),
         displayName: fallbackName,
         fullName: fallbackName,
-        role: 'client',
         emailVerified: false,
         onboardingCompleted: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       try {
-        await setDoc(docRef, fallbackProfile, { merge: true });
-        return fallbackProfile;
+        await setDoc(docRef, skeletonDoc, { merge: true });
       } catch (autoHealErr) {
         console.warn('Auto-provisioning ghost profile notice:', autoHealErr);
       }
@@ -113,13 +114,14 @@ export function subscribeToUserProfile(
             if (!querySnap.empty) {
               const foundDoc = querySnap.docs[0];
               const foundData = foundDoc.data() as UserProfile;
-              const normalizedRole = foundData.role === 'freelancer' ? 'symbiote' : (foundData.role || 'client');
-              const mergedProfile: UserProfile = {
+              // SAFE: Only normalize role if it actually exists — NEVER default to 'client'
+              const normalizedRole = foundData.role === 'freelancer' ? 'symbiote' : foundData.role;
+              const mergedProfile = {
                 ...foundData,
                 uid,
-                role: normalizedRole,
-              };
-              // Auto-sync into users/{uid}
+                ...(normalizedRole ? { role: normalizedRole } : {}),
+              } as UserProfile;
+              // Auto-sync into users/{uid} — preserves existing role field
               await setDoc(docRef, mergedProfile, { merge: true });
               callback(mergedProfile);
               return;
