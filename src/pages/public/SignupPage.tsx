@@ -157,12 +157,12 @@ export const SignupPage: React.FC = () => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Check if user already exists in Firestore
+      // Check if user already exists in Firestore with completed registration
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
+      const existingData = userSnap.exists() ? userSnap.data() : null;
 
-      if (userSnap.exists()) {
-        const existingData = userSnap.data();
+      if (existingData && existingData.role && existingData.onboardingCompleted === true) {
         const rawRole = existingData.role;
         const matchedRole: UserRole =
           rawRole === 'freelancer' ? 'symbiote' : rawRole === 'client' || rawRole === 'symbiote' || rawRole === 'admin' ? rawRole : role;
@@ -176,20 +176,16 @@ export const SignupPage: React.FC = () => {
           },
           { merge: true }
         );
-
-        if (existingData.onboardingCompleted === false) {
-          navigate(`/onboarding?role=${matchedRole}`, { replace: true });
-        } else {
-          navigate(`/${matchedRole}/dashboard`, { replace: true });
-        }
+        navigate(`/${matchedRole}/dashboard`, { replace: true });
       } else {
-        // Create fresh user doc with the chosen role
+        // Brand new registration or incomplete onboarding:
+        // Strictly assign the role chosen on this signup page (e.g. 'symbiote' or 'client')
         const nameParts = (user.displayName || '').trim().split(' ').filter(Boolean);
         const gFirstName = nameParts[0] || (user.email ? user.email.split('@')[0] : 'User');
         const gLastName = nameParts.slice(1).join(' ') || '';
         const gFullName = user.displayName || `${gFirstName} ${gLastName}`.trim() || 'User';
 
-        const newUserData = {
+        const updatedUserData = {
           uid: user.uid,
           firstName: gFirstName,
           lastName: gLastName,
@@ -201,12 +197,12 @@ export const SignupPage: React.FC = () => {
           emailVerified: user.emailVerified ?? true,
           avatarUrl: user.photoURL || undefined,
           onboardingCompleted: false,
-          createdAt: new Date().toISOString(),
+          createdAt: existingData?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           lastActiveAt: serverTimestamp(),
         };
 
-        await setDoc(userDocRef, newUserData);
+        await setDoc(userDocRef, updatedUserData, { merge: true });
         setRole(role);
         navigate(`/onboarding?role=${role}`, { replace: true });
       }

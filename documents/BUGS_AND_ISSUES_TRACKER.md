@@ -2478,7 +2478,7 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 * **SMTP Host**: `smtp.gmail.com`
 * **SMTP Port**: `465` (SSL Secure Connection)
 * **Authenticated Account**: `team@pixelgenesys.com`
-* **Application Password**: `ufosccidxxkpntjf` (16-character dedicated Google App Password)
+* **Application Password**: `<rotated — stored in production environment variables only>`
 * **Sender Address**: `team@pixelgenesys.com`
 
 **Live Verification Flow**:
@@ -2486,6 +2486,84 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 2. Backend `/api/auth/send-verification-otp` generates a cryptographic 6-digit numeric OTP.
 3. Transporter connects to `smtp.gmail.com:465` with `team@pixelgenesys.com` credentials and dispatches a dark-mode styled HTML email directly to the user's inbox.
 4. User inputs the 6 digits on `/verify-email` with auto-focus inputs and a 60-second resend cooldown timer.
+
+---
+
+### #83 ✅ [P0] Google Sign-In — Firestore Doc Not Created for New Users
+
+* **Category**: Authentication / User Management
+* **Location**: `src/pages/public/LoginPage.tsx` — `handleGoogleSignIn()` lines 380–384
+* **Original Problem**: When a new user signed in via "Continue with Google" and no `?role=` URL param was present, the code navigated directly to `/portal-select` **without creating a Firestore user document**. This meant the user existed in Firebase Auth but was completely invisible in the Admin panel and had no profile data.
+* **Root Cause**: Missing `setDoc` call in the `else` branch of the new-Google-user flow (line 381 — only called `navigate('/portal-select')` with no document creation).
+* **Resolution**:
+  * Added immediate `setDoc` to `users/{uid}` before `navigate('/portal-select')` in `handleGoogleSignIn()`.
+  * Document is created with `role: 'client'` as default — overwritten when user completes onboarding via `PortalSelectPage` + `OnboardingPage`.
+  * All fields populated from Google OAuth profile: `displayName`, `firstName`, `lastName`, `email`, `avatarUrl`, `emailVerified`, `onboardingCompleted: false`.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite + esbuild build successful)
+  * `npm test` → ✅ 144/144 tests passed
+* **Status**: Resolved & Verified ✅ (2026-09-29)
+
+---
+
+### #84 🔵 [P2] Ghost Users — Incomplete Registrations in Firestore
+
+* **Category**: Data Quality / Admin Panel
+* **Location**: Firestore `/users` collection
+* **Original Problem**: Firestore scan revealed **5 user documents** with `email: undefined`, no display name, and in some cases `role: undefined`. These are broken/incomplete registrations that pollute the Admin User Management panel.
+* **Affected UIDs**: Discovered via `scripts/check_google_users_client.ts` scan on 2026-09-29 (entries #12, #15, #16, #17, #26, #29 in scan results).
+* **Additional**: User "Taqi" has a duplicate entry (#40) with blank email and undefined role.
+* **Resolution Required**: Manual deletion via Admin Portal → User Management, or via Firebase Console → Firestore → `/users` collection. No code change required.
+* **Status**: Open — Pending manual cleanup by admin ⏳
+
+---
+
+### #85 ✅ [P0] Google OAuth Portal Routing, Role Hijacking & Premature Dashboard Redirect Fixed
+
+* **Category**: Authentication / OAuth Lifecycle / RBAC Routing
+* **Location**: `src/context/AuthContext.tsx`, `src/pages/public/LoginPage.tsx`, `src/pages/public/SignupPage.tsx`, `src/pages/public/PortalSelectPage.tsx`, `src/components/PublicOnlyRoute.tsx`
+* **Original Problem**: 
+  1. When a user clicked "Continue as Freelancer" from `/portal-select` and signed in with Google, they were redirected to the Client dashboard instead of the Freelancer portal, skipping onboarding.
+  2. `touchActive()` in `AuthContext.tsx` was creating a partial Firestore document without `email` or `role`.
+  3. `LoginPage.tsx` had an unconstrained `useEffect` redirect hook that immediately redirected users to `/${currentRole}/dashboard` as soon as `firebaseUser` was set, racing ahead of role selection.
+  4. `PublicOnlyRoute.tsx` treated `onboardingCompleted: undefined` as `true` (`onboardingCompleted !== false`), prematurely ejecting users from `/portal-select` to `/client/dashboard`.
+* **Resolution & Implementation**:
+  * **`AuthContext.tsx`**: Updated `touchActive()` to atomically record user metadata (`displayName`, `fullName`, `email`, `avatarUrl`, `emailVerified`, `lastActiveAt`, `isOnline`) without creating ghost records or defaulting to `client`. If a user document has no role, `currentRole` remains `null`.
+  * **`LoginPage.tsx`**: Updated auto-redirect hook to require `userProfile?.role` and `userProfile.onboardingCompleted === true`. Updated `handleGoogleSignIn` to route new users to `/portal-select` with their profile metadata saved in Firestore for Admin visibility.
+  * **`SignupPage.tsx`**: Updated `handleGoogleSignUp` so that if a user signs up on `/signup?role=symbiote` or `/signup?role=client`, that exact role is strictly preserved in Firestore and the user is routed to `/onboarding?role=${role}`.
+  * **`PortalSelectPage.tsx`**: Added an authenticated check that allows users without roles to remain on `/portal-select` and choose their role, only redirecting already-onboarded users.
+  * **`PublicOnlyRoute.tsx`**: Hardened guard to require `Boolean(activeUser.role)` and `activeUser.onboardingCompleted === true` before redirecting.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite + esbuild build successful)
+  * `npm test` → ✅ 144/144 tests passed (100%)
+* **Status**: Resolved & Verified ✅ (2026-09-29)
+
+---
+
+### #86 ✅ [P0] Admin Role Overwritten to Client via `users.ts` Auto-Heal & Listener Fallbacks
+
+* **Category**: Authentication / User State & RBAC Integrity
+* **Location**: `src/lib/firestore/users.ts` (`getUserProfile`, `subscribeToUserProfile`)
+* **Original Problem**: 
+  When an administrator (`dev.pixelgenesys@gmail.com`) logged into the platform, their Firestore document role was overwritten from `"admin"` to `"client"`. This routed the admin into the Client Portal (`/client/dashboard`) and caused access-denied errors across administrative routes.
+* **Root Cause**:
+  1. `getUserProfile()` contained an email-fallback lookup that normalized missing/falsy roles to `'client'` (`foundData.role || 'client'`) and saved the document back with `{ merge: true }`.
+  2. `getUserProfile()` contained a ghost account auto-heal block (lines 56–76) that hardcoded `role: 'client'` and wrote it to Firestore whenever a document was partial or missing a role.
+  3. `subscribeToUserProfile()` real-time listener also contained the `foundData.role || 'client'` fallback which persisted `role: 'client'` on snapshot changes.
+  4. If an account had partial session sync, these fallback paths systematically forced `role: 'client'`, corrupting administrator and freelancer roles.
+* **Resolution & Implementation**:
+  1. **Safe Role Normalization in `getUserProfile`**: Removed `|| 'client'`. Only normalizes if `foundData.role` actually exists; merges without injecting a role if absent, preventing corruption of existing roles.
+  2. **Ghost Account Skeleton Decoupling**: Removed hardcoded `role: 'client'` from the ghost auto-heal block. The skeleton document saves basic identifiers (`email`, `displayName`, `fullName`) with zero role assignment; role selection must happen explicitly via `/portal-select`.
+  3. **Safe Real-Time Listener in `subscribeToUserProfile`**: Removed `|| 'client'` from the real-time snapshot fallback sync.
+  4. **Restored Admin Document**: Restored `dev.pixelgenesys@gmail.com` (UID: `Bb72Vp4xBDYso9BhdGg7tAvk8Pj1`) `role: "admin"` directly in Cloud Firestore via Firebase Admin SDK.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite production build succeeded)
+  * `npm test` → ✅ 144/144 tests passed (100%)
+  * Admin document verified in Firestore: `role: "admin"`
+* **Status**: Resolved & Verified ✅ (2026-09-29)
 
 ---
 

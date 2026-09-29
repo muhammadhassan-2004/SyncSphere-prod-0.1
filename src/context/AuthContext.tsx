@@ -101,18 +101,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('syncsphere_demo_mode');
 
           let heartbeatTimer: any = null;
-          // Record active login/session timestamp
+          // Record active login/session timestamp and ensure basic user metadata exists
           const touchActive = async () => {
             try {
-              await setDoc(
-                doc(db, 'users', user.uid),
-                {
-                  lastActiveAt: serverTimestamp(),
-                  updatedAt: new Date().toISOString(),
-                  isOnline: true,
-                },
-                { merge: true }
-              );
+              const nameParts = (user.displayName || '').trim().split(' ').filter(Boolean);
+              const gFirstName = nameParts[0] || (user.email ? user.email.split('@')[0] : 'User');
+              const gLastName = nameParts.slice(1).join(' ') || '';
+              const gFullName = user.displayName || `${gFirstName} ${gLastName}`.trim() || 'User';
+
+              const basicData: Record<string, any> = {
+                uid: user.uid,
+                email: (user.email || '').toLowerCase(),
+                displayName: gFullName,
+                fullName: gFullName,
+                lastActiveAt: serverTimestamp(),
+                updatedAt: new Date().toISOString(),
+                isOnline: true,
+              };
+              if (user.photoURL) {
+                basicData.avatarUrl = user.photoURL;
+              }
+              if (typeof user.emailVerified === 'boolean') {
+                basicData.emailVerified = user.emailVerified;
+              }
+
+              await setDoc(doc(db, 'users', user.uid), basicData, { merge: true });
             } catch (err) {
               console.warn('Failed to update lastActiveAt on auth:', err);
             }
@@ -135,14 +148,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user.uid,
             (profile) => {
               if (!isMounted) return;
-              if (profile) {
+              if (profile && profile.role) {
                 const rawRole = profile.role;
                 const matchedRole: UserRole =
                   rawRole === 'freelancer'
                     ? 'symbiote'
                     : rawRole === 'client' || rawRole === 'symbiote' || rawRole === 'admin'
                     ? rawRole
-                    : 'client';
+                    : null;
 
                 const normalizedProfile: UserProfile = {
                   ...profile,
@@ -153,35 +166,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFirebaseUser(user);
                 setUserProfileState(normalizedProfile);
                 setCurrentRoleState(matchedRole);
-                localStorage.setItem(STORAGE_KEY, matchedRole);
-                localStorage.setItem(
-                  SESSION_STORAGE_KEY,
-                  JSON.stringify({
-                    uid: user.uid,
-                    email: profile.email || user.email || '',
-                    displayName: profile.displayName || user.displayName || 'User',
-                    role: matchedRole,
-                    avatarUrl: profile.avatarUrl,
-                  })
-                );
-              } else {
-                // Document doesn't exist yet, construct basic profile
-                const savedStoredRole = getInitialRole() || 'client';
-
-                const fallbackProfile: UserProfile = {
-                  uid: user.uid,
-                  email: user.email || '',
-                  displayName: user.displayName || user.email?.split('@')[0] || 'User',
-                  role: savedStoredRole,
-                  createdAt: '2026-01-01T00:00:00.000Z',
-                  updatedAt: '2026-01-01T00:00:00.000Z',
-                };
-
-                // Batched atomic update
+                if (matchedRole) {
+                  localStorage.setItem(STORAGE_KEY, matchedRole);
+                  localStorage.setItem(
+                    SESSION_STORAGE_KEY,
+                    JSON.stringify({
+                      uid: user.uid,
+                      email: profile.email || user.email || '',
+                      displayName: profile.displayName || user.displayName || 'User',
+                      role: matchedRole,
+                      avatarUrl: profile.avatarUrl,
+                    })
+                  );
+                }
+              } else if (profile) {
+                // Document exists but user has not selected a role yet
                 setFirebaseUser(user);
-                setUserProfileState(fallbackProfile);
-                setCurrentRoleState(savedStoredRole);
-                localStorage.setItem(STORAGE_KEY, savedStoredRole);
+                setUserProfileState(profile as UserProfile);
+                setCurrentRoleState(null);
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(SESSION_STORAGE_KEY);
+              } else {
+                // Document doesn't exist yet
+                setFirebaseUser(user);
+                setUserProfileState(null);
+                setCurrentRoleState(null);
               }
               setLoading(false);
             },
