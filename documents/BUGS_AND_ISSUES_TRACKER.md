@@ -2567,6 +2567,31 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 
 ---
 
+### #87 ✅ [P1] Google OAuth Users Not Visible in Admin User Management Dashboard
+
+* **Category**: Admin Panel / Firestore Query / User Visibility
+* **Location**: `src/lib/firestore/adminUsers.ts` (`getUsersPage`), `src/context/AuthContext.tsx` (`touchActive`)
+* **Original Problem**: 
+  Users who registered via **Google OAuth** (e.g., `markzukar110@gmail.com`, `rex.a@pixelgenesys.com`) were completely invisible in the Admin User Management page. The admin table would show 36 users while Firestore contained 46, silently hiding 10 accounts.
+* **Root Cause**:
+  Firestore has a strict rule: when `orderBy('createdAt', 'desc')` is applied in a query, **every document that does not have a `createdAt` field is entirely excluded from the results** — it is not sorted to the end, it simply disappears.
+  Google OAuth sign-in flows (`LoginPage.tsx`, `SignupPage.tsx`) saved `updatedAt` and `lastActiveAt` to Firestore but did NOT write a `createdAt` field. As a result, `getUsersPage()` with `orderBy('createdAt')` would silently skip all OAuth-registered users.
+* **Resolution & Implementation**:
+  1. **`adminUsers.ts` Query Fix**: Removed `orderBy('createdAt', 'desc')` from the primary Firestore query. Fetch all users with only role/status `where()` filters applied, then sort in-memory by `registeredAt` (which falls back to `updatedAt` or `lastActiveAt` if `createdAt` is absent). This guarantees zero user documents are silently excluded.
+  2. **`adminUsers.ts` Fallback Timestamps**: `registeredAt` and `lastLoginAt` now fall back to `updatedAt` / `lastActiveAt` if `createdAt` is missing, ensuring display is always accurate for OAuth users.
+  3. **`AuthContext.tsx` — `touchActive()` Backfill**: Added `getDoc()` check inside `touchActive()`. If a user document does not have `createdAt`, it is automatically written on next login, preventing future recurrence.
+  4. **Database Backfill**: One-time Admin SDK script (`scripts/backfill_created_at.ts`) was executed to add `createdAt` to all **10 existing legacy/OAuth documents** in production Firestore. Script was deleted after use.
+  5. **`AuthContext.tsx` Import Fix**: Added `getDoc` to the firebase/firestore import (missing after the backfill logic was added).
+* **Verification**:
+  * Script verified before fix: `orderBy(createdAt)` query returned 36 docs; `markzukar110@gmail.com` and `rex.a@pixelgenesys.com` were **absent**.
+  * Script verified after fix: `getUsersPage({})` returns **46/46 docs**; both Google users present: `Has markzukar110@gmail.com: true`, `Has rex.a@pixelgenesys.com: true`.
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite production build succeeded, 2716 modules, 19.11s)
+  * `npm test` → ✅ 144/144 tests passed (100%)
+* **Status**: Resolved & Verified ✅ (2026-09-29)
+
+---
+
 ## 📝 How to Log New Bugs in this File
 
 When identifying a new issue:

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/src/lib/firebase';
 import { UserProfile } from '@/src/types/firestore';
 import { subscribeToUserProfile } from '@/src/lib/firestore/users';
@@ -125,7 +125,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 basicData.emailVerified = user.emailVerified;
               }
 
-              await setDoc(doc(db, 'users', user.uid), basicData, { merge: true });
+              // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
+              const userRef = doc(db, 'users', user.uid);
+              const userSnap = await getDoc(userRef);
+              if (!userSnap.exists() || !userSnap.data()?.createdAt) {
+                basicData.createdAt = new Date().toISOString();
+              }
+
+              await setDoc(userRef, basicData, { merge: true });
             } catch (err) {
               console.warn('Failed to update lastActiveAt on auth:', err);
             }
