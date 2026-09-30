@@ -7,6 +7,8 @@ import { Avatar } from '@/src/components/ui/avatar';
 import { StatusPill } from '@/src/components/ui/badge';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
 import { SyncSphereLogo } from '@/src/components/ui/SyncSphereLogo';
+import { EmailVerificationGuard } from '@/src/components/guards/EmailVerificationGuard';
+
 import {
   subscribeToNotifications,
   subscribeToClientApplications,
@@ -391,6 +393,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
   };
 
   return (
+    <EmailVerificationGuard role={role}>
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased">
       {/* SIDEBAR: ~240px width, fixed left, full height, surface fill, 1px border right */}
       <aside className="w-[240px] shrink-0 h-full bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col justify-between z-20 select-none">
@@ -398,6 +401,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
         <div className="p-4 border-b border-[var(--color-border)] space-y-2">
           <Link
             to={roleConfig.defaultPath}
+
             className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-cyan)] rounded-md transition-opacity hover:opacity-85 cursor-pointer"
             title="Go to Dashboard"
             aria-label="Go to Dashboard"
@@ -735,6 +739,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
         </main>
       </div>
     </div>
+    </EmailVerificationGuard>
   );
 };
 
