@@ -31,6 +31,7 @@ import {
   FileText,
   Calendar,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -196,6 +197,12 @@ export const SymbioteDashboardPage: React.FC = () => {
   const paidPercent = totalBilled > 0 ? Math.round((totalEarnings / totalBilled) * 100) : 0;
   const pendingPercent = totalBilled > 0 ? 100 - paidPercent : 0;
 
+  // Profile Completeness Detection for Public Talent Search Visibility
+  const isProfileIncomplete = Boolean(
+    userProfile &&
+    (!userProfile.skills || userProfile.skills.length === 0 || !userProfile.hourlyRate || !(userProfile.title || userProfile.jobTitle))
+  );
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12">
       {/* GREETING HEADER */}
@@ -218,6 +225,37 @@ export const SymbioteDashboardPage: React.FC = () => {
           <span>Find Projects</span>
         </Button>
       </div>
+
+      {/* INCOMPLETE PROFILE NOTICE BANNER */}
+      {isProfileIncomplete && (
+        <div className="p-4 sm:p-5 rounded-[12px] bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-400 font-mono">
+                  Profile Incomplete — Hidden from Client Search
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  Search Hidden
+                </span>
+              </div>
+              <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed max-w-2xl">
+                Your profile is currently not discoverable in client talent searches because essential details (skills, hourly rate, or job title) have not been added yet. Complete your profile to get discovered and receive project invitations.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => navigate('/symbiote/settings')}
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono text-xs font-bold px-4 py-2.5 rounded-lg whitespace-nowrap shrink-0 shadow-md flex items-center gap-1.5 transition-all self-end sm:self-center"
+          >
+            <span>Complete Profile</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
 
       {/* STAT CARD ROW 1 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

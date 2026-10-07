@@ -165,6 +165,11 @@ export function UserDetailPage() {
                 >
                   {status[0].toUpperCase() + status.slice(1)}
                 </Badge>
+                {role !== 'admin' && (
+                  <Badge variant={target.profileCompleted !== false && (role === 'symbiote' ? Boolean(Array.isArray(target.skills) && target.skills.length > 0 && target.hourlyRate) : Boolean(target.companyName)) ? 'blue' : 'amber'}>
+                    {target.profileCompleted !== false && (role === 'symbiote' ? Boolean(Array.isArray(target.skills) && target.skills.length > 0 && target.hourlyRate) : Boolean(target.companyName)) ? 'Profile Complete' : 'Profile Incomplete'}
+                  </Badge>
+                )}
                 <span className="text-xs text-[var(--color-text-tertiary)]">
                   Registered: {registeredDateStr}
                 </span>

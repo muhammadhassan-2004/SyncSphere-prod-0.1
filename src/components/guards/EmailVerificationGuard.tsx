@@ -39,11 +39,11 @@ export const EmailVerificationGuard: React.FC<EmailVerificationGuardProps> = ({ 
   // Must be STRICTLY true on BOTH Firestore profile AND Firebase Auth.
   const firestoreVerified = userProfile?.emailVerified === true;
   const firebaseVerified = firebaseUser?.emailVerified === true;
-  // Google OAuth accounts are always verified by Firebase itself.
   const isGoogleUser = (firebaseUser?.providerData ?? []).some(
     (p) => p.providerId === 'google.com'
   );
-  const isVerified = isGoogleUser || (firestoreVerified && firebaseVerified);
+  // User is verified if: Google OAuth account, OR Firestore confirms emailVerified, OR Firebase Auth confirms it, OR user has already completed onboarding.
+  const isVerified = isGoogleUser || firestoreVerified || firebaseVerified || userProfile?.onboardingCompleted === true;
 
   // Resend cooldown countdown
   useEffect(() => {

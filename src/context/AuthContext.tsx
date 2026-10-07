@@ -62,6 +62,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             displayName: parsed.displayName || 'User',
             role: parsed.role,
             avatarUrl: parsed.avatarUrl,
+            emailVerified: parsed.emailVerified,
+            onboardingCompleted: parsed.onboardingCompleted,
             createdAt: parsed.createdAt || '2026-01-01T00:00:00.000Z',
             updatedAt: parsed.updatedAt || '2026-01-01T00:00:00.000Z',
           };
@@ -75,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [currentRole, setCurrentRoleState] = useState<UserRole>(getInitialRole);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(getInitialProfile);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unSubProfile: (() => void) | null = null;
@@ -121,15 +123,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (user.photoURL) {
                 basicData.avatarUrl = user.photoURL;
               }
-              if (typeof user.emailVerified === 'boolean') {
-                basicData.emailVerified = user.emailVerified;
-              }
 
               // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
               const userRef = doc(db, 'users', user.uid);
               const userSnap = await getDoc(userRef);
               if (!userSnap.exists() || !userSnap.data()?.createdAt) {
                 basicData.createdAt = new Date().toISOString();
+              }
+
+              // Preserve and auto-heal verified email status:
+              // If verified in Firebase Auth, OR in Firestore, OR if onboarding was completed, retain true
+              const isAlreadyVerified =
+                user.emailVerified === true ||
+                (userSnap.exists() && (userSnap.data()?.emailVerified === true || userSnap.data()?.onboardingCompleted === true));
+
+              if (isAlreadyVerified) {
+                basicData.emailVerified = true;
+              } else if (!userSnap.exists()) {
+                basicData.emailVerified = false;
               }
 
               await setDoc(userRef, basicData, { merge: true });
@@ -183,6 +194,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       displayName: profile.displayName || user.displayName || 'User',
                       role: matchedRole,
                       avatarUrl: profile.avatarUrl,
+                      emailVerified: profile.emailVerified === true || profile.onboardingCompleted === true || user.emailVerified === true,
+                      onboardingCompleted: profile.onboardingCompleted === true,
                     })
                   );
                 }
@@ -289,6 +302,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: firebaseUser.email || '',
         displayName: firebaseUser.displayName || defaultRoleName,
         role: currentRole || 'client',
+        emailVerified: firebaseUser.emailVerified,
         createdAt: (firebaseUser.metadata as any)?.creationTime || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

@@ -2,19 +2,36 @@
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
 
-# Run and deploy your AI Studio app
+# SyncSphere
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/dcf159da-2aba-410e-a481-a5363c39333d
+Modern AI-driven workspace and freelance marketplace platform built with React 19, Vite, Express, and Firebase.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js (v18+)
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+   ```bash
+   npm install
+   ```
+
+2. Configure environment variables:
+   Copy `.env.example` to `.env` and provide your configuration keys:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Run development server (Vite + Express):
+   ```bash
+   npm run dev
+   ```
+
+4. Production Build:
+   ```bash
+   npm run build
+   ```
+
+5. Production Start:
+   ```bash
+   npm run start
+   ```

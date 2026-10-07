@@ -144,19 +144,36 @@ export function subscribeToProjectsByOwner(
   };
 }
 
+/**
+ * Recursively strips undefined fields from an object to ensure Firestore setDoc/updateDoc
+ * never throws "Unsupported field value: undefined" errors.
+ */
+function cleanUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) continue;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = cleanUndefined(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as Partial<T>;
+}
+
 export async function saveProjectDraft(
   draftId: string | null,
   data: Partial<Project> & { ownerId: string }
 ): Promise<string> {
   try {
     const now = new Date().toISOString();
-    const payload = {
+    const payload = cleanUndefined({
       ...data,
       clientId: data.clientId || data.ownerId,
       ownerId: data.ownerId || data.clientId,
       status: data.status || 'draft',
       updatedAt: now,
-    };
+    });
     if (draftId) {
       const docRef = doc(db, PROJECTS_COLLECTION, draftId);
       await setDoc(docRef, payload, { merge: true });

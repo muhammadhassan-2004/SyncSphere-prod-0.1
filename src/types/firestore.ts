@@ -396,12 +396,15 @@ export interface InvoicePaymentDetails {
   paymentIntentId?: string;
   receiptUrl?: string;
   paidAt?: string;
+  markedPaidAt?: string;
+  confirmedAt?: string;
+  referenceNote?: string;
   brand?: string;
   last4?: string;
   fee?: number;
   netAmount?: number;
   directSettled?: boolean;
-  gateway?: 'stripe' | 'sandbox' | 'bank_transfer';
+  gateway?: 'stripe' | 'sandbox' | 'bank_transfer' | 'direct_transfer';
 }
 
 export interface Invoice {
@@ -418,7 +421,7 @@ export interface Invoice {
   amount: number;
   issuedDate?: string;
   dueDate: string;
-  status: 'pending' | 'paid' | 'overdue' | 'approved' | 'draft';
+  status: 'pending' | 'marked_paid' | 'paid' | 'overdue' | 'approved' | 'draft';
   lineItems?: InvoiceLineItem[];
   paymentMethod?: string;
   paymentDetails?: InvoicePaymentDetails;

@@ -2630,6 +2630,153 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
   * `npm run build` → ✅ Exit 0 (Vite production build succeeded, 13.88s)
 * **Status**: Resolved & Verified ✅ (2026-09-29)
 
+### #89 ✅ [P1] Environment Variables Template & README Setup Synchronization
+
+* **Category**: Configuration / Deployment / Documentation
+* **Location**: `.env.example`, `README.md`
+* **Original Problem**:
+  1. `.env.example` lacked documentation and placeholders for several server and client environment variables (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `FIREBASE_PROJECT_ID`, `VITE_FIREBASE_API_KEY`, `PORT`, `NODE_ENV`).
+  2. `README.md` referenced a non-existent `.env.local` file instead of `.env`, and lacked standard Vite + Express production build & startup instructions.
+* **Resolution & Implementation**:
+  1. **`.env.example`**: Updated template with all required keys and safe placeholder values, organized by service (Gemini, Cloudinary, SMTP, Firebase Admin, Stripe).
+  2. **`README.md`**: Updated local development instructions with correct `.env` copy command, Node version requirement, build command (`npm run build`), and production start command (`npm run start`).
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite production build succeeded)
+* **Status**: Resolved & Verified ✅ (2026-10-01)
+
+### #90 ✅ [P2] Production Bundle Splitting via Vite `manualChunks` Optimization
+
+* **Category**: Performance / Frontend Bundling / Vite Optimization
+* **Location**: `vite.config.ts`
+* **Original Problem**:
+  The production build compiled the entire application entry into a bloated 1,222 kB JavaScript chunk (`index.js`), which resulted in slow initial page loads, poor mobile performance, and Rollup chunk size warnings.
+* **Resolution & Implementation**:
+  1. Configured `build.rollupOptions.output.manualChunks` in `vite.config.ts` to isolate vendor dependencies:
+     * `vendor-react`: React, React DOM, React Router
+     * `vendor-firebase`: Firebase App, Auth, Firestore, Storage
+     * `vendor-charts`: Recharts, D3
+     * `vendor-pdf`: jsPDF, html2canvas
+     * `vendor-icons`: Lucide React
+  2. Main application bundle (`index.js`) size plummeted from **1,222 kB (322 kB gzip)** down to **110 kB (31.9 kB gzip)** (>90% reduction in entry bundle footprint).
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite bundle completed in 12.45s)
+* **Status**: Resolved & Verified ✅ (2026-10-01)
+
+### #91 ✅ [P2] Containerized Production Deployment Architecture (`Dockerfile` & `.dockerignore`)
+
+* **Category**: DevOps / Deployment / Containerization
+* **Location**: `Dockerfile`, `.dockerignore`
+* **Original Problem**:
+  The repository lacked containerization assets for cloud deployments (e.g. Google Cloud Run, AWS ECS, Docker VPS), making reproducible production deployments difficult to configure.
+* **Resolution & Implementation**:
+  1. Created multi-stage lightweight `Dockerfile` based on `node:20-alpine`:
+     * Stage 1 (`builder`): Installs all dependencies, compiles TypeScript and bundles the Vite app and Express server (`dist/server.cjs`).
+     * Stage 2 (`runner`): Production image installing production-only dependencies, copying compiled assets, exposing port 3000, and running as non-root user (`syncsphere:nodejs`).
+  2. Created `.dockerignore` preventing local node modules, environment files, and git history from leaking into container builds.
+* **Verification**:
+  * `tsc --noEmit` → ✅ Exit 0 (0 TypeScript errors)
+  * `npm run build` → ✅ Exit 0 (Vite + esbuild successful)
+  * `npm test` → ✅ 144/144 tests passed (100%)
+### 92. ✅ [P0] Project Wizard Budget Restoration & Out-of-Platform Payment Flow
+
+* **Category**: Project Creation, Payment Architecture & Billing Decoupling
+* **Date Logged**: 2026-10-07
+* **Location**:
+  - `src/pages/client/CreateProjectStep2Page.tsx`
+  - `src/pages/client/CreateProjectStep4Page.tsx`
+  - `src/lib/firestore/workspace.ts`
+  - `src/components/project/ApprovalsQueueView.tsx`
+  - `src/types/firestore.ts`
+  - `src/lib/firestore/invoices.ts`
+  - `src/pages/client/InvoiceManagementPage.tsx`
+  - `src/pages/symbiote/SymbioteInvoicesPage.tsx`
+* **Original Problem**:
+  1. **Budget Option Missing in Project Wizard**: The client reported that the budget configuration (Fixed Price vs Hourly Rate, Currency, Min/Max Budget) had been removed during project creation, conflicting with the approved Figma designs and pilot launch requirements.
+  2. **Coupled Auto-Billing on Task Approval**: `approveTaskByClient` in `workspace.ts` was automatically creating invoices and debiting milestones upon task completion, creating billing conflicts when clients and freelancers need to agree on terms and rates separately.
+  3. **Out-of-Platform Payment Settlement Flow**: The business model requires client and freelancer to agree upon payments via chat and transfer funds directly out of platform (direct transfer / wire / cash), with client marking the status as "Paid (Direct Transfer)" and the freelancer confirming receipt.
+* **Resolution & Implementation**:
+  1. **Project Wizard Budget Restored (`CreateProjectStep2Page.tsx` & `Step4Page.tsx`)**:
+     - Restored Budget Model selection cards (Fixed Price Project vs Hourly Rate).
+     - Restored Currency selector (USD, EUR, GBP, CAD, AUD) and Min/Max target budget inputs.
+     - Updated Step 4 review screen to accurately present chosen budget model and range in the project summary.
+  2. **Decoupled Task & Milestone Approvals (`workspace.ts` & `ApprovalsQueueView.tsx`)**:
+     - Removed automatic `createInvoice` invocations and specialist rate deductions from `approveTaskByClient` and `approveMilestoneByClient`. Task approvals now strictly manage project progress and Kanban deliverable approval ("Done").
+     - Rebranded approval button in `ApprovalsQueueView` to "Approve Task" and status pill to "Awaiting Client Verification".
+  3. **Out-of-Platform Payment & Confirmation Architecture (`invoices.ts`, `InvoiceManagementPage.tsx`, `SymbioteInvoicesPage.tsx`)**:
+     - Expanded `Invoice['status']` in `src/types/firestore.ts` to include `'marked_paid'` (`'pending' | 'marked_paid' | 'paid' | 'overdue' | 'approved' | 'draft'`).
+     - Added `markInvoicePaidByClient(invoiceId, referenceNote)` allowing clients to record direct out-of-platform transfers with custom notes.
+     - Added `confirmInvoicePaymentBySymbiote(invoiceId)` allowing specialists to verify receipt and finalize invoice status to `'paid'`.
+     - Added client-side "Mark as Paid (Direct Transfer)" modal and status pill in `InvoiceManagementPage.tsx`.
+     - Added freelancer-side "Confirm Receipt" button in table and details modal in `SymbioteInvoicesPage.tsx`.
+* **Verification**:
+  - `tsc --noEmit` → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ Automated test suite updated and passing
+  - `npm run build` → ✅ Exit code 0
+### 93. ✅ [P1] Specialist Profile Completeness Transparency & Onboarding Skip Handling
+
+* **Category**: User Onboarding, Profile Visibility & Admin Management
+* **Date Logged**: 2026-10-07
+* **Location**:
+  - `src/pages/public/OnboardingPage.tsx`
+  - `src/pages/symbiote/SymbioteDashboardPage.tsx`
+  - `src/lib/firestore/adminUsers.ts`
+  - `src/pages/admin/UserManagementPage.tsx`
+  - `src/pages/admin/UserDetailPage.tsx`
+* **Original Problem**:
+  When users registered via Google OAuth and skipped onboarding / profile setup, their specialist profile had empty technical fields (no skills, no hourly rate, no title). As designed, they were hidden from client talent searches and AI matching, but without explicit feedback:
+  1. The freelancer dashboard had no indicator explaining why the profile was hidden or how to publish it.
+  2. Onboarding had no confirmation clarifying that skipping setup delays discoverability.
+  3. Super Admin User Management showed users without indicating whether their onboarding profile was complete or skipped.
+* **Resolution & Implementation**:
+  1. **Freelancer Dashboard Incomplete Profile Alert (`SymbioteDashboardPage.tsx`)**:
+     - Added a prominent top alert banner displayed whenever essential profile fields (`skills`, `hourlyRate`, `title`) are missing.
+     - Clarifies that the profile is hidden from client searches and provides a direct 1-click CTA button (`Complete Profile →`) navigating to `/symbiote/settings`.
+  2. **Onboarding Skip Confirmation Notice (`OnboardingPage.tsx`)**:
+     - Added a confirmation modal upon clicking "Skip for now" notifying the user that public search visibility requires adding skills and rates in Settings.
+     - Tracks `profileCompleted: false` in Firestore on skip and sets `profileCompleted: true` on full setup completion.
+  3. **Admin User Management Transparency (`adminUsers.ts`, `UserManagementPage.tsx`, `UserDetailPage.tsx`)**:
+     - Populated `profileCompleted` across `AdminUserRow`.
+     - Rendered a visible `Incomplete Profile` status indicator in the user management table and `Profile Incomplete` badge in user detail view.
+* **Verification**:
+  - `tsc --noEmit` → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ Automated test suite passing
+  - `npm run build` → ✅ Exit code 0
+* **Status**: Resolved & Verified ✅ (2026-10-07)
+
+---
+
+### 94. ✅ [P0] Onboarding Completion Mandate, Email Verification Loop Fix & Project Draft Sanitization
+
+* **Category**: Authentication, User Onboarding & Project Creation Flow
+* **Date Logged**: 2026-10-07
+* **Location**:
+  - `src/pages/public/OnboardingPage.tsx`
+  - `src/context/AuthContext.tsx`
+  - `src/lib/firestore/projects.ts`
+* **Original Problem**:
+  During local end-to-end testing, the user encountered three issues:
+  1. Onboarding had a "Skip for now" button that allowed users to bypass entering required profile information, leading to unpopulated specialist/client profiles.
+  2. After email verification and completing onboarding, refreshing the page (F5) redirected the user back to `/verify-email`. Root cause: `AuthContext.tsx` line 124 executed `basicData.emailVerified = user.emailVerified;` during `touchActive()`. Since Firebase Auth's client object had `emailVerified: false` while Firestore had `emailVerified: true`, page reloads overwrote Firestore back to `false`, causing `ProtectedRoute.tsx` to bounce the user to `/verify-email`.
+  3. When creating a project on Step 1 / Step 2, clicking Continue failed with "Failed to save draft. Please try again." Root cause: optional fields like `companyName`, `clientEmail`, `minBudget`, or `maxBudget` were passed as `undefined`. Firestore Web SDK strictly throws `FirebaseError: Function setDoc() called with invalid data. Unsupported field value: undefined`.
+* **Resolution & Implementation**:
+  1. **Onboarding Mandate Purge of Skip Bypass (`OnboardingPage.tsx`)**:
+     - Removed the "Skip for now" button from the onboarding header and completely purged the skip modal.
+     - Users are now required to complete step 1 and step 2 to access their workspace.
+     - Ensured `emailVerified: true`, `profileCompleted: true`, and `onboardingCompleted: true` are locked upon setup completion.
+  2. **Email Verification Preservation on Page Reload (`AuthContext.tsx`)**:
+     - Updated `touchActive` to check `if (user.emailVerified === true || (userSnap.exists() && userSnap.data()?.emailVerified === true)) { basicData.emailVerified = true; }`.
+     - Completely stopped overwriting Firestore's verified status back to `false` on reloads and heartbeats.
+  3. **Recursive Undefined Sanitizer for Project Drafts (`src/lib/firestore/projects.ts`)**:
+     - Introduced `cleanUndefined<T>(obj: T): Partial<T>` that recursively strips any `undefined` values before calling `setDoc(docRef, payload, { merge: true })`.
+     - Project drafts can now be saved cleanly regardless of empty/undefined optional fields.
+* **Verification**:
+  - `tsc --noEmit` → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ 162/162 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0
+* **Status**: Resolved & Verified ✅ (2026-10-07)
+
 ---
 
 ## 📝 How to Log New Bugs in this File

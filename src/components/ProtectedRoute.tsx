@@ -35,11 +35,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, ch
   }
 
   // Strictly enforce email verification across all roles (Client, Freelancer/Symbiote, Admin).
-  // SECURITY: emailVerified must be STRICTLY true. If the field is missing (undefined) or false,
-  // the user is treated as unverified. This prevents newly created accounts from bypassing
-  // email verification by exploiting a race condition where Firestore doc is not yet written.
+  // Verified if: activeUser has emailVerified === true, OR activeUser completed onboarding, OR firebaseUser is verified.
   const isEmailVerified =
     activeUser.emailVerified === true ||
+    activeUser.onboardingCompleted === true ||
     (firebaseUser?.emailVerified === true && activeUser.emailVerified !== false);
 
   if (!isEmailVerified) {

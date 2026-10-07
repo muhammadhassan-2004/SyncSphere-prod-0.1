@@ -17,6 +17,7 @@ import {
   Sliders,
   Check,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
@@ -284,7 +285,7 @@ export const OnboardingPage: React.FC = () => {
     }
   };
 
-  const handleSaveOnboarding = async (skip: boolean = false) => {
+  const handleSaveOnboarding = async () => {
     setSaving(true);
     const targetDashboard = `/${activeRole}/dashboard`;
 
@@ -294,81 +295,81 @@ export const OnboardingPage: React.FC = () => {
       if (uid) {
         let updates: Record<string, any> = {
           onboardingCompleted: true,
+          profileCompleted: true,
+          emailVerified: true,
           role: activeRole,
           updatedAt: new Date().toISOString(),
           lastActiveAt: serverTimestamp(),
         };
 
-        if (!skip) {
-          if (phoneNumber.trim()) {
-            updates.phoneNumber = phoneNumber.trim();
-          }
+        if (phoneNumber.trim()) {
+          updates.phoneNumber = phoneNumber.trim();
+        }
 
-          if (activeRole === 'client') {
-            const normalizedSize = normalizeCompanySize(companySize);
-            const normalizedInd = normalizeIndustry(industry);
-            const rawLocation = location.trim();
-            const normalizedCtry = normalizeCountry(rawLocation);
-            const detectedTz = getDetectedTimezone();
-            const resolvedBio = projectDescription.trim() || 'Enterprise technology organization delivering high-scale digital solutions.';
+        if (activeRole === 'client') {
+          const normalizedSize = normalizeCompanySize(companySize);
+          const normalizedInd = normalizeIndustry(industry);
+          const rawLocation = location.trim();
+          const normalizedCtry = normalizeCountry(rawLocation);
+          const detectedTz = getDetectedTimezone();
+          const resolvedBio = projectDescription.trim() || 'Enterprise technology organization delivering high-scale digital solutions.';
 
-            updates = {
-              ...updates,
+          updates = {
+            ...updates,
+            companyName: companyName.trim() || 'Card Private Limited',
+            industry: normalizedInd,
+            companySize: normalizedSize,
+            location: rawLocation || normalizedCtry,
+            country: normalizedCtry,
+            timeZone: detectedTz,
+            ...(website.trim() ? { websiteUrl: website.trim() } : {}),
+            ...(primaryGoal ? { primaryGoal } : {}),
+            ...(budgetRange ? { budgetRange } : {}),
+            bio: resolvedBio,
+            companyProfile: {
               companyName: companyName.trim() || 'Card Private Limited',
               industry: normalizedInd,
               companySize: normalizedSize,
-              location: rawLocation || normalizedCtry,
+              website: website.trim() || '',
               country: normalizedCtry,
               timeZone: detectedTz,
-              ...(website.trim() ? { websiteUrl: website.trim() } : {}),
-              ...(primaryGoal ? { primaryGoal } : {}),
-              ...(budgetRange ? { budgetRange } : {}),
-              bio: resolvedBio,
-              companyProfile: {
-                companyName: companyName.trim() || 'Card Private Limited',
-                industry: normalizedInd,
-                companySize: normalizedSize,
-                website: website.trim() || '',
-                country: normalizedCtry,
-                timeZone: detectedTz,
-                companyDescription: resolvedBio,
-              },
-            };
-          } else if (activeRole === 'symbiote') {
-            const parsedRate = typeof hourlyRate === 'string' ? parseFloat(hourlyRate) : hourlyRate;
-            const rawLocation = location.trim();
-            updates = {
-              ...updates,
-              ...(rawLocation ? { location: rawLocation, country: normalizeCountry(rawLocation) } : {}),
-              ...(jobTitle.trim() ? { title: jobTitle.trim(), jobTitle: jobTitle.trim() } : {}),
-              ...(!isNaN(parsedRate) && parsedRate > 0 ? { hourlyRate: parsedRate } : {}),
-              ...(skills.length > 0 ? { skills } : {}),
-              ...(experienceYears
-                ? {
-                    experience: experienceYears,
-                    experienceYears: experienceYears,
-                    yearsOfExperience: experienceYears,
-                  }
-                : {}),
-              ...(availability ? { availability } : {}),
-              ...(bio.trim() ? { bio: bio.trim() } : {}),
-              ...(portfolioUrl.trim()
-                ? { websiteUrl: portfolioUrl.trim(), portfolioUrl: portfolioUrl.trim() }
-                : {}),
-            };
-          } else if (activeRole === 'admin') {
-            updates = {
-              ...updates,
-              ...(department ? { department } : {}),
-              ...(adminTitle.trim() ? { adminTitle: adminTitle.trim(), jobTitle: adminTitle.trim() } : {}),
-              notificationPreferences: {
-                newApplications: true,
-                messages: true,
-                invoiceAlerts: alertCritical,
-                milestoneUpdates: alertSecurity,
-              },
-            };
-          }
+              companyDescription: resolvedBio,
+            },
+          };
+        } else if (activeRole === 'symbiote') {
+          const parsedRate = typeof hourlyRate === 'string' ? parseFloat(hourlyRate) : hourlyRate;
+          const rawLocation = location.trim();
+          updates = {
+            ...updates,
+            ...(rawLocation ? { location: rawLocation, country: normalizeCountry(rawLocation) } : {}),
+            ...(jobTitle.trim() ? { title: jobTitle.trim(), jobTitle: jobTitle.trim() } : {}),
+            ...(!isNaN(parsedRate) && parsedRate > 0 ? { hourlyRate: parsedRate } : {}),
+            ...(skills.length > 0 ? { skills } : {}),
+            ...(experienceYears
+              ? {
+                  experience: experienceYears,
+                  experienceYears: experienceYears,
+                  yearsOfExperience: experienceYears,
+                }
+              : {}),
+            ...(availability ? { availability } : {}),
+            ...(bio.trim() ? { bio: bio.trim() } : {}),
+            ...(portfolioUrl.trim()
+              ? { websiteUrl: portfolioUrl.trim(), portfolioUrl: portfolioUrl.trim() }
+              : {}),
+          };
+        } else if (activeRole === 'admin') {
+          updates = {
+            ...updates,
+            ...(department ? { department } : {}),
+            ...(adminTitle.trim() ? { adminTitle: adminTitle.trim(), jobTitle: adminTitle.trim() } : {}),
+            notificationPreferences: {
+              newApplications: true,
+              messages: true,
+              invoiceAlerts: alertCritical,
+              milestoneUpdates: alertSecurity,
+            },
+          };
         }
 
         try {
@@ -385,19 +386,11 @@ export const OnboardingPage: React.FC = () => {
         sessionStorage.removeItem(draftKey);
       } catch {}
 
-      if (skip) {
-        addToast({
-          title: 'Onboarding Skipped',
-          description: `Welcome to SyncSphere! You can complete your profile preferences anytime in Settings.`,
-          type: 'info',
-        });
-      } else {
-        addToast({
-          title: 'Profile Setup Complete',
-          description: `Welcome to your ${activeRole} workspace!`,
-          type: 'success',
-        });
-      }
+      addToast({
+        title: 'Profile Setup Complete',
+        description: `Welcome to your ${activeRole} workspace!`,
+        type: 'success',
+      });
 
       navigate(targetDashboard, { replace: true });
     } catch (err: any) {
@@ -470,15 +463,6 @@ export const OnboardingPage: React.FC = () => {
           <div className="text-xs text-[var(--color-text-secondary)] font-medium hidden sm:block">
             Step {step} of 2
           </div>
-          <button
-            type="button"
-            id="onboarding-skip-btn"
-            onClick={() => handleSaveOnboarding(true)}
-            disabled={saving}
-            className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] font-semibold transition-colors px-2.5 py-1 rounded-md hover:bg-[var(--color-surface-elevated)] cursor-pointer"
-          >
-            Skip for now
-          </button>
         </div>
       </header>
 
@@ -1173,7 +1157,7 @@ export const OnboardingPage: React.FC = () => {
                 <Button
                   type="button"
                   id="onboarding-complete-btn"
-                  onClick={() => handleSaveOnboarding(false)}
+                  onClick={() => handleSaveOnboarding()}
                   disabled={saving}
                   className="bg-gradient-to-r from-[var(--color-accent-cyan)] to-[var(--color-accent-green)] text-slate-950 font-bold hover:opacity-95 hover:shadow-lg hover:shadow-cyan-500/20 active:scale-[0.98] transition-all px-6 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer shadow-md text-xs sm:text-sm border-0"
                 >

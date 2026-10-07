@@ -460,7 +460,7 @@ export async function approveTaskByClient(
 
     await logProjectActivity(projectId, {
       title: 'Task Approved by Client',
-      description: `Task "${taskTitle}" was approved as Done. Ready for auto-invoicing.`,
+      description: `Task "${taskTitle}" was approved as Done.`,
       type: 'task',
     });
 
@@ -477,15 +477,13 @@ export async function approveTaskByClient(
       });
     }
 
-    // Auto-approve any time entries logged against this task and sum logged hours
-    let totalLoggedTimeHours = 0;
+    // Auto-approve any time entries logged against this task
     try {
       const timeColRef = collection(db, 'time_entries');
       const timeQuery = query(timeColRef, where('taskId', '==', taskId));
       const timeSnap = await getDocs(timeQuery);
       for (const tDoc of timeSnap.docs) {
         const entryData = tDoc.data() as Record<string, any>;
-        totalLoggedTimeHours += Number(entryData.hours || 0);
         if (entryData?.status !== 'approved') {
           await updateDoc(tDoc.ref, {
             status: 'approved',
@@ -496,128 +494,6 @@ export async function approveTaskByClient(
       }
     } catch (timeErr) {
       console.warn('Could not auto-approve time entries for task:', timeErr);
-    }
-
-    // DIRECT PER-TASK INVOICING AT FREELANCER'S AGREED RATE
-    try {
-      const projRef = doc(db, 'projects', projectId);
-      const projSnap = await getDoc(projRef);
-      if (projSnap.exists()) {
-        const projData = projSnap.data();
-        const clientId = projData.ownerId || projData.clientId;
-        const assigneeUid =
-          taskData?.assigneeId ||
-          (taskData?.assignees && taskData.assignees[0]?.uid) ||
-          projData.assignedSymbioteId ||
-          projData.symbioteId;
-        const assigneeName =
-          taskData?.assigneeName ||
-          (taskData?.assignees && taskData.assignees[0]?.displayName) ||
-          projData.assignedSymbioteName ||
-          'Specialist';
-
-        // 1. Determine freelancer agreed hourly rate from teamMembers or user profile
-        const assignedMember = (projData.teamMembers || []).find((m: any) => m.uid === assigneeUid);
-        let freelancerRate = Number(assignedMember?.hourlyRate);
-
-        if (!freelancerRate || freelancerRate <= 0) {
-          try {
-            if (assigneeUid) {
-              const userRef = doc(db, 'users', assigneeUid);
-              const userSnap = await getDoc(userRef);
-              if (userSnap.exists()) {
-                const uData = userSnap.data();
-                freelancerRate = Number(uData.hourlyRate || uData.rate);
-              }
-            }
-          } catch (uErr) {
-            console.warn('Could not fetch user profile rate:', uErr);
-          }
-        }
-
-        if (!freelancerRate || freelancerRate <= 0) {
-          freelancerRate = Number(projData.maxBudget) || Number(projData.hourlyRate) || 75;
-        }
-
-        // 2. Determine actual execution hours
-        const taskLogged = Number(taskData?.actualHours || taskData?.actualTotalHours || 0);
-        const effectiveHours = taskLogged > 0
-          ? taskLogged
-          : (totalLoggedTimeHours > 0 ? totalLoggedTimeHours : (Number(taskData?.estimatedHours) || 1));
-        const taskAmount = Math.max(25, Math.round(effectiveHours * freelancerRate));
-
-        // 3. Generate itemized direct invoice for this task (if not already invoiced)
-        if (clientId && assigneeUid && !taskData?.invoiced) {
-          const { createInvoice } = await import('@/src/lib/firestore/invoices');
-          const now = new Date();
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 14);
-          const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-          const invId = await createInvoice({
-            invoiceNumber,
-            clientId,
-            symbioteId: assigneeUid,
-            symbioteName: assigneeName,
-            projectId,
-            projectName: projData.title || 'Project Deliverable',
-            title: `Task Settlement: ${taskTitle}`,
-            description: `Direct task settlement for approved task "${taskTitle}" (${effectiveHours} hrs @ $${freelancerRate}/hr).`,
-            amount: taskAmount,
-            issuedDate: now.toISOString().slice(0, 10),
-            dueDate: dueDate.toISOString().slice(0, 10),
-            status: 'pending',
-            lineItems: [
-              {
-                description: `${taskTitle} — Execution (${effectiveHours}h @ $${freelancerRate}/hr)`,
-                amount: taskAmount,
-              },
-            ],
-          });
-
-          await updateDoc(docRef, {
-            invoiced: true,
-            invoiceNumber,
-            invoiceId: invId || '',
-            settledAmount: taskAmount,
-            settledRate: freelancerRate,
-            settledHours: effectiveHours,
-            updatedAt: new Date().toISOString(),
-          });
-
-          // Atomically accumulate totalSpent and totalSettledTasks on project
-          try {
-            const currentTotalSpent = Number(projData.totalSpent || 0);
-            const currentSettledTasks = Number(projData.totalSettledTasks || 0);
-            await updateDoc(projRef, {
-              totalSpent: currentTotalSpent + taskAmount,
-              totalSettledTasks: currentSettledTasks + 1,
-              updatedAt: new Date().toISOString(),
-            });
-          } catch (pUpErr) {
-            console.warn('Could not update project totalSpent:', pUpErr);
-          }
-
-          await logProjectActivity(projectId, {
-            title: 'Task Invoice Auto-Generated',
-            description: `Invoice ${invoiceNumber} ($${taskAmount.toLocaleString()}) was auto-created for approved task "${taskTitle}" (${effectiveHours}h @ $${freelancerRate}/hr).`,
-            type: 'invoice',
-          });
-
-          await createNotification({
-            userId: assigneeUid,
-            type: 'invoice',
-            title: 'Task Invoice Generated 💰',
-            description: `Invoice ${invoiceNumber} for $${taskAmount.toLocaleString()} has been submitted to client for task "${taskTitle}".`,
-            read: false,
-            relatedItemId: invId || '',
-            relatedItemLink: '/symbiote/invoices',
-            createdAt: new Date().toISOString(),
-          });
-        }
-      }
-    } catch (invErr) {
-      console.error('Direct task invoice generation failed:', invErr);
     }
 
     // MILESTONE PHASE AUTO-COMPLETION (Milestones as pure phases)
@@ -1060,93 +936,14 @@ export async function approveMilestoneByClient(
       updatedAt: new Date().toISOString(),
     });
 
-    // 3. Auto-generate itemized invoice for approved milestone (Issue #18)
+    // 3. Notify specialist that milestone was approved
     const symbioteId = msData.submittedBy || projData?.assignedSymbioteId || projData?.symbioteId;
-    const symbioteName = msData.submittedByName || projData?.assignedSymbioteName || 'Specialist';
-
-    const totalHours = milestoneTasks.reduce(
-      (sum, t) => sum + Number(t.actualHours || t.estimatedHours || 0),
-      0
-    );
-    // Resolve specialist agreed rate from project team members or user profile
-    const assignedMember = (projData?.teamMembers || []).find((m: any) => m.uid === symbioteId);
-    let resolvedHourlyRate = Number(assignedMember?.hourlyRate);
-    if (!resolvedHourlyRate || resolvedHourlyRate <= 0) {
-      if (symbioteId) {
-        try {
-          const userSnap = await getDoc(doc(db, 'users', symbioteId));
-          if (userSnap.exists()) {
-            resolvedHourlyRate = Number(userSnap.data()?.hourlyRate || userSnap.data()?.rate);
-          }
-        } catch {
-          // Ignore lookup warning
-        }
-      }
-    }
-    if (!resolvedHourlyRate || resolvedHourlyRate <= 0) {
-      resolvedHourlyRate = Number(projData?.hourlyRate) || 0;
-    }
-
-    const calculatedAmount =
-      msData.rate && Number(msData.rate) > 0
-        ? Number(msData.rate)
-        : Math.round(totalHours * resolvedHourlyRate);
-
-    if (clientId && symbioteId && !msData.invoiced) {
-      const { createInvoice } = await import('@/src/lib/firestore/invoices');
-      const now = new Date();
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 14);
-      const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(
-        1000 + Math.random() * 9000
-      )}`;
-
-      const invId = await createInvoice({
-        invoiceNumber,
-        clientId,
-        symbioteId,
-        symbioteName,
-        projectId,
-        projectName: projData?.title || 'Project Deliverable',
-        title: `Milestone Deliverable: ${msTitle}`,
-        description: `Itemized invoice for approved milestone "${msTitle}" including all verified deliverable tasks and hours.`,
-        amount: calculatedAmount,
-        issuedDate: now.toISOString().slice(0, 10),
-        dueDate: dueDate.toISOString().slice(0, 10),
-        status: 'pending',
-        lineItems:
-          milestoneTasks.length > 0
-            ? milestoneTasks.map((t) => ({
-                description: t.title,
-                hours: Number(t.actualHours || t.estimatedHours || 1),
-                rate: resolvedHourlyRate,
-                amount: Math.round(
-                  Number(t.actualHours || t.estimatedHours || 1) * resolvedHourlyRate
-                ),
-              }))
-            : [
-                {
-                  description: `Deliverable: ${msTitle}`,
-                  hours: totalHours || 1,
-                  rate: resolvedHourlyRate,
-                  amount: calculatedAmount,
-                },
-              ],
-      });
-
-      await updateDoc(msRef, {
-        invoiced: true,
-        invoiceNumber,
-        invoiceId: invId || '',
-        updatedAt: new Date().toISOString(),
-      });
-
-      // Notify specialist that milestone was approved & invoiced
+    if (symbioteId) {
       await createNotification({
         userId: symbioteId,
         type: 'milestone',
         title: 'Milestone Approved ✓',
-        description: `Client approved milestone "${msTitle}". Itemized invoice ${invoiceNumber} ($${calculatedAmount.toLocaleString()}) has been issued.`,
+        description: `Client approved milestone "${msTitle}". Deliverables verified.`,
         read: false,
         relatedItemId: milestoneId,
         relatedItemLink: `/symbiote/workspace?projectId=${projectId}`,
@@ -1157,7 +954,7 @@ export async function approveMilestoneByClient(
     // 4. Log project activity
     await logProjectActivity(projectId, {
       title: 'Milestone Approved',
-      description: `Client approved milestone "${msTitle}". Deliverables verified and invoiced.`,
+      description: `Client approved milestone "${msTitle}". Deliverables verified.`,
       type: 'milestone',
       actorName: 'Client',
       actorId: clientUid || clientId,

@@ -31,6 +31,8 @@ export interface AdminUserRow {
   lastLoginAt: Timestamp | null;
   avatarInitials: string;
   avatarUrl?: string;
+  onboardingCompleted?: boolean;
+  profileCompleted?: boolean;
 }
 
 export interface CreateAdminUserParams {
@@ -116,6 +118,15 @@ export async function getUsersPage(
 
       const avatarUrl = data.avatarUrl || data.photoURL || '';
 
+      const onboardingCompleted = data.onboardingCompleted === true;
+      const profileCompleted = data.profileCompleted !== false && (
+        role === 'admin'
+          ? true
+          : role === 'symbiote'
+          ? Boolean(Array.isArray(data.skills) && data.skills.length > 0 && data.hourlyRate && (data.title || data.jobTitle))
+          : Boolean(data.companyName || data.companyProfile?.companyName)
+      );
+
       return {
         id: d.id,
         userIdLabel: `USR-${d.id.slice(0, 6).toUpperCase()}`,
@@ -127,6 +138,8 @@ export async function getUsersPage(
         lastLoginAt,
         avatarInitials: avatarInitials || 'SS',
         avatarUrl: avatarUrl || undefined,
+        onboardingCompleted,
+        profileCompleted,
       };
     });
 

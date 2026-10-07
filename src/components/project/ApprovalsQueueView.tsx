@@ -571,13 +571,13 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                           className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{isApproving ? 'Approving Task...' : 'Approve Task & Settle Hours'}</span>
+                          <span>{isApproving ? 'Approving Task...' : 'Approve Task'}</span>
                         </Button>
                       </>
                     ) : (
                       <span className="text-[11px] text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 px-3 py-1 rounded border border-amber-500/20">
                         <Clock className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Awaiting Client Verification & Settlement</span>
+                        <span>Awaiting Client Verification</span>
                       </span>
                     )}
                   </div>

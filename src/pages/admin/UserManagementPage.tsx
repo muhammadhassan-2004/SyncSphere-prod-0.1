@@ -375,9 +375,16 @@ export function UserManagementPage() {
                     {u.registeredAt ? u.registeredAt.toDate().toLocaleDateString() : '—'}
                   </td>
                   <td className="p-3.5">
-                    <Badge variant={statusBadgeVariant[u.status] || 'gray'}>
-                      {u.status === 'active' ? 'Active' : 'Inactive'}
-                    </Badge>
+                    <div className="flex flex-col gap-1 items-start">
+                      <Badge variant={statusBadgeVariant[u.status] || 'gray'}>
+                        {u.status === 'active' ? 'Active' : 'Inactive'}
+                      </Badge>
+                      {u.role !== 'admin' && !u.profileCompleted && (
+                        <span className="text-[10px] text-amber-400 font-mono whitespace-nowrap" title="User skipped or has not finished profile setup (skills/rate)">
+                          ● Incomplete Profile
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3.5 text-[var(--color-text-secondary)]">
                     {u.lastLoginAt ? u.lastLoginAt.toDate().toLocaleString() : 'Never'}
