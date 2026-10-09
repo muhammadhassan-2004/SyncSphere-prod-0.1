@@ -162,6 +162,14 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
   // Helper to resolve tasks belonging to a milestone cleanly
   const getMilestoneTasks = (ms: WorkspaceMilestone) => {
     return tasks.filter((t) => {
+      // Specialist visibility: show only tasks assigned to the current specialist
+      if (isSpecialist && firebaseUser?.uid) {
+        const isAssigned =
+          t.assigneeId === firebaseUser.uid ||
+          (t.assignees && t.assignees.some((a) => a.uid === firebaseUser.uid));
+        if (!isAssigned) return false;
+      }
+
       if (t.milestoneId && ms.id) {
         return t.milestoneId === ms.id;
       }
@@ -228,7 +236,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
     if (!projectId || !task.id || isReadOnly || project.status === 'completed' || !isClient) return;
     try {
       await approveTaskByClient(projectId, task.id, firebaseUser?.uid);
-      setActionSuccessMsg(`Task "${task.title}" approved and direct settlement invoice generated.`);
+      setActionSuccessMsg(`Task "${task.title}" approved successfully.`);
       setTimeout(() => setActionSuccessMsg(null), 4000);
     } catch (err) {
       console.error('Failed to approve task:', err);
@@ -367,7 +375,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
         </div>
 
         {/* TOP ACTION BUTTONS */}
-        {!isReadOnly && (
+        {!isReadOnly && !isSpecialist && (
           <div className="flex items-center gap-2.5">
             <Button
               variant="secondary"
@@ -746,7 +754,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                 )}
 
                 {/* ADD TASK FILE */}
-                {!isReadOnly && (
+                {!isReadOnly && !isSpecialist && (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -901,7 +909,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                     <p className="text-xs text-[var(--color-text-secondary)]">
                       No task files inside this milestone folder yet.
                     </p>
-                    {!isReadOnly && (
+                    {!isReadOnly && !isSpecialist && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -992,7 +1000,7 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
                                 type="button"
                                 onClick={(e) => handleQuickApproveTask(e, task)}
                                 className="px-2 py-1 rounded-[6px] text-[10px] font-mono flex items-center gap-1 text-[var(--color-text-secondary)] hover:text-emerald-400 hover:bg-emerald-500/10 border border-[var(--color-border)] hover:border-emerald-500/30 transition-all cursor-pointer shrink-0"
-                                title="Approve and issue direct task invoice"
+                                title="Approve task deliverables"
                               >
                                 <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>Approve</span>
