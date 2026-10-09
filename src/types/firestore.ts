@@ -221,6 +221,7 @@ export interface Invitation {
   clientName?: string;
   status: 'pending' | 'accepted' | 'approved' | 'declined';
   budgetRange: string;
+  symbioteHourlyRate?: number;
   timeline: string;
   techTags: string[];
   aiMatchScore?: number;
@@ -382,6 +383,12 @@ export interface TimeEntry {
   hours: number;
   description: string;
   status: 'pending' | 'approved' | 'rejected';
+  hourlyRate?: number;
+  invoiced?: boolean;
+  invoiceId?: string;
+  approvedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InvoiceLineItem {

@@ -1685,6 +1685,141 @@ runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #94 with verified status', () 
   assert.ok(code.includes('### 94. ✅ [P0] Onboarding Completion Mandate, Email Verification Loop Fix & Project Draft Sanitization'), 'Tracker missing Issue #94 header');
 });
 
+// ----------------------------------------------------
+// Test Group 42: Issue #98 - Project Completion Workflow & Complete Project Button
+// ----------------------------------------------------
+console.log('\n📌 Test Group 42: Issue #98 (Project Completion Workflow & Complete Project Button)');
+
+runTest('ProjectHeader defines dynamicProgressPct, allTasksCompleted, and canCompleteProject', () => {
+  const code = readFile('src/components/project/ProjectHeader.tsx');
+  assert.ok(code.includes('dynamicProgressPct?: number;'), 'ProjectHeaderProps missing dynamicProgressPct');
+  assert.ok(code.includes('allTasksCompleted?: boolean;'), 'ProjectHeaderProps missing allTasksCompleted');
+  assert.ok(code.includes('canCompleteProject = Boolean('), 'ProjectHeader missing canCompleteProject calculation');
+  assert.ok(code.includes('allTasksCompleted || progressPercent >= 100'), 'canCompleteProject must accept allTasksCompleted or 100% progress');
+  assert.ok(code.includes('<span>Complete Project</span>'), 'ProjectHeader missing Complete Project button label');
+});
+
+runTest('ProjectDetailsPage dynamically calculates progress and passes completion props', () => {
+  const code = readFile('src/pages/client/ProjectDetailsPage.tsx');
+  assert.ok(code.includes('syncProjectCompletionAndProgress'), 'ProjectDetailsPage missing syncProjectCompletionAndProgress import');
+  assert.ok(code.includes('allTasksCompleted = useMemo('), 'ProjectDetailsPage missing allTasksCompleted memo');
+  assert.ok(code.includes('dynamicProgressPct = useMemo('), 'ProjectDetailsPage missing dynamicProgressPct memo');
+  assert.ok(code.includes('dynamicProgressPct={dynamicProgressPct}'), 'ProjectDetailsPage must pass dynamicProgressPct to ProjectHeader');
+  assert.ok(code.includes('allTasksCompleted={allTasksCompleted}'), 'ProjectDetailsPage must pass allTasksCompleted to ProjectHeader');
+  assert.ok(code.includes('onCompleteProject={handleCompleteProject}'), 'ProjectDetailsPage must pass onCompleteProject to WorkspaceTab');
+});
+
+runTest('WorkspaceTab renders allTasksCompleted banner and toolbar button', () => {
+  const code = readFile('src/components/project/WorkspaceTab.tsx');
+  assert.ok(code.includes('onCompleteProject?: () => void;'), 'WorkspaceTabProps missing onCompleteProject');
+  assert.ok(code.includes('allTasksCompleted = useMemo('), 'WorkspaceTab missing allTasksCompleted memo');
+  assert.ok(code.includes('All Workspace Tasks Completed!'), 'WorkspaceTab missing All Workspace Tasks Completed banner');
+  assert.ok(code.includes('onClick={onCompleteProject}'), 'WorkspaceTab missing onCompleteProject click handler');
+});
+
+runTest('workspace.ts syncProjectCompletionAndProgress respects 100% task completion and syncs status', () => {
+  const code = readFile('src/lib/firestore/workspace.ts');
+  assert.ok(code.includes('getPersistedTaskStatusOverrides()'), 'syncProjectCompletionAndProgress must read status overrides');
+  assert.ok(code.includes('taskPct === 100'), 'syncProjectCompletionAndProgress must set 100% progress when all tasks complete');
+  assert.ok(code.includes('status: targetStatus'), 'syncProjectCompletionAndProgress must persist targetStatus');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #98 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 98. ✅ [P1] Project Completion Workflow & "Complete Project" Button Availability When All Tasks/Deliverables Complete'), 'Tracker missing Issue #98 header');
+});
+
+// ----------------------------------------------------
+// Test Group 43: Issue #99 - Admin User Management Google OAuth & Incomplete Profile Breakdown
+// ----------------------------------------------------
+console.log('\n📌 Test Group 43: Issue #99 (Admin User Management Google OAuth & Incomplete Profile Breakdown)');
+
+runTest('GoogleColorIcon renders official 4-color branding', () => {
+  const code = readFile('src/components/ui/GoogleColorIcon.tsx');
+  assert.ok(code.includes('#4285F4'), 'GoogleColorIcon missing Google Blue');
+  assert.ok(code.includes('#34A853'), 'GoogleColorIcon missing Google Green');
+  assert.ok(code.includes('#FBBC05'), 'GoogleColorIcon missing Google Yellow');
+  assert.ok(code.includes('#EA4335'), 'GoogleColorIcon missing Google Red');
+});
+
+runTest('adminUsers.ts evaluates role-specific missingProfileFields, incompleteReason, and isGoogleUser', () => {
+  const code = readFile('src/lib/firestore/adminUsers.ts');
+  assert.ok(code.includes('missingProfileFields?: string[];'), 'AdminUserRow missing missingProfileFields');
+  assert.ok(code.includes('incompleteReason?: string;'), 'AdminUserRow missing incompleteReason');
+  assert.ok(code.includes('isGoogleUser?: boolean;'), 'AdminUserRow missing isGoogleUser');
+  assert.ok(code.includes("missingProfileFields.push('Company Name')"), 'adminUsers.ts must check Client Company Name');
+  assert.ok(code.includes("missingProfileFields.push('Skills')"), 'adminUsers.ts must check Symbiote Skills');
+  assert.ok(code.includes("missingProfileFields.push('Hourly Rate')"), 'adminUsers.ts must check Symbiote Hourly Rate');
+});
+
+runTest('UserManagementPage and UserDetailPage render GoogleColorIcon and detailed incomplete hover tooltip', () => {
+  const mgmtCode = readFile('src/pages/admin/UserManagementPage.tsx');
+  assert.ok(mgmtCode.includes('GoogleColorIcon'), 'UserManagementPage missing GoogleColorIcon');
+  assert.ok(mgmtCode.includes('u.isGoogleUser'), 'UserManagementPage missing isGoogleUser check');
+  assert.ok(mgmtCode.includes('u.incompleteReason'), 'UserManagementPage missing incompleteReason tooltip');
+
+  const detailCode = readFile('src/pages/admin/UserDetailPage.tsx');
+  assert.ok(detailCode.includes('GoogleColorIcon'), 'UserDetailPage missing GoogleColorIcon');
+  assert.ok(detailCode.includes('isGoogleUser'), 'UserDetailPage missing isGoogleUser check');
+  assert.ok(detailCode.includes('missingProfileFields.join'), 'UserDetailPage missing missingProfileFields breakdown');
+});
+
+runTest('SignupPage and LoginPage persist authProvider and providerId on Google OAuth', () => {
+  const signupCode = readFile('src/pages/public/SignupPage.tsx');
+  assert.ok(signupCode.includes("authProvider: 'google'"), 'SignupPage missing authProvider google');
+  assert.ok(signupCode.includes("providerId: 'google.com'"), 'SignupPage missing providerId google.com');
+
+  const loginCode = readFile('src/pages/public/LoginPage.tsx');
+  assert.ok(loginCode.includes("authProvider: 'google'"), 'LoginPage missing authProvider google');
+  assert.ok(loginCode.includes("providerId: 'google.com'"), 'LoginPage missing providerId google.com');
+
+  const authCode = readFile('src/context/AuthContext.tsx');
+  assert.ok(authCode.includes("basicData.authProvider = 'google'"), 'AuthContext missing google authProvider touchActive auto-heal');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #99 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 99. ✅ [P1] Admin User Management: Google OAuth Visual Attribution & Contextual Incomplete Profile Hover Breakdown'), 'Tracker missing Issue #99 header');
+});
+
+// ----------------------------------------------------
+// Test Group 44: Issue #100 - Freelancer Earnings Deduplication, Client Name Accuracy & Time Approval Security
+// ----------------------------------------------------
+console.log('\n📌 Test Group 44: Issue #100 (Freelancer Earnings Deduplication, Client Name Accuracy & Time Tracking Approval)');
+runTest('firestore.rules authorizes clients and project participants to update time_entries', () => {
+  const rules = readFile('firestore.rules');
+  assert.ok(rules.includes("match /time_entries/{entryId}"), 'firestore.rules missing time_entries match');
+  assert.ok(rules.includes("request.auth.uid == resource.data.clientId"), 'firestore.rules missing clientId update rule for time_entries');
+  assert.ok(rules.includes("isProjectParticipant(resource.data.projectId)"), 'firestore.rules missing isProjectParticipant update rule for time_entries');
+});
+
+runTest('SymbioteEarningsPage.tsx resolves accurate client names and prevents symbiote self-attribution', () => {
+  const earningsCode = readFile('src/pages/symbiote/SymbioteEarningsPage.tsx');
+  assert.ok(earningsCode.includes('projectClientMap'), 'SymbioteEarningsPage missing projectClientMap');
+  assert.ok(earningsCode.includes('isClientNameSelf'), 'SymbioteEarningsPage missing isClientNameSelf check');
+  assert.ok(!earningsCode.includes("clientName: inv.symbioteName"), 'SymbioteEarningsPage must never use inv.symbioteName as clientName');
+});
+
+runTest('SymbioteEarningsPage.tsx deduplicates invoiced time entries and classifies hourly settlements correctly', () => {
+  const earningsCode = readFile('src/pages/symbiote/SymbioteEarningsPage.tsx');
+  assert.ok(earningsCode.includes('invoicedKeywords'), 'SymbioteEarningsPage missing invoicedKeywords set');
+  assert.ok(earningsCode.includes('te.invoiced || te.invoiceId'), 'SymbioteEarningsPage missing te.invoiced / te.invoiceId skip check');
+  assert.ok(earningsCode.includes("isHourly ="), 'SymbioteEarningsPage missing isHourly dynamic check');
+  assert.ok(earningsCode.includes("invoiceType?.toLowerCase() === 'hourly'"), 'SymbioteEarningsPage missing invoiceType check');
+});
+
+runTest('src/types/firestore.ts defines robust fields on TimeEntry', () => {
+  const typesCode = readFile('src/types/firestore.ts');
+  assert.ok(typesCode.includes('hourlyRate?: number;'), 'TimeEntry missing hourlyRate');
+  assert.ok(typesCode.includes('invoiced?: boolean;'), 'TimeEntry missing invoiced');
+  assert.ok(typesCode.includes('invoiceId?: string;'), 'TimeEntry missing invoiceId');
+});
+
+runTest('BUGS_AND_ISSUES_TRACKER.md records Issue #100 with verified status', () => {
+  const code = readFile('documents/BUGS_AND_ISSUES_TRACKER.md');
+  assert.ok(code.includes('### 100. ✅ [P0] Freelancer Earnings: Transaction Deduplication, Accurate Client Attribution & Time Tracking Approval Permissions'), 'Tracker missing Issue #100 header');
+});
+
 
 
 console.log('\n====================================================');

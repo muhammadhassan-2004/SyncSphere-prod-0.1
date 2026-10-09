@@ -215,6 +215,8 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.symbioteId ||
+        ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
+        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
         isAdmin()
       );
       allow delete: if isSignedIn() && (

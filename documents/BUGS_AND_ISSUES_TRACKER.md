@@ -2764,18 +2764,262 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
   1. **Onboarding Mandate Purge of Skip Bypass (`OnboardingPage.tsx`)**:
      - Removed the "Skip for now" button from the onboarding header and completely purged the skip modal.
      - Users are now required to complete step 1 and step 2 to access their workspace.
-     - Ensured `emailVerified: true`, `profileCompleted: true`, and `onboardingCompleted: true` are locked upon setup completion.
-  2. **Email Verification Preservation on Page Reload (`AuthContext.tsx`)**:
-     - Updated `touchActive` to check `if (user.emailVerified === true || (userSnap.exists() && userSnap.data()?.emailVerified === true)) { basicData.emailVerified = true; }`.
-     - Completely stopped overwriting Firestore's verified status back to `false` on reloads and heartbeats.
-  3. **Recursive Undefined Sanitizer for Project Drafts (`src/lib/firestore/projects.ts`)**:
-     - Introduced `cleanUndefined<T>(obj: T): Partial<T>` that recursively strips any `undefined` values before calling `setDoc(docRef, payload, { merge: true })`.
-     - Project drafts can now be saved cleanly regardless of empty/undefined optional fields.
+     - Ensured `emailVerified: true`, `profileCompleted: true`, and `onboardingCompleted: true` are locked upon setup completion and cached into `localStorage('syncsphere_user_session')`.
+  2. **Email Verification Preservation & Session Cache Auto-Heal (`AuthContext.tsx`, `VerifyEmailPage.tsx`)**:
+     - Configured `initializeFirestore(app, { ignoreUndefinedProperties: true })` in `src/lib/firebase.ts` to permanently prevent undefined field write rejections.
+     - Sanitized `phoneNumber` in `SignupPage.tsx` to prevent Firestore user creation crashes during account registration.
+     - In `VerifyEmailPage.tsx`, added `role` to `setDoc` and saved `emailVerified: true` directly into `localStorage('syncsphere_user_session')`.
+     - In `AuthContext.tsx`, updated `authenticatedUser` to fall back to synchronous session cache values for `emailVerified` and `onboardingCompleted` during page reloads, eliminating the race condition before Firestore subscription resolves.
+  3. **Project Draft Sanitization & Explicit Client Ownership (`projects.ts`, `CreateProjectStep2Page.tsx`)**:
+     - Introduced `cleanUndefined<T>(obj: T): Partial<T>` in `projects.ts` that recursively strips any `undefined` values before calling `setDoc(docRef, payload, { merge: true })`.
+     - Explicitly supplied `clientId: firebaseUser.uid` across wizard steps to ensure complete compliance with Firestore security rules `allow update`.
 * **Verification**:
   - `tsc --noEmit` → ✅ Exit code 0 (0 TypeScript errors)
-  - `npm test` → ✅ 162/162 Automated tests passed (100%)
+  - `npm test` → ✅ 163/163 Automated tests passed (100%)
   - `npm run build` → ✅ Exit code 0
-* **Status**: Resolved & Verified ✅ (2026-10-07)
+### 95. ✅ [P1] Payment Model & Budget UI Standardization, Proposal Compensation Grounding & PreSync Title Decoupling
+
+* **Category**: UI/UX Integrity, Billing & Budget Model Grounding, PreSync AI Architecture
+* **Date Logged**: 2026-10-08
+* **Location**:
+  - `src/lib/utils/projectBudget.ts`
+  - `server/routes/ai.routes.ts`
+  - `src/pages/client/CreateProjectStep3Page.tsx`
+  - `src/pages/client/ClientProjectsPage.tsx`
+  - `src/components/project/ProjectHeader.tsx`
+  - `src/components/project/OverviewTab.tsx`
+  - `src/components/project/SymbioteOverviewTab.tsx`
+  - `src/pages/symbiote/SymbioteProjectDetailPage.tsx`
+  - `src/pages/symbiote/SymbioteBrowseProjectsPage.tsx`
+  - `src/pages/symbiote/SymbioteInvitationsPage.tsx`
+  - `src/pages/client/AIMatchingPage.tsx`
+  - `src/components/talent/InviteModal.tsx`
+* **Original Problem** (Trello Card `6ac804569b85565b5099d920`):
+  1. **PreSync AI Brief polluting project titles**: Attaching an AI brief prepended `[PreSync AI Brief] ` directly into the project title string across database records and displays. Titles should remain clean with a separate sleek badge/pill next to title.
+  2. **Budget and Payment Model UI Misalignment**:
+     - On Client Projects (`ClientProjectsPage.tsx`), table and cards only showed `$0 spent` without displaying allocated project budget alongside.
+     - On Project Overview (`ProjectHeader.tsx` & `OverviewTab.tsx`), the budget amount was missing from the header stats and financials card.
+     - On Specialist Project Detail (`SymbioteProjectDetailPage.tsx`), stat chips and proposal cards were hardcoded to "Payment Model: Dynamic Per-Task" and forced an hourly rate (`$52/hr (PROFILE RATE)`) even on fixed-price projects.
+* **Resolution & Implementation**:
+  1. **Centralized Project Budget & Title Utility (`projectBudget.ts`)**:
+     - Created `formatProjectBudget(project)` to cleanly format fixed budgets (`$5,000`) and hourly rates (`$50 – $80/hr` or `$50/hr`).
+     - Created `getProjectBillingModel(project)` returning `"Fixed Price"` or `"Hourly Rate"`.
+     - Created `getCleanProjectTitle(title)` and `isAiBriefProject(project)` to sanitize legacy strings and detect AI brief presence.
+  2. **AI Brief Decoupled from Title at Source (`ai.routes.ts` & `CreateProjectStep3Page.tsx`)**:
+     - Removed `[PreSync AI Brief]` prefix generation in fallback synthesis.
+     - Rendered sleek `<Sparkles /> PreSync AI Brief` badge across all project header views and card listings.
+  3. **Client & Specialist Budget & Financials Alignment**:
+     - `ClientProjectsPage.tsx`: Table and grid cards display clean titles, PreSync badge, and allocated budget alongside spent amount (`Budget / Spent`).
+     - `ProjectHeader.tsx` & `OverviewTab.tsx`: Added `Budget` stat pill alongside `Spent So Far`, and updated Financials section with clear project budget and billing model.
+     - `SymbioteOverviewTab.tsx`: Updated Financials card with `Project Budget` and `Total Project Settlement`.
+     - `SymbioteProjectDetailPage.tsx`: Grounded AI banner, stat chips, and application summary with dynamic billing model and budget amount. Proposal form dynamically toggles between `Project Compensation (Fixed Contract)` and `Agreed Billing Rate (Profile Rate)` based on project compensation type.
+     - `InviteModal.tsx`, `AIMatchingPage.tsx`, `SymbioteBrowseProjectsPage.tsx`, `SymbioteInvitationsPage.tsx`: Integrated `getCleanProjectTitle` and `formatProjectBudget`.
+* **Verification**:
+  - `tsc --noEmit` → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ 163/163 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0
+* **Status**: Resolved & Verified ✅ (2026-10-08)
+
+### 96. ✅ [P1] Task Module Redesign & Freelancer Workflow/Visibility Optimization
+
+* **Category**: Task Management, Role-Based Access Control, Workspace Permissions
+* **Date Logged**: 2026-10-08
+* **Location**:
+  - `src/components/project/TaskDrawer.tsx`
+  - `src/components/project/MilestonesTab.tsx`
+  - `src/components/project/WorkspaceTab.tsx`
+  - `src/pages/symbiote/SymbioteWorkspacePage.tsx`
+* **Original Problem** (Trello Card `6ab70ccff83f4f5dd504c1b9`):
+  1. **Task Time & Budget Section Clutter**: The task drawer displayed excessive noisy banners ("Budget Guardrail", "STRICT CAP", warning alerts) instead of clean, simple inputs.
+  2. **Role Authorization on Tasks**:
+     - Task creation and full editing (title, description, milestone, hours, assignees) should be strictly restricted to Client and Admin.
+     - Freelancers should only be able to update task progress status (`To Do` / preview, `In Progress`, `Submit for Review`).
+     - "Create Milestone" and "Add Task" buttons should not be visible to freelancers in MilestonesTab.
+  3. **Freelancer Task Visibility Filtering**:
+     - In both WorkspaceTab and MilestonesTab, specialists should only see tasks assigned to them (`task.assigneeId === uid || task.assignees.some(a => a.uid === uid)`).
+  4. **Task Comments Section**:
+     - Real interactive discussion and notes log under Assign Team Members with author badges, timestamp, and edit/delete controls.
+* **Resolution & Implementation**:
+  1. **Simplified Task Time & Effort Section (`TaskDrawer.tsx`)**:
+     - Cleaned up noisy banners and simplified into clean inputs: `Estimated Hours *` and `Max Cap Limit (Hours)`.
+     - Integrated `getCleanProjectTitle` into the drawer header.
+  2. **Role-Based Task Editing and Actions Guard**:
+     - `TaskDrawer.tsx`: Enforced that freelancers can only update task progress status (`To Do`, `In Progress`, `Submit for Review`), with review tasks requiring client approval for completion. Non-client users cannot create new tasks or alter milestone/budget metadata.
+     - `MilestonesTab.tsx`: Guarded "Create Milestone", "Add Task", and "Add First Task File" buttons with `!isSpecialist`.
+     - `WorkspaceTab.tsx`: "Add Task" headers and column buttons restricted to `isClientOrAdmin`. Direct dragging to 'completed' by freelancers displays clear review requirement notice.
+  3. **Specialist Task Visibility Filtering**:
+     - `MilestonesTab.tsx`: Filtered `getMilestoneTasks` to only return tasks assigned to the current specialist when logged in as a specialist.
+     - `WorkspaceTab.tsx`: Filtered Kanban board tasks to only return tasks assigned to the active freelancer.
+  4. **Task Comments & Discussion Section**:
+     - Fully wired interactive comments thread in `TaskDrawer.tsx` powered by Firestore (`addTaskComment`, `updateTaskComment`, `deleteTaskComment`).
+* **Verification**:
+  - `npm test` → ✅ 163/163 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-08)
+
+### 97. ✅ [P0] Fixed Project Budget Contaminating Hourly Rate Calculation, Invoicing Inflation & Negative/Duplicate Settlement History
+
+* **Category**: Billing & Accounting Integrity, Hourly Rate Resolution, Invoices & Workspace Spend
+* **Date Logged**: 2026-10-08
+* **Location**:
+  - `src/components/talent/InviteModal.tsx`
+  - `src/lib/firestore/invitations.ts`
+  - `src/components/project/ProjectTeamTab.tsx`
+  - `src/lib/firestore/applications.ts`
+  - `src/components/project/ApprovalsQueueView.tsx`
+  - `src/lib/firestore/workspace.ts`
+  - `src/pages/symbiote/SymbioteEarningsPage.tsx`
+  - `src/pages/symbiote/SymbioteInvoicesPage.tsx`
+* **Original Problem** (Trello Card `6ab70ee94364db4f6bbd874c`):
+  1. **Phantom $55,000 / $5,000/hr Calculation**:
+     - Approvals Queue and Spent So Far displayed $55,000 per task instead of the real hourly cost (~$605 for 11h @ $55/hr).
+     - Approvals Queue showed `Value (@$5000/h): $55,000` because the total project budget ($5,000 or $55,000) was mistakenly extracted from `invitation.budgetRange` and stored as the specialist's `hourlyRate` in `project.teamMembers`.
+  2. **Invoicing & Milestone Settlement Discrepancy**:
+     - Milestones have no fixed fee of their own; settlements are strictly task-based per freelancer's agreed hourly rate.
+     - Two legacy invoices (`INV-2026-1949` and `INV-2026-6272`) had inflated amounts of $55,000 each, bloating total invoiced / pending payments to $110,000.
+  3. **Earnings Page Inaccuracies & Duplication**:
+     - `SymbioteEarningsPage.tsx` transactions table showed the freelancer's own name in the "Client" column (`inv.symbioteName` instead of `inv.clientName`).
+     - Transaction history displayed duplicate rows by independently listing the invoices AND the time entries for the same tasks.
+* **Resolution & Implementation**:
+  1. **Decoupled Project Budget from Hourly Rates**:
+     - `InviteModal.tsx`: Explicitly saved `symbioteHourlyRate: candidate.hourlyRate || 55` in invitation payloads.
+     - `invitations.ts`: In `acceptInvitation`, resolved the specialist's actual rate from profile (`hourlyRate <= 500`) or `symbioteHourlyRate`; strictly ignored fixed budgets.
+     - `ProjectTeamTab.tsx`: In `projectTeamMembers` mapping and `addTeamMemberToProject`, verified rate against real user doc and clamped against fixed budget leak.
+     - `applications.ts`: Verified candidate rate in `updateApplicationStatus` to ensure realistic hourly rates.
+  2. **Sanitized Approvals Queue & Cumulative Spend**:
+     - `ApprovalsQueueView.tsx`: Clamped `defaultSpecialistRate` and `taskRate` to realistic bounds (`<= 500`), preventing budget strings from inflating review value.
+     - `workspace.ts`: In `syncProjectCompletionAndProgress`, calculated actual task spend strictly from verified specialist rates and removed fallback that blindly set `totalSpent` to the entire project budget.
+  3. **Corrected Earnings & Invoices Presentation**:
+     - `SymbioteEarningsPage.tsx`: Mapped `clientName` to `inv.clientName` (or company name), correctly classified task settlements as `Hourly`, and deduplicated time entries against invoiced dates to eliminate duplicate entries.
+  4. **Self-Healed Corrupted Database Entities**:
+     - Corrected project `4T9KIJTk84l00IevgKpA` `teamMembers[0].hourlyRate` to $55/hr and `totalSpent` to $1,210 (2 tasks * 11h * $55/hr).
+     - Healed `INV-2026-1949` and `INV-2026-6272` to $605.00 each with correct client names and line items.
+* **Verification**:
+  - `npm test` → ✅ 163/163 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-08)
+
+---
+
+### 98. ✅ [P1] Project Completion Workflow & "Complete Project" Button Availability When All Tasks/Deliverables Complete
+
+* **Category**: Project Workspace Lifecycle, Progress Calculation & Client Controls
+* **Date Logged**: 2026-10-08
+* **Location**:
+  - `src/components/project/ProjectHeader.tsx`
+  - `src/pages/client/ProjectDetailsPage.tsx`
+  - `src/components/project/WorkspaceTab.tsx`
+  - `src/lib/firestore/workspace.ts`
+* **Original Problem** (Trello Card `6ab71058dab2e8b02e043a17`):
+  - Description: *"यार इसमें जो है सारी चीजें जो हैं complete पे और फिर भी complete वाला बटन नहीं दे रहा."* ("Bro, in this all things are on complete, and still it is not giving the complete button.")
+  - In the project Workspace tab, all deliverables / tasks were in the `COMPLETED` column (e.g. 2 of 2 tasks approved & completed, 0 in To Do, 0 in In Progress, 0 in Review).
+  - Despite 100% completion of all workspace items, the "Complete Project" button failed to appear due to multiple rigid guards:
+    1. `ProjectHeader.tsx` strictly required `project.status === 'in_progress'`. Projects created with status `'open'` (displayed as "Active / Open") were locked out even when actively staffed and completed.
+    2. `ProjectHeader.tsx` required `progressPercent >= 100`, but only read the static `project.progressPct` field on the Firestore document (which lagged at 65%), rather than the dynamic completion of live tasks and milestones.
+    3. `ProjectDetailsPage.tsx` did not pass live-evaluated progress or an `allTasksCompleted` boolean to `ProjectHeader`, and did not invoke `syncProjectCompletionAndProgress`.
+    4. `WorkspaceTab.tsx` lacked an in-tab completion banner and action button to complete the project directly from the workspace execution view.
+    5. `workspace.ts` `syncProjectCompletionAndProgress` did not account for local task status overrides and did not grant 100% progress when 100% of workspace tasks were completed if milestones lagged.
+* **Resolution & Implementation**:
+  1. **Dynamic Completion Evaluation & Unlocked Status (`ProjectHeader.tsx`)**:
+     - Added `dynamicProgressPct` and `allTasksCompleted` optional props to `ProjectHeaderProps`.
+     - Calculated `effectiveProgress` dynamically from props, falling back to document attributes.
+     - Unlocked `canCompleteProject` for all active projects (`status !== 'completed' && status !== 'closed' && status !== 'draft'`), triggering whenever all tasks are finished (`allTasksCompleted`) OR progress reaches 100%, provided zero tasks are in review.
+     - Updated Health pill to show "Completed (100%)" when all items are finished.
+  2. **Live Progress Sync & Prop Flow (`ProjectDetailsPage.tsx`)**:
+     - Computes real-time `allTasksCompleted` (`tasks.length > 0 && tasks.every(t => t.status === 'completed') && pendingReviewsCount === 0`) and `dynamicProgressPct`.
+     - Triggers `syncProjectCompletionAndProgress(projectId)` to synchronize Firestore state.
+     - Passes `dynamicProgressPct` and `allTasksCompleted` to `<ProjectHeader />`, and `onCompleteProject` to `<WorkspaceTab />`.
+  3. **Direct Workspace Completion Experience (`WorkspaceTab.tsx`)**:
+     - Added `onCompleteProject` prop to `WorkspaceTabProps`.
+     - Added a prominent celebration callout banner (`All Workspace Tasks Completed!`) with a direct `Complete Project` button when all tasks are complete.
+     - Embedded a `Complete Project` action button in the Workspace top toolbar next to `Add Task`.
+  4. **Robust Progress Engine & Status Sync (`workspace.ts`)**:
+     - In `syncProjectCompletionAndProgress`, incorporated `getPersistedTaskStatusOverrides()`.
+     - Ensured that if all tasks are complete (`taskPct === 100`), `calculatedProgress` is set to 100%.
+     - Included `status: targetStatus` in document updates so active projects transition cleanly.
+     - Healed task `2N8nnmeSRVkq1XVYfRqE` ("dadasasas") on project `4T9KIJTk84l00IevgKpA` to `completed` status.
+* **Verification**:
+  - `npm test` → ✅ 169/169 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-08)
+
+---
+
+### 99. ✅ [P1] Admin User Management: Google OAuth Visual Attribution & Contextual Incomplete Profile Hover Breakdown
+
+* **Category**: User Management, Administration & Authentication Grounding
+* **Date Logged**: 2026-10-08
+* **Location**:
+  - `src/components/ui/GoogleColorIcon.tsx`
+  - `src/lib/firestore/adminUsers.ts`
+  - `src/pages/admin/UserManagementPage.tsx`
+  - `src/pages/admin/UserDetailPage.tsx`
+  - `src/pages/public/SignupPage.tsx`
+  - `src/pages/public/LoginPage.tsx`
+  - `src/context/AuthContext.tsx`
+* **Original Problem** (Trello Card `6ac80db1e240537550cdadef`):
+  - Description: *"यूजर्स हैं, यहाँ पे जो है सारे यूजर्स आने चाहिए, भले जिनकी प्रोफाइल कंप्लीट हो रही है नहीं हो रही, सारे यूजर्स यहाँ पे रजिस्टर होने चाहिए. और जो गूगल से कर रहे हैं, वो भी रजिस्टर होने चाहिए. और दूसरी चीज ये है कि ये चेक करो कि गूगल से जो रजिस्टर कर रहा है, वो सही फंक्शनल काम कर रहा है या नहीं. उसके अलावा यहाँ पे इनकम्प्लीट प्रोफाइल पे जब होवर करें तो बताए कि हाँ भाई क्या इनकम्प्लीट है, क्या कौन सी फील्ड फिल नहीं है जिसकी वजह से इनकम्प्लीट प्रोफाइल दिखा रहा है. ... और जो यूजर्स गूगल के थ्रू लॉगिन हो रहे हैं, गूगल के थ्रू रजिस्टर हो रहे हैं, उन्हें की ईमेल के आगे एक गूगल का छोटा सा आइकन आ जाए, छोटा सा कलरफुल आइकन आ जाए बस."*
+  - Identified Flaws:
+    1. **Lack of OAuth Identification**: In User Management, there was zero visual distinction between normal email/password users and Google OAuth users.
+    2. **Misleading & Hardcoded Incomplete Tooltip**: Hovering on "Incomplete Profile" displayed a static hardcoded string: `User skipped or has not finished profile setup (skills/rate)` for ALL users—even Clients who have no skills or rate fields. It never identified which specific fields were missing.
+    3. **Google OAuth Registration Tracking**: Google sign-up/in flows did not reliably persist `authProvider: 'google'` and `providerId: 'google.com'` onto the Firestore user document, preventing administrator inspection of authentication mechanisms.
+* **Resolution & Implementation**:
+  1. **Official 4-Color Google Branding Icon (`GoogleColorIcon.tsx`)**:
+     - Built a dedicated SVG component styled with official Google brand colors (`#4285F4`, `#34A853`, `#FBBC05`, `#EA4335`).
+     - Rendered next to user emails in `UserManagementPage.tsx` and `UserDetailPage.tsx` with `"Registered via Google OAuth"` tooltip.
+  2. **Role-Aware Contextual Incomplete Profile Evaluation (`adminUsers.ts`)**:
+     - Upgraded user mapping to evaluate role-specific missing fields:
+       - **Symbiote / Freelancer**: Checks for `Professional Title`, `Skills`, `Hourly Rate`, and `Bio`.
+       - **Client**: Checks for `Company Name` and `Industry`.
+     - Dynamically computes `missingProfileFields: string[]` and `incompleteReason: string` (e.g., `"Missing required fields: Company Name"` or `"Missing required fields: Skills, Hourly Rate"`).
+  3. **Dual Native & Rich Hover Tooltips (`UserManagementPage.tsx` & `UserDetailPage.tsx`)**:
+     - In `UserManagementPage.tsx`, updated the status cell to include native `title={u.incompleteReason}` along with an instant CSS rich tooltip popover detailing the exact unfulfilled fields.
+     - In `UserDetailPage.tsx`, updated the profile completeness badge to render `Profile Incomplete (Missing: ...)` with full field breakdown.
+  4. **Robust Google Registration Persistence (`SignupPage.tsx`, `LoginPage.tsx`, `AuthContext.tsx`)**:
+     - Guaranteed `authProvider: 'google'` and `providerId: 'google.com'` are persisted on Google sign-up and sign-in.
+     - `AuthContext.tsx` `touchActive` detects Google auth via `providerData` and self-heals user document records.
+* **Verification**:
+  - `npm test` → ✅ 174/174 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-08)
+
+---
+
+### 100. ✅ [P0] Freelancer Earnings: Transaction Deduplication, Accurate Client Attribution & Time Tracking Approval Permissions
+
+* **Category**: Freelancer Portal, Financial Ledger Integrity & Firestore Security
+* **Date Logged**: 2026-10-09
+* **Location**:
+  - `firestore.rules`
+  - `src/pages/symbiote/SymbioteEarningsPage.tsx`
+  - `src/types/firestore.ts`
+  - `src/lib/firestore/timeEntries.ts`
+  - `src/lib/firestore/workspace.ts`
+* **Original Problem** (Trello Card `6abaf2dddc51b1403ec1f296`):
+  - Description: *"सबसे पहले इसका सही से ऑर्डर करो. मैंने basically all the rate और basically this end-to-end pipeline का project जो है, टास्क complete होने के बाद, मेरे पास earnings me do transactions आ रही हैं, ये चीज मुझे नहीं समझ आ रही. दूसरी चीज ये है कि मैंने time tracking किया... जब client ने time tracking को approve किया तो client के पास तो approve हो गया, लेकिन freelancer side pe approval नहीं हो रहा/pending dikha raha hai."*
+  - Identified Flaws:
+    1. **Duplicate Transaction Rows & Inflated Project Breakdown**: For project "End-to-End ML Pipeline", completing and settling a task ($600) produced two transactions in `SymbioteEarningsPage.tsx`: a settled invoice row ($600) AND an un-invoiced hourly log row ($600), inflating the Project Breakdown to $1,200.
+    2. **Inaccurate Client Name Attribution**: In `SymbioteEarningsPage.tsx`, the `Client` column populated the freelancer's own name (`Smith John`) or a generic fallback (`Client Partner`) instead of resolving the actual client (`Yan Alex` / `Acme Tech`).
+    3. **Time Tracking Approval Security Rule Lockout**: In `firestore.rules`, `match /time_entries/{entryId}` only permitted `symbiote` and `admin` in `allow update`. When clients approved logged hours from the Client Portal (`TimeTrackingPage.tsx` or `ApprovalsQueueView.tsx`), the write failed with `permission-denied`. While the client's browser showed local state, the Firestore document remained stuck in `'pending'` status, leaving the freelancer seeing unapproved hours.
+    4. **False "Paid" Status on Un-Invoiced Hours**: In `SymbioteEarningsPage.tsx`, approved un-invoiced time entries were prematurely displayed with `status: 'paid'` before any invoice was issued or settled.
+* **Resolution & Implementation**:
+  1. **Firestore Security Rule Authorization (`firestore.rules`)**:
+     - Upgraded `match /time_entries/{entryId}` `allow update` to authorize clients (`request.auth.uid == resource.data.clientId`), project participants (`isProjectParticipant(resource.data.projectId)`), symbiotes, and admins to update time entry documents (status approvals/rejections, descriptions).
+  2. **Client Name Resolution & Self-Attribution Guard (`SymbioteEarningsPage.tsx`)**:
+     - Constructed `projectClientMap` dynamically mapping project IDs to actual client names (`p.clientName || p.clientCompany || p.clientCompanyName || p.companyName`).
+     - Added `isClientNameSelf` guard checking against `userProfile.displayName` and `inv.symbioteName`. If an invoice has missing or self-attributed client name, it resolves the true client name from `projectClientMap`, guaranteeing the freelancer's name is never displayed under the Client column.
+  3. **Robust Transaction Deduplication (`SymbioteEarningsPage.tsx`)**:
+     - Added comprehensive deduplication: skips time entries that are marked `invoiced: true`, linked via `invoiceId`, or matching invoiced dates (`dateKey`), task titles, or line-item descriptions in settled project invoices.
+     - Properly aligned task settlement invoice classifications: dynamic keyword and line-item evaluation accurately marks task settlements as `Hourly` rather than misclassifying as `Milestone`.
+     - Clamped un-invoiced time entry transactions to `status: 'pending'` (awaiting payout settlement) instead of incorrectly marking them as `paid`.
+     - Deduplication ensures Project Breakdown accurately reflects the single $600 transaction (100% share) matching Total Earnings ($600).
+  4. **Database Self-Healing**:
+     - Synchronized time entry `fgKHe2F1vEEKS2u4NkCX` to `status: 'approved'`, `invoiced: true`, and linked to invoice `2UEh2ARLkvJZ9odcA5au`.
+     - Updated invoice `2UEh2ARLkvJZ9odcA5au` with `clientName: 'Yan Alex'` and `clientCompany: 'Acme Tech'`.
+* **Verification**:
+  - `npm test` → ✅ 178/178 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-09)
 
 ---
 
