@@ -7,8 +7,9 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with auto-detect long polling to ensure reliable connectivity across network proxies and iframes
+// Initialize Firestore with auto-detect long polling and ignoreUndefinedProperties to prevent crashes
 export const db = initializeFirestore(app, {
+  ignoreUndefinedProperties: true,
   experimentalAutoDetectLongPolling: true,
 });
 export const auth = getAuth(app);

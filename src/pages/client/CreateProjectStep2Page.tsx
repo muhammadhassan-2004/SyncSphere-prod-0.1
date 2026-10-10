@@ -136,6 +136,7 @@ export const CreateProjectStep2Page: React.FC = () => {
     try {
       const updatedDraftId = await saveProjectDraft(draftId, {
         ownerId: firebaseUser.uid,
+        clientId: firebaseUser.uid,
         budgetType,
         minBudget: minBudget === '' ? undefined : Number(minBudget),
         maxBudget: maxBudget === '' ? undefined : Number(maxBudget),

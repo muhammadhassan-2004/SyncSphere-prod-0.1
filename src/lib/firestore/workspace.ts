@@ -58,7 +58,14 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
     // 1. Fetch all tasks for project
     const tasksCol = collection(db, 'workspaces', projectId, 'tasks');
     const tasksSnap = await getDocs(tasksCol);
-    const allTasks = tasksSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkspaceTask));
+    const overrides = getPersistedTaskStatusOverrides();
+    const allTasks = tasksSnap.docs.map(d => {
+      const t = { id: d.id, ...d.data() } as WorkspaceTask;
+      if (t.id && overrides[t.id]) {
+        return { ...t, status: overrides[t.id].status };
+      }
+      return t;
+    });
 
     // 2. Fetch all milestones for project
     const msCol = collection(db, 'workspaces', projectId, 'milestones');
@@ -97,6 +104,10 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
       const taskPct = (completedTasks / totalTasks) * 100;
       const msPct = (completedMilestones / totalMilestones) * 100;
       if (taskPct === 100 && msPct === 100) {
+        calculatedProgress = 100;
+        isCompleted = true;
+      } else if (taskPct === 100) {
+        // When all workspace tasks are completed, progress reaches 100%
         calculatedProgress = 100;
         isCompleted = true;
       } else {
@@ -142,6 +153,7 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
       const updates: any = {
         progressPct: calculatedProgress,
         progressPercent: calculatedProgress,
+        status: targetStatus,
         updatedAt: new Date().toISOString(),
       };
 
@@ -156,7 +168,16 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
         } else {
           const assigneeUid = t.assigneeId || (t.assignees && t.assignees[0]?.uid) || projData.assignedSymbioteId || projData.symbioteId;
           const member = projTeam.find((m: any) => m.uid === assigneeUid);
-          const rate = Number(member?.hourlyRate) || Number(t.settledRate) || Number(projData.hourlyRate) || 75;
+          let rate = Number(t.settledRate);
+          if (!rate || rate <= 0 || rate > 500) {
+            const mRate = Number(member?.hourlyRate);
+            if (mRate > 0 && mRate <= 500) {
+              rate = mRate;
+            } else {
+              const pRate = Number(projData.hourlyRate);
+              rate = pRate > 0 && pRate <= 500 ? pRate : 55;
+            }
+          }
           const hours = Number(t.actualHours || t.actualTotalHours || t.estimatedHours || 1);
           calculatedTasksSpend += Math.max(25, Math.round(hours * rate));
         }
@@ -174,11 +195,11 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
       }
 
       const existingSpent = Number(projData.totalSpent || 0);
-      if (calculatedTasksSpend > 0 && (existingSpent === 0 || existingSpent < calculatedTasksSpend)) {
+      if (calculatedTasksSpend > 0) {
         updates.totalSpent = calculatedTasksSpend;
         updates.totalSettledTasks = completedTasksList.length || allMilestones.filter(m => m.completed).length;
       } else if (projData.status === 'completed' && existingSpent === 0 && calculatedTasksSpend === 0) {
-        // Fallback for completed legacy projects: check project invoices or agreed deliverable budget
+        // Fallback for completed legacy projects: check project invoices
         try {
           const invQuery = query(collection(db, 'invoices'), where('projectId', '==', projectId));
           const invSnap = await getDocs(invQuery);
@@ -190,8 +211,6 @@ export async function syncProjectCompletionAndProgress(projectId: string): Promi
           if (invSpend > 0) {
             updates.totalSpent = invSpend;
             updates.totalSettledTasks = invSnap.size;
-          } else if (projData.budget && typeof projData.budget === 'number' && projData.budget > 0) {
-            updates.totalSpent = projData.budget;
           }
         } catch (invErr) {
           console.debug('[workspace] Could not fetch project invoices during sync:', invErr);

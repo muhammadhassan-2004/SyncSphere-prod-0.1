@@ -5,6 +5,7 @@ import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
+import { GoogleColorIcon } from '@/src/components/ui/GoogleColorIcon';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/lib/toast/ToastProvider';
 import {
@@ -365,7 +366,16 @@ export function UserManagementPage() {
                       <span className="group-hover:underline">{u.name}</span>
                     </Link>
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-secondary)]">{u.email}</td>
+                  <td className="p-3.5 text-[var(--color-text-secondary)]">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {u.isGoogleUser && (
+                        <span title="Registered via Google OAuth" className="inline-flex shrink-0">
+                          <GoogleColorIcon className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+                      <span>{u.email}</span>
+                    </div>
+                  </td>
                   <td className="p-3.5">
                     <Badge variant={roleBadgeVariant[u.role] || 'gray'}>
                       {u.role === 'client' ? 'Client' : u.role === 'symbiote' ? 'Freelancer' : 'Admin'}
@@ -380,9 +390,22 @@ export function UserManagementPage() {
                         {u.status === 'active' ? 'Active' : 'Inactive'}
                       </Badge>
                       {u.role !== 'admin' && !u.profileCompleted && (
-                        <span className="text-[10px] text-amber-400 font-mono whitespace-nowrap" title="User skipped or has not finished profile setup (skills/rate)">
-                          ● Incomplete Profile
-                        </span>
+                        <div className="relative group/incomplete">
+                          <span
+                            className="text-[10px] text-amber-400 font-mono whitespace-nowrap cursor-help flex items-center gap-1 hover:underline"
+                            title={u.incompleteReason || 'Incomplete Profile: Missing required fields'}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span>Incomplete Profile</span>
+                          </span>
+                          {/* Rich hover tooltip */}
+                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover/incomplete:block z-50 p-2.5 rounded-md bg-slate-900 border border-amber-500/40 text-amber-200 text-[11px] shadow-2xl whitespace-nowrap font-sans pointer-events-none">
+                            <p className="font-semibold text-amber-300">Incomplete Profile</p>
+                            <p className="text-[10px] text-slate-300 mt-0.5">
+                              {u.incompleteReason || 'User has not completed all required profile fields'}
+                            </p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </td>

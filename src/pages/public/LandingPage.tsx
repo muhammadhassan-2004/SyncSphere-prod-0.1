@@ -38,7 +38,19 @@ export const LandingPage: React.FC = () => {
   const isAuthenticated = Boolean(firebaseUser || activeUser || currentRole);
   const rawRole = activeUser?.role || currentRole || 'client';
   const effectiveRole = (rawRole === 'freelancer' ? 'symbiote' : rawRole) as 'client' | 'symbiote' | 'admin';
-  const dashboardPath = `/${effectiveRole}/dashboard`;
+
+  const isEmailVerified =
+    activeUser?.emailVerified === true ||
+    activeUser?.onboardingCompleted === true ||
+    (firebaseUser?.emailVerified === true && activeUser?.emailVerified !== false);
+
+  const needsOnboarding = isEmailVerified && activeUser?.onboardingCompleted !== true;
+
+  const dashboardPath = !isEmailVerified
+    ? `/verify-email?email=${encodeURIComponent(activeUser?.email || firebaseUser?.email || '')}&role=${effectiveRole}`
+    : needsOnboarding
+    ? `/onboarding?role=${effectiveRole}`
+    : `/${effectiveRole}/dashboard`;
 
   useEffect(() => {
     let isMounted = true;

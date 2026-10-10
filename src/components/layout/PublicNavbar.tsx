@@ -28,15 +28,24 @@ export const PublicNavbar: React.FC = () => {
   const rawRole = activeUser?.role || currentRole || 'client';
   const effectiveRole = (rawRole === 'freelancer' ? 'symbiote' : rawRole) as 'client' | 'symbiote' | 'admin';
 
-  const isEmailUnverified =
-    activeUser?.emailVerified === false ||
-    (firebaseUser && firebaseUser.emailVerified === false && activeUser?.emailVerified !== true);
+  const isEmailVerified =
+    activeUser?.emailVerified === true ||
+    activeUser?.onboardingCompleted === true ||
+    (firebaseUser?.emailVerified === true && activeUser?.emailVerified !== false);
 
-  const dashboardPath = isEmailUnverified
+  const needsOnboarding = isEmailVerified && activeUser?.onboardingCompleted !== true;
+
+  const dashboardPath = !isEmailVerified
     ? `/verify-email?email=${encodeURIComponent(activeUser?.email || firebaseUser?.email || '')}&role=${effectiveRole}`
+    : needsOnboarding
+    ? `/onboarding?role=${effectiveRole}`
     : `/${effectiveRole}/dashboard`;
 
-  const dashboardLabel = isEmailUnverified ? 'Verify Email' : 'Dashboard';
+  const dashboardLabel = !isEmailVerified
+    ? 'Verify Email'
+    : needsOnboarding
+    ? 'Complete Setup'
+    : 'Dashboard';
 
   const roleMeta = {
     client: {

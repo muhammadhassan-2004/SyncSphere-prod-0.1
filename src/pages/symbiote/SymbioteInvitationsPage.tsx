@@ -10,6 +10,7 @@ import {
   createInvitation,
 } from '@/src/lib/firestore';
 import { Invitation } from '@/src/types/firestore';
+import { getCleanProjectTitle } from '@/src/lib/utils/projectBudget';
 import {
   Mail,
   CheckCircle2,
@@ -46,7 +47,7 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({
   const navigate = useNavigate();
   const rawScore = invitation.matchScore ?? invitation.aiMatchScore;
   const matchScore = typeof rawScore === 'number' && rawScore > 0 ? rawScore : null;
-  const projectTitle = invitation.projectTitle || 'Project Invitation';
+  const projectTitle = getCleanProjectTitle(invitation.projectTitle || 'Project Invitation');
   const clientName = invitation.clientName || 'Client';
   const clientQuote =
     invitation.clientNote ||

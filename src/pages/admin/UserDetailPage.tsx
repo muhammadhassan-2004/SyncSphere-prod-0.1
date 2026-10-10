@@ -24,6 +24,7 @@ import {
   type UserActivityLog,
 } from '@/src/lib/firestore/adminUserActivity';
 import { EmptyState } from '@/src/components/ui/EmptyState';
+import { GoogleColorIcon } from '@/src/components/ui/GoogleColorIcon';
 import { useAuth } from '@/src/context/AuthContext';
 
 type PendingAction = 'inactive' | 'active' | null;
@@ -98,6 +99,35 @@ export function UserDetailPage() {
   const role = target.role === 'freelancer' ? 'symbiote' : (target.role || 'client');
   const status = target.status || 'active';
 
+  const isGoogleUser = Boolean(
+    target.authProvider === 'google' ||
+    target.providerId === 'google.com' ||
+    (Array.isArray(target.providers) && target.providers.includes('google.com')) ||
+    (typeof target.avatarUrl === 'string' && target.avatarUrl.includes('googleusercontent.com')) ||
+    (typeof target.photoURL === 'string' && target.photoURL.includes('googleusercontent.com')) ||
+    (Array.isArray(target.providerData) && target.providerData.some((p: any) => p.providerId === 'google.com'))
+  );
+
+  const missingProfileFields: string[] = [];
+  if (role === 'symbiote') {
+    const hasSkills = Array.isArray(target.skills) && target.skills.length > 0;
+    const hasRate = Boolean(target.hourlyRate && Number(target.hourlyRate) > 0);
+    const hasTitle = Boolean((target.title && target.title.trim()) || (target.jobTitle && target.jobTitle.trim()));
+    if (!hasTitle) missingProfileFields.push('Professional Title');
+    if (!hasSkills) missingProfileFields.push('Skills');
+    if (!hasRate) missingProfileFields.push('Hourly Rate');
+  } else if (role === 'client') {
+    const hasCompany = Boolean(
+      (target.companyName && target.companyName.trim()) ||
+      (target.companyProfile?.companyName && target.companyProfile.companyName.trim())
+    );
+    if (!hasCompany) missingProfileFields.push('Company Name');
+  }
+
+  const isProfileComplete = target.profileCompleted !== false && (
+    role === 'admin' ? true : missingProfileFields.length === 0
+  );
+
   let registeredDateStr = '—';
   if (target.createdAt) {
     if (typeof target.createdAt.toDate === 'function') {
@@ -153,6 +183,11 @@ export function UserDetailPage() {
                 <span>{name}</span>
               </h1>
               <p className="text-sm text-[var(--color-text-secondary)] flex flex-wrap items-center gap-2">
+                {isGoogleUser && (
+                  <span title="Registered via Google OAuth" className="inline-flex shrink-0">
+                    <GoogleColorIcon className="w-3.5 h-3.5" />
+                  </span>
+                )}
                 <span>{email}</span>
                 <span>•</span>
                 <span className="capitalize">{role === 'client' ? 'Client' : role === 'symbiote' ? 'Freelancer' : 'Admin'}</span>
@@ -166,8 +201,11 @@ export function UserDetailPage() {
                   {status[0].toUpperCase() + status.slice(1)}
                 </Badge>
                 {role !== 'admin' && (
-                  <Badge variant={target.profileCompleted !== false && (role === 'symbiote' ? Boolean(Array.isArray(target.skills) && target.skills.length > 0 && target.hourlyRate) : Boolean(target.companyName)) ? 'blue' : 'amber'}>
-                    {target.profileCompleted !== false && (role === 'symbiote' ? Boolean(Array.isArray(target.skills) && target.skills.length > 0 && target.hourlyRate) : Boolean(target.companyName)) ? 'Profile Complete' : 'Profile Incomplete'}
+                  <Badge
+                    variant={isProfileComplete ? 'blue' : 'amber'}
+                    title={!isProfileComplete && missingProfileFields.length > 0 ? `Missing required fields: ${missingProfileFields.join(', ')}` : undefined}
+                  >
+                    {isProfileComplete ? 'Profile Complete' : `Profile Incomplete${missingProfileFields.length > 0 ? ` (Missing: ${missingProfileFields.join(', ')})` : ''}`}
                   </Badge>
                 )}
                 <span className="text-xs text-[var(--color-text-tertiary)]">

@@ -194,6 +194,8 @@ export const SignupPage: React.FC = () => {
           email: (user.email || '').toLowerCase(),
           phoneNumber: user.phoneNumber || undefined,
           role: role,
+          authProvider: 'google',
+          providerId: 'google.com',
           emailVerified: user.emailVerified ?? true,
           avatarUrl: user.photoURL || undefined,
           onboardingCompleted: false,
@@ -264,21 +266,24 @@ export const SignupPage: React.FC = () => {
 
       // 3. Write user document to Firestore
       try {
-        await setDoc(doc(db, 'users', user.uid), {
+        const userPayload: Record<string, any> = {
           uid: user.uid,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           fullName: computedFullName,
           displayName: computedFullName,
           email: email.trim().toLowerCase(),
-          phoneNumber: phoneNumber.trim() || undefined,
           role: role,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           lastActiveAt: serverTimestamp(),
           emailVerified: false,
           onboardingCompleted: false,
-        });
+        };
+        if (phoneNumber.trim()) {
+          userPayload.phoneNumber = phoneNumber.trim();
+        }
+        await setDoc(doc(db, 'users', user.uid), userPayload);
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
       }

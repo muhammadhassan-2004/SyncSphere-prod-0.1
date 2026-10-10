@@ -33,6 +33,10 @@ export interface AdminUserRow {
   avatarUrl?: string;
   onboardingCompleted?: boolean;
   profileCompleted?: boolean;
+  missingProfileFields?: string[];
+  incompleteReason?: string;
+  isGoogleUser?: boolean;
+  authProvider?: string;
 }
 
 export interface CreateAdminUserParams {
@@ -119,13 +123,41 @@ export async function getUsersPage(
       const avatarUrl = data.avatarUrl || data.photoURL || '';
 
       const onboardingCompleted = data.onboardingCompleted === true;
+
+      const isGoogleUser = Boolean(
+        data.authProvider === 'google' ||
+        data.providerId === 'google.com' ||
+        (Array.isArray(data.providers) && data.providers.includes('google.com')) ||
+        (typeof data.avatarUrl === 'string' && data.avatarUrl.includes('googleusercontent.com')) ||
+        (typeof data.photoURL === 'string' && data.photoURL.includes('googleusercontent.com')) ||
+        (Array.isArray(data.providerData) && data.providerData.some((p: any) => p.providerId === 'google.com'))
+      );
+
+      const missingProfileFields: string[] = [];
+      if (role === 'symbiote') {
+        const hasSkills = Array.isArray(data.skills) && data.skills.length > 0;
+        const hasRate = Boolean(data.hourlyRate && Number(data.hourlyRate) > 0);
+        const hasTitle = Boolean((data.title && data.title.trim()) || (data.jobTitle && data.jobTitle.trim()));
+        if (!hasTitle) missingProfileFields.push('Professional Title');
+        if (!hasSkills) missingProfileFields.push('Skills');
+        if (!hasRate) missingProfileFields.push('Hourly Rate');
+      } else if (role === 'client') {
+        const hasCompany = Boolean(
+          (data.companyName && data.companyName.trim()) ||
+          (data.companyProfile?.companyName && data.companyProfile.companyName.trim())
+        );
+        if (!hasCompany) missingProfileFields.push('Company Name');
+      }
+
       const profileCompleted = data.profileCompleted !== false && (
         role === 'admin'
           ? true
-          : role === 'symbiote'
-          ? Boolean(Array.isArray(data.skills) && data.skills.length > 0 && data.hourlyRate && (data.title || data.jobTitle))
-          : Boolean(data.companyName || data.companyProfile?.companyName)
+          : missingProfileFields.length === 0
       );
+
+      const incompleteReason = missingProfileFields.length > 0
+        ? `Missing required fields: ${missingProfileFields.join(', ')}`
+        : 'User skipped or has not finished profile setup';
 
       return {
         id: d.id,
@@ -140,6 +172,10 @@ export async function getUsersPage(
         avatarUrl: avatarUrl || undefined,
         onboardingCompleted,
         profileCompleted,
+        missingProfileFields,
+        incompleteReason,
+        isGoogleUser,
+        authProvider: isGoogleUser ? 'google' : (data.authProvider || 'password'),
       };
     });
 

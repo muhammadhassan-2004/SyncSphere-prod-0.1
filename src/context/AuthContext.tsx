@@ -124,6 +124,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 basicData.avatarUrl = user.photoURL;
               }
 
+              const isGoogle = user.providerData?.some((p) => p.providerId === 'google.com');
+              if (isGoogle) {
+                basicData.authProvider = 'google';
+                basicData.providerId = 'google.com';
+              }
+
               // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
               const userRef = doc(db, 'users', user.uid);
               const userSnap = await getDoc(userRef);
@@ -132,10 +138,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
 
               // Preserve and auto-heal verified email status:
-              // If verified in Firebase Auth, OR in Firestore, OR if onboarding was completed, retain true
-              const isAlreadyVerified =
+              // If verified in Firebase Auth, OR in Firestore, OR if onboarding was completed, OR cached session is verified, retain true
+              let isAlreadyVerified =
                 user.emailVerified === true ||
                 (userSnap.exists() && (userSnap.data()?.emailVerified === true || userSnap.data()?.onboardingCompleted === true));
+
+              if (!isAlreadyVerified) {
+                try {
+                  const cachedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+                  if (cachedSession) {
+                    const parsed = JSON.parse(cachedSession);
+                    if (parsed.uid === user.uid && parsed.emailVerified === true) {
+                      isAlreadyVerified = true;
+                    }
+                  }
+                } catch {}
+              }
 
               if (isAlreadyVerified) {
                 basicData.emailVerified = true;
@@ -175,9 +193,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     ? rawRole
                     : null;
 
+                let isProfileEmailVerified =
+                  profile.emailVerified === true ||
+                  profile.onboardingCompleted === true ||
+                  user.emailVerified === true;
+
+                if (!isProfileEmailVerified) {
+                  try {
+                    const cachedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+                    if (cachedSession) {
+                      const parsed = JSON.parse(cachedSession);
+                      if (parsed.uid === user.uid && parsed.emailVerified === true) {
+                        isProfileEmailVerified = true;
+                      }
+                    }
+                  } catch {}
+                }
+
                 const normalizedProfile: UserProfile = {
                   ...profile,
                   role: matchedRole,
+                  emailVerified: isProfileEmailVerified,
                 };
 
                 // Batched atomic update
@@ -194,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       displayName: profile.displayName || user.displayName || 'User',
                       role: matchedRole,
                       avatarUrl: profile.avatarUrl,
-                      emailVerified: profile.emailVerified === true || profile.onboardingCompleted === true || user.emailVerified === true,
+                      emailVerified: isProfileEmailVerified,
                       onboardingCompleted: profile.onboardingCompleted === true,
                     })
                   );
@@ -297,12 +333,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (firebaseUser) {
       const defaultRoleName =
         currentRole === 'symbiote' ? 'Symbiote' : currentRole === 'admin' ? 'Admin' : 'Client';
+      const initial = getInitialProfile();
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
         displayName: firebaseUser.displayName || defaultRoleName,
         role: currentRole || 'client',
-        emailVerified: firebaseUser.emailVerified,
+        emailVerified: firebaseUser.emailVerified || (initial?.emailVerified === true),
+        onboardingCompleted: initial?.onboardingCompleted === true,
         createdAt: (firebaseUser.metadata as any)?.creationTime || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

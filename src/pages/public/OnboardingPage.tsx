@@ -103,6 +103,13 @@ export const OnboardingPage: React.FC = () => {
 
   const draftKey = `syncsphere_onboarding_draft_${firebaseUser?.uid || userProfile?.uid || 'temp'}`;
 
+  // If user has already completed onboarding, redirect straight to their dashboard
+  useEffect(() => {
+    if (userProfile?.onboardingCompleted === true) {
+      navigate(`/${activeRole}/dashboard`, { replace: true });
+    }
+  }, [userProfile?.onboardingCompleted, activeRole, navigate]);
+
   // Restore draft state on mount if present in sessionStorage (TC-AUTH-005 browser refresh retention)
   useEffect(() => {
     try {
@@ -379,6 +386,22 @@ export const OnboardingPage: React.FC = () => {
           console.warn('Firestore write warning during onboarding, proceeding with local role sync:', dbErr);
         }
       }
+
+      try {
+        const uidVal = firebaseUser?.uid || userProfile?.uid;
+        const existingRaw = localStorage.getItem('syncsphere_user_session');
+        const existing = existingRaw ? JSON.parse(existingRaw) : {};
+        localStorage.setItem(
+          'syncsphere_user_session',
+          JSON.stringify({
+            ...existing,
+            uid: uidVal || existing.uid,
+            role: activeRole,
+            emailVerified: true,
+            onboardingCompleted: true,
+          })
+        );
+      } catch {}
 
       setRole(activeRole);
 

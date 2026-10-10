@@ -9,6 +9,7 @@ import { getProjectsByOwner } from '@/src/lib/firestore/projects';
 import { createInvitation, getInvitationsByClient } from '@/src/lib/firestore/invitations';
 import { Project } from '@/src/types/firestore';
 import { getUserStatusDot } from '@/src/lib/utils/presence';
+import { formatProjectBudget, getCleanProjectTitle } from '@/src/lib/utils/projectBudget';
 import {
   Send,
   X,
@@ -110,7 +111,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
       setErrorText('Cannot send invitations for a completed or closed project.');
       return;
     }
-    const projTitle = selectedProj.title || 'Selected Project';
+    const projTitle = getCleanProjectTitle(selectedProj.title) || 'Selected Project';
 
     setSubmitting(true);
     setErrorText(null);
@@ -131,16 +132,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
         return;
       }
 
-      const budgetFormatted =
-        typeof selectedProj?.budget === 'number' && selectedProj.budget > 0
-          ? `$${selectedProj.budget.toLocaleString()}`
-          : selectedProj?.minBudget && selectedProj?.maxBudget
-          ? `$${Number(selectedProj.minBudget).toLocaleString()} - $${Number(selectedProj.maxBudget).toLocaleString()}`
-          : candidate.hourlyRate
-          ? `$${candidate.hourlyRate}/hr`
-          : selectedProj?.budgetType === 'hourly'
-          ? 'Hourly Rate'
-          : 'Dynamic Per-Task';
+      const budgetFormatted = formatProjectBudget(selectedProj);
 
       const invId = await createInvitation({
         projectId: selectedProjectId,
@@ -154,6 +146,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
         clientId: currentUserId,
         status: 'pending',
         budgetRange: budgetFormatted,
+        symbioteHourlyRate: candidate.hourlyRate || 55,
         timeline: selectedProj?.duration || '1 - 3 months',
         techTags: (candidate.skills || []).slice(0, 4),
         matchScore: candidate.matchScore || (candidate as any).aiMatchScore || 95,
@@ -266,7 +259,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
               >
                 {projects.map((proj) => (
                   <option key={proj.id} value={proj.id}>
-                    {proj.title} ({proj.status || 'open'})
+                    {getCleanProjectTitle(proj.title)} ({proj.status || 'open'})
                   </option>
                 ))}
               </select>

@@ -15,6 +15,7 @@ import {
   subscribeToTimeEntriesForClient,
 } from '@/src/lib/firestore';
 import { Project, Application, Invoice, TimeEntry } from '@/src/types/firestore';
+import { formatProjectBudget } from '@/src/lib/utils/projectBudget';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -41,6 +42,7 @@ import {
   Clock,
   Briefcase,
   Layers,
+  CheckCircle2,
 } from 'lucide-react';
 
 function formatRelativeTime(isoString?: string): string {
@@ -113,9 +115,8 @@ export const ClientDashboardPage: React.FC = () => {
     return projects.filter((p) => p.status === 'in_progress' || p.status === 'open').length;
   }, [projects]);
 
-  const totalSpend = useMemo(() => {
-    const sum = projects.reduce((acc, p) => acc + (p.totalSpent || 0), 0);
-    return `$${sum.toLocaleString()}`;
+  const completedProjectsCount = useMemo(() => {
+    return projects.filter((p) => p.status === 'completed').length;
   }, [projects]);
 
   const hiredProsCount = useMemo(() => {
@@ -239,7 +240,7 @@ export const ClientDashboardPage: React.FC = () => {
         title: p.title,
         category: p.category || 'AI Engineering',
         status: p.status || 'in_progress',
-        budget: `$${(p.totalSpent || 0).toLocaleString()}`,
+        budget: formatProjectBudget(p),
         pros: Array.isArray(initials) ? initials : (initials ? [initials] : []),
         deadline: p.deadline || 'TBD',
         progress:
@@ -361,11 +362,11 @@ export const ClientDashboardPage: React.FC = () => {
           isLoading={loading}
         />
         <KPIStatCard
-          label="Total Spend"
-          value={totalSpend}
-          icon={<DollarSign className="w-4 h-4" />}
+          label="Completed Projects"
+          value={completedProjectsCount}
+          icon={<CheckCircle2 className="w-4 h-4" />}
           iconVariant="green"
-          trend={{ value: '+8.4% vs last mo', direction: 'up' }}
+          trend={{ value: 'Delivered', direction: 'neutral' }}
           isLoading={loading}
         />
         <KPIStatCard
@@ -542,7 +543,7 @@ export const ClientDashboardPage: React.FC = () => {
                   <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] font-medium">
                     <th className="py-2.5 px-3.5">Project Name</th>
                     <th className="py-2.5 px-3.5">Status</th>
-                    <th className="py-2.5 px-3.5">Spent So Far</th>
+                    <th className="py-2.5 px-3.5">Budget</th>
                     <th className="py-2.5 px-3.5">Team</th>
                     <th className="py-2.5 px-3.5">Deadline</th>
                     <th className="py-2.5 px-3.5">Progress</th>

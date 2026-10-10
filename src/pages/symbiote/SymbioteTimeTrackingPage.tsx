@@ -98,7 +98,6 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
   const symbioteName =
     userProfile?.displayName ||
     (userProfile?.firstName ? `${userProfile.firstName} ${userProfile.lastName || ''}`.trim() : 'Freelancer');
-  const hourlyRate = userProfile?.hourlyRate || (userProfile as any)?.rate || 75;
 
   const [searchParams] = useSearchParams();
   const initialProjectId = searchParams.get('project') || '';
@@ -406,17 +405,14 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
       }
     });
 
-    const thisMonthEarned = Math.round(thisMonthHours * hourlyRate);
-
     // If completely brand new / 0 hours, provide sensible default targets
     return {
       todayHours: Number(todayHours.toFixed(1)),
       todaySessions,
       thisWeekHours: Number(thisWeekHours.toFixed(1)),
       thisMonthHours: Number(thisMonthHours.toFixed(1)),
-      thisMonthEarned,
     };
-  }, [timeEntries, hourlyRate]);
+  }, [timeEntries]);
 
   // REAL WEEKLY BAR CHART CALCULATION (Mon to Sun)
   const weeklyChartData = useMemo(() => {
@@ -557,7 +553,7 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
               {stats.thisMonthHours}h
             </div>
             <div className="text-xs text-[var(--color-text-secondary)] mt-1">
-              ${stats.thisMonthEarned.toLocaleString()} estimated
+              Total monthly hours logged
             </div>
           </div>
         </div>

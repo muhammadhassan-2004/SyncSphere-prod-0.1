@@ -14,6 +14,7 @@ import { subscribeToProject } from '@/src/lib/firestore/projects';
 import {
   subscribeToWorkspaceTasks,
   subscribeToWorkspaceMilestones,
+  syncProjectCompletionAndProgress,
 } from '@/src/lib/firestore/workspace';
 import { Project, WorkspaceTask, WorkspaceMilestone } from '@/src/types/firestore';
 import { Card } from '@/src/components/ui/card';
@@ -150,6 +151,33 @@ export const ProjectDetailsPage: React.FC = () => {
     return tasks.filter((t) => t.status === 'review').length;
   }, [tasks]);
 
+  const allTasksCompleted = useMemo(() => {
+    return tasks.length > 0 && tasks.every((t) => t.status === 'completed') && pendingReviewsCount === 0;
+  }, [tasks, pendingReviewsCount]);
+
+  const dynamicProgressPct = useMemo(() => {
+    if (project?.status === 'completed') return 100;
+    if (tasks.length === 0 && milestones.length === 0) {
+      return typeof project?.progressPct === 'number' ? project.progressPct : 0;
+    }
+    const completedTasks = tasks.filter((t) => t.status === 'completed').length;
+    if (tasks.length > 0 && completedTasks === tasks.length) return 100;
+
+    const taskPct = tasks.length > 0 ? (completedTasks / tasks.length) * 100 : 0;
+    const completedMs = milestones.filter((m) => m.completed).length;
+    const msPct = milestones.length > 0 ? (completedMs / milestones.length) * 100 : 0;
+
+    if (tasks.length > 0 && milestones.length > 0) {
+      return Math.round(taskPct * 0.7 + msPct * 0.3);
+    }
+    return Math.round(taskPct || msPct || 0);
+  }, [tasks, milestones, project]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    syncProjectCompletionAndProgress(projectId).catch(() => {});
+  }, [projectId, tasks.length, milestones.length, pendingReviewsCount]);
+
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto py-16 flex flex-col items-center justify-center space-y-3">
@@ -251,6 +279,8 @@ export const ProjectDetailsPage: React.FC = () => {
         approvedTeamCount={approvedTeamCount}
         filesCount={filesCount}
         pendingReviewsCount={pendingReviewsCount}
+        dynamicProgressPct={dynamicProgressPct}
+        allTasksCompleted={allTasksCompleted}
       />
 
       {/* TAB BODY REGION */}
@@ -272,6 +302,7 @@ export const ProjectDetailsPage: React.FC = () => {
           <WorkspaceTab
             project={project}
             isReadOnly={project.status === 'completed'}
+            onCompleteProject={handleCompleteProject}
           />
         )}
 

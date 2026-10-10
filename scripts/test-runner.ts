@@ -1314,28 +1314,25 @@ runTest('CreateProjectStep2Page preserves timeline and project setup structure',
 runTest('ProjectHeader and OverviewTab purge hardcoded $15,000 Total and weeklyCommitment 40 hrs', () => {
   const headerCode = readFile('src/components/project/ProjectHeader.tsx');
   assert.ok(!headerCode.includes('$15,000 Total'), 'ProjectHeader still has hardcoded $15,000 Total');
-  assert.ok(headerCode.includes('Spent So Far'), 'ProjectHeader missing Spent So Far metric');
+  assert.ok(!headerCode.includes('Spent So Far'), 'ProjectHeader should not have Spent So Far metric');
 
   const overviewCode = readFile('src/components/project/OverviewTab.tsx');
   assert.ok(!overviewCode.includes('weeklyCommitment'), 'OverviewTab still renders weeklyCommitment');
   assert.ok(!overviewCode.includes('hrs / week'), 'OverviewTab still renders hrs / week');
 });
 
-runTest('OverviewTab and SymbioteOverviewTab render real cumulative spend figures', () => {
+runTest('OverviewTab and SymbioteOverviewTab purge total spent widgets per client request', () => {
   const clientTab = readFile('src/components/project/OverviewTab.tsx');
-  assert.ok(clientTab.includes('Total Spent So Far'), 'OverviewTab missing Total Spent So Far');
-  assert.ok(clientTab.includes('project.totalSpent'), 'OverviewTab missing project.totalSpent reference');
+  assert.ok(!clientTab.includes('Total Spent So Far'), 'OverviewTab still contains Total Spent So Far');
 
   const proTab = readFile('src/components/project/SymbioteOverviewTab.tsx');
-  assert.ok(proTab.includes('Total Project Settlement'), 'SymbioteOverviewTab missing Total Project Settlement');
-  assert.ok(proTab.includes('project.totalSpent'), 'SymbioteOverviewTab missing project.totalSpent reference');
+  assert.ok(!proTab.includes('Total Project Settlement'), 'SymbioteOverviewTab still contains Total Project Settlement');
 });
 
-runTest('ClientProjectsPage tracks and renders Total Spent So Far across all metrics', () => {
+runTest('ClientProjectsPage tracks and renders Project Budget cleanly without spent metrics', () => {
   const code = readFile('src/pages/client/ClientProjectsPage.tsx');
-  assert.ok(code.includes('p.totalSpent || 0'), 'ClientProjectsPage missing totalSpent accumulation');
-  assert.ok(code.includes('Total Spent So Far'), 'ClientProjectsPage missing Total Spent So Far KPI label');
-  assert.ok(code.includes('Spent So Far'), 'ClientProjectsPage missing Spent So Far table column header');
+  assert.ok(!code.includes('Total Spent So Far'), 'ClientProjectsPage still contains Total Spent So Far KPI label');
+  assert.ok(!code.includes('spent so far'), 'ClientProjectsPage still contains spent so far subtext');
 });
 
 runTest('adminProjects.ts and ProjectOversightPage prioritize totalSpent for Admin oversight', () => {
@@ -1362,7 +1359,7 @@ runTest('ClientDashboardPage purges hardcoded fake months, dumps, matchScore and
   assert.ok(!code.includes("{ month: 'Mar', spend: 0 }"), 'ClientDashboardPage still has static months');
   assert.ok(!code.includes("a.matchScore || 90"), 'ClientDashboardPage still has 90% fallback');
   assert.ok(code.includes('subscribeToTimeEntriesForClient'), 'ClientDashboardPage missing time_entries subscription');
-  assert.ok(code.includes('Spent So Far'), 'ClientDashboardPage missing Spent So Far table header');
+  assert.ok(!code.includes('Spent So Far'), 'ClientDashboardPage should not have Spent So Far table header');
 });
 
 runTest('FilesAndDocsPage and FindTalentPage purge hardcoded amounts, fake skills and dummy domains', () => {

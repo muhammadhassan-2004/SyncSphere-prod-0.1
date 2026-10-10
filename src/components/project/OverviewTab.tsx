@@ -9,6 +9,7 @@ import { Avatar } from '@/src/components/ui/avatar';
 import { StatusPill } from '@/src/components/ui/badge';
 import { getUserStatusDot } from '@/src/lib/utils/presence';
 import { UserProfileModal } from '@/src/components/profile/UserProfileModal';
+import { formatProjectBudget, getProjectBillingModel } from '@/src/lib/utils/projectBudget';
 import {
   FileText,
   DollarSign,
@@ -103,10 +104,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
     : healthStatus === 'Critical'
     ? 'amber'
     : 'green';
-
-  // Real-time project expenditure tracking
-  const totalSpent = Number(project.totalSpent || 0);
-  const totalSettledTasks = Number(project.totalSettledTasks || 0);
 
   return (
     <div className="space-y-6">
@@ -391,18 +388,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ project, onOpenAddTeam
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3.5 rounded-[8px] bg-slate-900/50 border border-slate-800 space-y-1.5">
-                <span className="text-xs text-slate-400 block font-medium">
-                  Total Spent So Far
-                </span>
-                <p className="text-xl font-bold font-mono text-cyan-400">
-                  ${totalSpent.toLocaleString()}
-                </p>
-                <span className="text-[11px] text-slate-400 block">
-                  {totalSettledTasks > 0
-                    ? `${totalSettledTasks} approved task${totalSettledTasks > 1 ? 's' : ''} settled`
-                    : 'Dynamic Per-Task Billing (No spend yet)'}
-                </span>
+              <div className="p-3.5 rounded-[8px] bg-slate-900/50 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400 font-medium">Project Budget</span>
+                  <span className="text-sm font-bold font-mono text-slate-100">
+                    {formatProjectBudget(project)}
+                  </span>
+                </div>
               </div>
 
               <div className="p-3.5 rounded-[8px] bg-slate-900/50 border border-slate-800 space-y-2.5">

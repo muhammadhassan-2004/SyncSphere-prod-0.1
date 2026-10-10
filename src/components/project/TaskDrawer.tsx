@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Avatar } from '@/src/components/ui/avatar';
 import { useAuth } from '@/src/context/AuthContext';
+import { getCleanProjectTitle } from '@/src/lib/utils/projectBudget';
 import {
   X,
   Plus,
@@ -251,7 +252,11 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
     // Freelancer Task Guard: Freelancers cannot edit task metadata (title, description, budget, milestones).
     // Freelancers only update task progress status (To Do, In Progress, Submit for Review).
     if (!isClientOrAdmin) {
-      if (taskToEdit && taskToEdit.id && status !== taskToEdit.status) {
+      if (!taskToEdit) {
+        onClose();
+        return;
+      }
+      if (taskToEdit.id && status !== taskToEdit.status) {
         setIsSubmitting(true);
         setErrorText(null);
         try {
@@ -388,7 +393,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-[var(--color-text-secondary)] font-mono">
-                Project: {project.title || 'Untitled Project'}
+                Project: {getCleanProjectTitle(project.title) || 'Untitled Project'}
               </p>
             </div>
           </div>

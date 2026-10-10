@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Project } from '@/src/types/firestore';
 import { StatusPill } from '@/src/components/ui/badge';
 import { Button } from '@/src/components/ui/button';
+import { formatProjectBudget, getCleanProjectTitle, isAiBriefProject } from '@/src/lib/utils/projectBudget';
 import {
   DollarSign,
   Activity,
@@ -32,6 +33,8 @@ interface ProjectHeaderProps {
   approvedTeamCount?: number;
   filesCount?: number;
   pendingReviewsCount?: number;
+  dynamicProgressPct?: number;
+  allTasksCompleted?: boolean;
 }
 
 export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
@@ -45,6 +48,8 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   approvedTeamCount,
   filesCount,
   pendingReviewsCount,
+  dynamicProgressPct,
+  allTasksCompleted,
 }) => {
   // Map project status to StatusPill variant
   const getStatusVariant = (status: Project['status']) => {
@@ -90,12 +95,22 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
       })
     : 'Recently';
 
-  // Formatted total spent so far
-  const totalSpent = Number(project.totalSpent || 0);
-
   const healthStatus = project.healthStatus || 'On Track';
-  const progressPercent = typeof project.progressPct === 'number' ? project.progressPct : (project.progressPercent ?? (project.status === 'completed' ? 100 : 0));
+  const progressPercent = typeof dynamicProgressPct === 'number'
+    ? dynamicProgressPct
+    : (typeof project.progressPct === 'number'
+        ? project.progressPct
+        : (project.progressPercent ?? (project.status === 'completed' ? 100 : 0)));
   const navigate = useNavigate();
+
+  const canCompleteProject = Boolean(
+    onCompleteProject &&
+    project.status !== 'completed' &&
+    project.status !== 'closed' &&
+    project.status !== 'draft' &&
+    (!pendingReviewsCount || pendingReviewsCount === 0) &&
+    (allTasksCompleted || progressPercent >= 100)
+  );
 
   const tabs: Array<{ id: ProjectTabType; label: string; icon: React.ReactNode; badge?: number }> = [
     { id: 'overview', label: 'Overview', icon: <FileText className="w-3.5 h-3.5" /> },
@@ -130,8 +145,13 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-text-primary)] tracking-tight">
-              {project.title || 'Untitled Project'}
+              {getCleanProjectTitle(project.title)}
             </h1>
+            {isAiBriefProject(project) && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--color-accent-cyan)]/15 text-[var(--color-accent-cyan)] border border-[var(--color-accent-cyan)]/30">
+                <Sparkles className="w-3 h-3" /> PreSync AI Brief
+              </span>
+            )}
             <StatusPill variant={getStatusVariant(project.status)} label={getStatusLabel(project.status)} />
           </div>
 
@@ -157,16 +177,18 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           {/* BUDGET & HEALTH STATS */}
           <div className="hidden sm:flex items-center gap-4 px-3.5 py-2 rounded-[10px] bg-slate-900/60 border border-slate-800 text-xs">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+              <div className="p-1.5 rounded-md bg-[var(--color-accent-cyan)]/10 text-[var(--color-accent-cyan)]">
                 <DollarSign className="w-3.5 h-3.5" />
               </div>
               <div>
-                <span className="text-[10.5px] text-slate-400 block font-medium">Spent So Far</span>
-                <span className="font-semibold text-emerald-400 text-xs font-mono">
-                  ${totalSpent.toLocaleString()}
+                <span className="text-[10.5px] text-slate-400 block font-medium">Budget</span>
+                <span className="font-semibold text-slate-100 text-xs font-mono">
+                  {formatProjectBudget(project)}
                 </span>
               </div>
             </div>
+
+
 
             <div className="w-[1px] h-6 bg-slate-800" />
 
@@ -177,7 +199,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
               <div>
                 <span className="text-[10.5px] text-slate-400 block font-medium">Health</span>
                 <span className="font-semibold text-emerald-400 text-xs">
-                  {healthStatus} ({progressPercent}%)
+                  {progressPercent >= 100 ? 'Completed' : healthStatus} ({progressPercent}%)
                 </span>
               </div>
             </div>
@@ -210,24 +232,18 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
               </div>
             ) : (
               <>
-                {/* COMPLETE PROJECT BUTTON: Only visible when project is actively in_progress, has assigned talent, deliverables/progress are 100% complete, and no reviews pending */}
-                {onCompleteProject &&
-                  project.status === 'in_progress' &&
-                  progressPercent >= 100 &&
-                  (!pendingReviewsCount || pendingReviewsCount === 0) &&
-                  ((project.teamMembers && project.teamMembers.length > 0) ||
-                    project.assignedSymbioteId ||
-                    (project as any).specialistId ||
-                    (project as any).assignedTo) && (
-                    <Button
-                      size="sm"
-                      onClick={onCompleteProject}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse cursor-pointer"
-                    >
-                      <Target className="w-3.5 h-3.5" />
-                      <span>Complete Project</span>
-                    </Button>
-                  )}
+                {/* COMPLETE PROJECT BUTTON: Only visible when all deliverables/tasks are finished or 100% complete */}
+                {canCompleteProject && (
+                  <Button
+                    size="sm"
+                    onClick={onCompleteProject}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse cursor-pointer"
+                    title="Complete Project"
+                  >
+                    <Target className="w-3.5 h-3.5" />
+                    <span>Complete Project</span>
+                  </Button>
+                )}
 
                 {/* FIND TALENT / MATCHING BUTTON: Helpful when project is open and needs talent */}
                 {project.status === 'open' &&

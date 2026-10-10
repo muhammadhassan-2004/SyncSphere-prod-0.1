@@ -159,12 +159,26 @@ export async function updateApplicationStatus(
           const existingTeam = projData.teamMembers || [];
           const isMember = existingTeam.some((m: any) => m.uid === appData.symbioteId);
 
+          let appRate = 55;
+          if (appData.rate && appData.rate > 0 && appData.rate <= 500) {
+            appRate = appData.rate;
+          } else {
+            try {
+              const uSnap = await getDoc(doc(db, 'users', appData.symbioteId));
+              if (uSnap.exists() && uSnap.data()?.hourlyRate && uSnap.data().hourlyRate <= 500) {
+                appRate = uSnap.data().hourlyRate;
+              }
+            } catch (e) {
+              console.debug('Could not fetch user profile rate in applications:', e);
+            }
+          }
+
           const newMember = {
             uid: appData.symbioteId,
             displayName: appData.symbioteName || 'Specialist',
             role: appData.symbioteTitle || 'AI Specialist',
             avatarInitials: appData.symbioteAvatarInitials || 'SP',
-            hourlyRate: appData.rate || 100,
+            hourlyRate: appRate,
             matchScore: appData.aiMatchScore || 95,
             addedAt: new Date().toISOString(),
           };
