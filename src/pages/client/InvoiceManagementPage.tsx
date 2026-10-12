@@ -5,6 +5,7 @@ import {
   subscribeToInvoices,
   updateInvoiceStatus,
   createInvoice,
+  markInvoicePaidByClient,
 } from '@/src/lib/firestore/invoices';
 import { subscribeToProjectsByOwner } from '@/src/lib/firestore/projects';
 import { getAllSymbiotesFromFirestore, subscribeToSymbiotesFromFirestore } from '@/src/lib/firestore/users';
@@ -47,6 +48,11 @@ export const InvoiceManagementPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Direct Transfer Modal state
+  const [showDirectTransferModal, setShowDirectTransferModal] = useState<boolean>(false);
+  const [directTransferNote, setDirectTransferNote] = useState<string>('');
+  const [directTransferSubmitting, setDirectTransferSubmitting] = useState<boolean>(false);
 
   // Payment Modal state
   const [showPayModal, setShowPayModal] = useState<boolean>(false);
@@ -209,6 +215,23 @@ export const InvoiceManagementPage: React.FC = () => {
       totalVolume,
     };
   }, [invoices]);
+
+  // Direct Out-of-Platform Payment Transfer Handler
+  const handleConfirmDirectTransfer = async () => {
+    if (!activeInvoice || !activeInvoice.id) return;
+    setDirectTransferSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await markInvoicePaidByClient(activeInvoice.id, directTransferNote.trim());
+      setShowDirectTransferModal(false);
+      setDirectTransferNote('');
+    } catch (err: any) {
+      console.error('Failed to mark invoice as paid:', err);
+      setErrorMsg(err.message || 'Failed to update invoice payment status.');
+    } finally {
+      setDirectTransferSubmitting(false);
+    }
+  };
 
   // Payment Execution Handler
   const handleExecutePayment = async () => {
@@ -559,6 +582,7 @@ export const InvoiceManagementPage: React.FC = () => {
               >
                 <option value="all" className="bg-slate-900 text-white">All Statuses</option>
                 <option value="pending" className="bg-slate-900 text-white">Pending</option>
+                <option value="marked_paid" className="bg-slate-900 text-white">Payment Sent (Pending Confirmation)</option>
                 <option value="paid" className="bg-slate-900 text-white">Paid</option>
                 <option value="overdue" className="bg-slate-900 text-white">Overdue</option>
               </select>
@@ -626,6 +650,11 @@ export const InvoiceManagementPage: React.FC = () => {
                             <CheckCircle2 className="w-2.5 h-2.5" />
                             Paid
                           </span>
+                        ) : inv.status === 'marked_paid' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 border border-cyan-500/40 text-cyan-400 inline-flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5" />
+                            Payment Sent
+                          </span>
                         ) : inv.status === 'overdue' ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 border border-rose-500/40 text-rose-400 inline-flex items-center gap-1">
                             <AlertTriangle className="w-2.5 h-2.5" />
@@ -677,6 +706,11 @@ export const InvoiceManagementPage: React.FC = () => {
                   <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Paid
+                  </span>
+                ) : activeInvoice.status === 'marked_paid' ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-cyan-500/15 border border-cyan-500/40 text-cyan-400 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" />
+                    Payment Sent (Awaiting Confirmation)
                   </span>
                 ) : activeInvoice.status === 'overdue' ? (
                   <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-rose-500/15 border border-rose-500/40 text-rose-400 flex items-center gap-1.5">
@@ -805,20 +839,46 @@ export const InvoiceManagementPage: React.FC = () => {
                 )}
               </div>
 
-              {/* ACTION BUTTONS: PAY NOW / DOWNLOAD PDF (§11.20) */}
+              {/* ACTION BUTTONS: PAY NOW / DIRECT TRANSFER / DOWNLOAD PDF (§11.20) */}
               <div className="space-y-2 pt-2">
-                {activeInvoice.status !== 'paid' ? (
-                  <Button
-                    onClick={() => setShowPayModal(true)}
-                    className="w-full h-11 bg-gradient-to-r from-[var(--color-accent-cyan)] to-emerald-400 text-slate-950 font-mono text-xs font-bold rounded-[8px] flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.25)] hover:scale-[1.01] transition-all"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Settle & Mark Paid (${activeInvoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
-                  </Button>
-                ) : (
+                {activeInvoice.status === 'paid' ? (
                   <div className="p-3 rounded-[8px] bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono font-bold flex items-center justify-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Invoice Settled & Paid</span>
+                  </div>
+                ) : activeInvoice.status === 'marked_paid' ? (
+                  <div className="p-3.5 rounded-[8px] bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-mono flex flex-col items-center justify-center gap-1.5 text-center">
+                    <div className="flex items-center gap-1.5 font-bold text-cyan-400">
+                      <Clock className="w-4 h-4" />
+                      <span>Payment Dispatched (Direct Transfer)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-sans">
+                      You marked this invoice as paid. Awaiting receipt confirmation from {activeInvoice.symbioteName || 'the specialist'}.
+                    </p>
+                    {activeInvoice.paymentDetails?.referenceNote && (
+                      <div className="text-[10px] text-cyan-300/80 bg-cyan-950/40 px-2 py-1 rounded border border-cyan-800/40 font-mono mt-0.5">
+                        Ref / Note: {activeInvoice.paymentDetails.referenceNote}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => setShowDirectTransferModal(true)}
+                      className="w-full h-11 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-mono text-xs font-bold rounded-[8px] flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:scale-[1.01] transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Mark as Paid (Direct Transfer)</span>
+                    </Button>
+
+                    <Button
+                      onClick={() => setShowPayModal(true)}
+                      variant="outline"
+                      className="w-full h-9 border-[var(--color-border)] text-[var(--color-text-secondary)] font-mono text-[11px] rounded-[8px] flex items-center justify-center gap-2 hover:border-[var(--color-accent-cyan)] hover:text-white transition-all"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>Or Online Checkout (${activeInvoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
+                    </Button>
                   </div>
                 )}
 
@@ -1016,6 +1076,101 @@ export const InvoiceManagementPage: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* DIRECT OUT-OF-PLATFORM TRANSFER MODAL */}
+      {showDirectTransferModal && activeInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-fadeIn relative">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-bold font-mono text-[var(--color-text-primary)]">
+                    Direct Out-of-Platform Transfer
+                  </h3>
+                  <p className="text-[10px] text-[var(--color-text-secondary)] font-mono">
+                    Mark invoice paid after sending funds directly
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDirectTransferModal(false)}
+                className="text-[var(--color-text-secondary)] hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div className="p-3 rounded-[8px] bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className="space-y-4 text-xs font-mono">
+              <div className="p-3 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] space-y-1.5">
+                <div className="flex justify-between text-[var(--color-text-secondary)]">
+                  <span>Invoice #:</span>
+                  <span className="text-[var(--color-text-primary)] font-bold">{activeInvoice.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between text-[var(--color-text-secondary)]">
+                  <span>Specialist:</span>
+                  <span className="text-[var(--color-accent-cyan)] font-medium">
+                    {activeInvoice.symbioteName || symbioteMap[activeInvoice.symbioteId]?.name || 'Specialist'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-[var(--color-border)]/50">
+                  <span className="text-[var(--color-text-primary)]">Total Transferred:</span>
+                  <span className="text-emerald-400 font-mono">${activeInvoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[var(--color-text-secondary)] mb-1 text-[11px]">
+                  Transaction Reference or Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={directTransferNote}
+                  onChange={(e) => setDirectTransferNote(e.target.value)}
+                  placeholder="e.g. Sent via Bank Wire / PayPal ref #987654"
+                  className="w-full h-9 px-3 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-mono text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  This note will be visible to the specialist so they can verify the transfer.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-slate-300 space-y-1">
+                <span className="font-bold text-emerald-400 block">✓ Next Step: Specialist Confirmation</span>
+                <p className="text-[10px] text-slate-400">
+                  Once you confirm, the status updates to "Payment Sent". The specialist will verify receipt on their dashboard and mark it confirmed.
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  onClick={() => setShowDirectTransferModal(false)}
+                  variant="outline"
+                  className="h-9 border-[var(--color-border)] text-xs font-mono"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmDirectTransfer}
+                  disabled={directTransferSubmitting}
+                  className="h-9 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-mono text-xs font-bold px-4"
+                >
+                  {directTransferSubmitting ? 'Recording...' : 'Confirm Payment Sent'}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

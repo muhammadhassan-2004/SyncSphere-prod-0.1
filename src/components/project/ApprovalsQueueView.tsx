@@ -80,11 +80,12 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   // Loading state per task action
   const [processingAction, setProcessingAction] = useState<Record<string, 'approve' | 'revision' | null>>({});
 
-  const defaultSpecialistRate = Number(
+  const rawDefaultRate = Number(
     (project as any)?.teamMembers?.find((m: any) => m.uid === project.assignedSymbioteId)?.hourlyRate ||
     (project as any)?.teamMembers?.[0]?.hourlyRate ||
-    project.hourlyRate
+    (project.hourlyRate && Number(project.hourlyRate) <= 500 ? project.hourlyRate : 0)
   ) || 0;
+  const defaultSpecialistRate = rawDefaultRate > 0 && rawDefaultRate <= 500 ? rawDefaultRate : 55;
 
   // Filter tasks in 'review' status
   const reviewTasks = useMemo(() => {
@@ -131,7 +132,8 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
   const totalValueAtReview = useMemo(() => {
     return reviewTasks.reduce((sum, t) => {
       const assigned = (project as any)?.teamMembers?.find((m: any) => m.uid === t.assigneeId);
-      const rate = Number(assigned?.hourlyRate) || defaultSpecialistRate;
+      const rawRate = Number(assigned?.hourlyRate) || defaultSpecialistRate;
+      const rate = rawRate > 0 && rawRate <= 500 ? rawRate : defaultSpecialistRate;
       return sum + Math.round((Number(t.actualHours) || 0) * rate);
     }, 0);
   }, [reviewTasks, defaultSpecialistRate, project]);
@@ -311,7 +313,8 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
             
             // Specialist agreed rate from teamMembers or fallback to project rate
             const assignedMember = (project as any)?.teamMembers?.find((m: any) => m.uid === task.assigneeId);
-            const taskRate = Number(assignedMember?.hourlyRate) || defaultSpecialistRate;
+            const rawRate = Number(assignedMember?.hourlyRate) || defaultSpecialistRate;
+            const taskRate = rawRate > 0 && rawRate <= 500 ? rawRate : defaultSpecialistRate;
             const taskCost = Math.round(effectiveLoggedHours * taskRate);
 
             return (
@@ -571,13 +574,13 @@ export const ApprovalsQueueView: React.FC<ApprovalsQueueViewProps> = ({
                           className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{isApproving ? 'Approving Task...' : 'Approve Task & Settle Hours'}</span>
+                          <span>{isApproving ? 'Approving Task...' : 'Approve Task'}</span>
                         </Button>
                       </>
                     ) : (
                       <span className="text-[11px] text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 px-3 py-1 rounded border border-amber-500/20">
                         <Clock className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Awaiting Client Verification & Settlement</span>
+                        <span>Awaiting Client Verification</span>
                       </span>
                     )}
                   </div>

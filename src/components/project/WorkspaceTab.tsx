@@ -70,12 +70,14 @@ interface WorkspaceTabProps {
   project: Project;
   onOpenCreateMilestoneModal?: () => void;
   isReadOnly?: boolean;
+  onCompleteProject?: () => void;
 }
 
 export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
   project,
   onOpenCreateMilestoneModal,
   isReadOnly,
+  onCompleteProject,
 }) => {
   const projectId = project.id || '';
   const isProjectCompleted = project.status === 'completed' || isReadOnly;
@@ -110,11 +112,15 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     return tasks.filter((t) => t.status === 'review').length;
   }, [tasks]);
 
+  const allTasksCompleted = useMemo(() => {
+    return tasks.length > 0 && tasks.every((t) => t.status === 'completed') && reviewTasksCount === 0;
+  }, [tasks, reviewTasksCount]);
+
   const handleApproveTask = async (taskId: string) => {
     if (!projectId) return;
     try {
       await approveTaskByClient(projectId, taskId);
-      setToastMessage('Task approved! Direct settlement invoice generated.');
+      setToastMessage('Task approved successfully!');
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err) {
       console.error('Failed to approve task:', err);
@@ -280,6 +286,33 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
         </div>
       )}
 
+      {/* ALL TASKS COMPLETED CALLOUT BANNER */}
+      {!isProjectCompleted && allTasksCompleted && isClientOrAdmin && (
+        <div className="p-4 rounded-[12px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-emerald-200">All Workspace Tasks Completed!</p>
+              <p className="text-[11px] text-emerald-400/80 mt-0.5">
+                Every task deliverable has been approved. You can now officially mark this project as completed.
+              </p>
+            </div>
+          </div>
+          {onCompleteProject && (
+            <Button
+              size="sm"
+              onClick={onCompleteProject}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] shrink-0 cursor-pointer"
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>Complete Project</span>
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* TOAST MESSAGE BANNER */}
       {toastMessage && (
         <div className="p-3.5 rounded-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between gap-3 animate-in fade-in">
@@ -350,6 +383,17 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
               </button>
             )}
           </div>
+
+          {!isProjectCompleted && allTasksCompleted && isClientOrAdmin && onCompleteProject && (
+            <Button
+              size="sm"
+              onClick={onCompleteProject}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs flex items-center gap-1.5 shrink-0 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse cursor-pointer"
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>Complete Project</span>
+            </Button>
+          )}
 
           {!isProjectCompleted && isClientOrAdmin && (
             <Button

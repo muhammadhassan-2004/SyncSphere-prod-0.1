@@ -27,9 +27,7 @@ async function generateGeminiContent(ai: GoogleGenAI, promptText: string): Promi
 // Intelligent fallback brief generator that synthesizes detailed architecture & domain-specific risks
 export function computeFallbackBrief(projectData: any, conversation?: any[]) {
   const title = (projectData?.title || 'Modern Software Application').trim();
-  const synthesizedTitle = title.toLowerCase().startsWith('ai brief:') || title.toLowerCase().startsWith('[presync')
-    ? title
-    : `[PreSync AI Brief] ${title}`;
+  const cleanTitle = title.replace(/^\[PreSync\s+AI\s+Brief\]\s*/i, '').replace(/^PreSync\s+AI\s+Brief:\s*/i, '').trim() || title;
 
   const category = projectData?.category || 'Full Stack Development';
   const industry = projectData?.industry || 'Technology & SaaS';
@@ -88,7 +86,7 @@ export function computeFallbackBrief(projectData: any, conversation?: any[]) {
   ];
 
   return {
-    title: synthesizedTitle,
+    title: cleanTitle,
     description: fullDescription,
     keyRisks,
     recommendedSkills

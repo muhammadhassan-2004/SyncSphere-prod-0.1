@@ -105,6 +105,23 @@ export const SymbioteEarningsPage: React.FC = () => {
     return map;
   }, [projects]);
 
+  // Project Client map to accurately resolve the client's name/company (never the symbiote)
+  const projectClientMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    projects.forEach((p) => {
+      if (p.id) {
+        const cName =
+          p.clientName ||
+          (p as any).clientCompany ||
+          (p as any).clientCompanyName ||
+          (p as any).companyName ||
+          'Client Partner';
+        map[p.id] = cName;
+      }
+    });
+    return map;
+  }, [projects]);
+
   // Toast Helper
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -148,54 +165,96 @@ export const SymbioteEarningsPage: React.FC = () => {
   const transactions: TransactionRow[] = useMemo(() => {
     const list: TransactionRow[] = [];
 
+    const symbioteOwnName = userProfile?.displayName || (userProfile as any)?.name || '';
+
     // Map Invoices
     invoices.forEach((inv) => {
+      const isHourly =
+        Boolean(inv.lineItems && inv.lineItems.some((l) => l.hours || l.description?.includes('/hr') || l.description?.includes('Execution'))) ||
+        Boolean(inv.title?.toLowerCase().includes('task')) ||
+        Boolean(inv.title?.toLowerCase().includes('hourly')) ||
+        Boolean(inv.description?.toLowerCase().includes('task')) ||
+        Boolean(inv.description?.toLowerCase().includes('/hr')) ||
+        Boolean(inv.description?.toLowerCase().includes('hrs')) ||
+        Boolean((inv as any).invoiceType?.toLowerCase() === 'hourly');
+
+      // Ensure clientName never defaults or reflects the freelancer's own name
+      const rawClientName = inv.clientName || (inv as any).clientCompany;
+      const isClientNameSelf =
+        rawClientName &&
+        symbioteOwnName &&
+        (rawClientName.toLowerCase().trim() === symbioteOwnName.toLowerCase().trim() ||
+          rawClientName.toLowerCase().trim() === (inv.symbioteName || '').toLowerCase().trim());
+
+      const resolvedClientName =
+        (!isClientNameSelf && rawClientName)
+          ? rawClientName
+          : (inv.projectId ? projectClientMap[inv.projectId] : null) || 'Client Partner';
+
       list.push({
         id: inv.id || `inv-${Math.random()}`,
         date: inv.issuedDate || inv.createdAt ? (inv.issuedDate || inv.createdAt || '').slice(0, 10) : new Date().toISOString().slice(0, 10),
-        projectName: inv.projectName || projectMap[inv.projectId || ''] || 'Project Milestone',
+        projectName: inv.projectName || projectMap[inv.projectId || ''] || 'Project Settlement',
         projectId: inv.projectId,
-        clientName: inv.symbioteName || 'Client Partner',
+        clientName: resolvedClientName,
         amount: inv.amount || 0,
-        type: inv.lineItems && inv.lineItems.some((l) => l.hours) ? 'Hourly' : 'Milestone',
+        type: isHourly ? 'Hourly' : 'Milestone',
         status: inv.status,
       });
     });
 
-    // Map Approved Time Entries as Hourly Earnings
+    // Map un-invoiced time entries as Hourly Logs
     const defaultHourlyRate = Number((userProfile as any)?.hourlyRate) || 0;
+    const invoicedDatesAndProjects = new Set(
+      invoices.map((inv) => `${inv.projectId}_${(inv.issuedDate || inv.createdAt || '').slice(0, 10)}`)
+    );
+
+    const invoicedKeywords = new Set<string>();
+    invoices.forEach((inv) => {
+      if (inv.title) invoicedKeywords.add(inv.title.toLowerCase().trim());
+      if (inv.description) invoicedKeywords.add(inv.description.toLowerCase().trim());
+      inv.lineItems?.forEach((li) => {
+        if (li.description) invoicedKeywords.add(li.description.toLowerCase().trim());
+      });
+    });
+
     timeEntries.forEach((te) => {
-      const teStatus = (te.status || 'pending').toLowerCase();
-      const rate = Number(te.hourlyRate) || defaultHourlyRate;
-      if (teStatus === 'approved') {
-        const estEarnings = (te.hours || 0) * rate;
-        list.push({
-          id: te.id || `te-${Math.random()}`,
-          date: te.date || new Date().toISOString().slice(0, 10),
-          projectName: te.projectName || projectMap[te.projectId] || 'Hourly Work',
-          projectId: te.projectId,
-          clientName: 'Client Partner',
-          amount: estEarnings,
-          type: 'Hourly',
-          status: 'paid',
-        });
-      } else if (teStatus === 'pending') {
-        const estEarnings = (te.hours || 0) * rate;
-        list.push({
-          id: te.id || `te-${Math.random()}`,
-          date: te.date || new Date().toISOString().slice(0, 10),
-          projectName: te.projectName || projectMap[te.projectId] || 'Hourly Work',
-          projectId: te.projectId,
-          clientName: 'Client Partner',
-          amount: estEarnings,
-          type: 'Hourly',
-          status: 'pending',
-        });
-      }
+      // 1. Skip if explicitly marked as invoiced or linked to an invoice
+      if (te.invoiced || te.invoiceId) return;
+
+      // 2. Skip if an invoice covers this project on this date
+      const key = `${te.projectId}_${(te.date || '').slice(0, 10)}`;
+      if (invoicedDatesAndProjects.has(key)) return;
+
+      // 3. Skip if task title, task ID, or description is referenced in an existing invoice
+      if (te.taskId && Array.from(invoicedKeywords).some((kw) => kw.includes(te.taskId!.toLowerCase()))) return;
+      if (te.taskTitle && Array.from(invoicedKeywords).some((kw) => kw.includes(te.taskTitle!.toLowerCase()))) return;
+      if (te.description && Array.from(invoicedKeywords).some((kw) => kw.includes(te.description.toLowerCase()))) return;
+
+      const rawRate = Number(te.hourlyRate) || defaultHourlyRate;
+      const rate = rawRate > 0 && rawRate <= 500 ? rawRate : (defaultHourlyRate > 0 && defaultHourlyRate <= 500 ? defaultHourlyRate : 55);
+      const estEarnings = (te.hours || 0) * rate;
+
+      const resolvedClientName =
+        (te.projectId ? projectClientMap[te.projectId] : null) ||
+        (te as any).clientName ||
+        'Client Partner';
+
+      list.push({
+        id: te.id || `te-${Math.random()}`,
+        date: te.date || new Date().toISOString().slice(0, 10),
+        projectName: te.projectName || projectMap[te.projectId] || 'Hourly Work',
+        projectId: te.projectId,
+        clientName: resolvedClientName,
+        amount: estEarnings,
+        type: 'Hourly',
+        // Un-invoiced hours remain in 'pending' settlement until officially invoiced and paid
+        status: 'pending',
+      });
     });
 
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [invoices, timeEntries, projectMap, userProfile]);
+  }, [invoices, timeEntries, projectMap, projectClientMap, userProfile]);
 
   // Filtered Transactions
   const filteredTransactions = useMemo(() => {

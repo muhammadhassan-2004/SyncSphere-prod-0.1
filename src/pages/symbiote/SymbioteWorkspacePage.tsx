@@ -679,7 +679,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
       {activeTab === 'milestones' && project && (
         <MilestonesTab
           project={project}
-          isReadOnly={true}
+          isReadOnly={false}
           userRole="specialist"
         />
       )}

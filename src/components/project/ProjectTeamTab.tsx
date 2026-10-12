@@ -156,7 +156,13 @@ export const ProjectTeamTab: React.FC<ProjectTeamTabProps> = ({
           role: resolvedRole,
           avatarInitials: userDoc?.avatarInitials || inv.symbioteAvatarInitials,
           avatarUrl: userDoc?.avatarUrl || (userDoc as any)?.photoURL || inv.symbioteAvatarUrl,
-          hourlyRate: userDoc?.hourlyRate || (inv.budgetRange ? parseFloat(inv.budgetRange.replace(/[^0-9.]/g, '')) || undefined : undefined),
+          hourlyRate: (userDoc?.hourlyRate && userDoc.hourlyRate <= 500)
+            ? userDoc.hourlyRate
+            : (inv.symbioteHourlyRate && inv.symbioteHourlyRate <= 500)
+            ? inv.symbioteHourlyRate
+            : (inv.budgetRange && inv.budgetRange.includes('/hr')
+              ? parseFloat(inv.budgetRange.replace(/[^0-9.]/g, '')) || 55
+              : 55),
           matchScore: inv.matchScore || inv.aiMatchScore,
           invitationId: inv.id,
           source: 'invitation',
@@ -236,12 +242,21 @@ export const ProjectTeamTab: React.FC<ProjectTeamTabProps> = ({
       const alreadyInDoc = (project.teamMembers || []).some((m) => m.uid === memberUid);
 
       if (!alreadyInDoc) {
+        const userDoc = realUsersMap.get(memberUid);
+        const resolvedHourlyRate = (userDoc?.hourlyRate && userDoc.hourlyRate <= 500)
+          ? userDoc.hourlyRate
+          : (invitation.symbioteHourlyRate && invitation.symbioteHourlyRate <= 500)
+          ? invitation.symbioteHourlyRate
+          : (invitation.budgetRange && invitation.budgetRange.includes('/hr')
+            ? parseFloat(invitation.budgetRange.replace(/[^0-9.]/g, '')) || 55
+            : 55);
+
         await addTeamMemberToProject(projectId, {
           uid: memberUid,
           displayName: invitation.symbioteName || 'Specialist',
           role: invitation.symbioteTitle || 'Senior AI Specialist',
           avatarInitials: invitation.symbioteAvatarInitials || 'SP',
-          hourlyRate: invitation.budgetRange ? parseFloat(invitation.budgetRange.replace(/[^0-9.]/g, '')) || 100 : 100,
+          hourlyRate: resolvedHourlyRate,
           matchScore: invitation.matchScore || invitation.aiMatchScore || 95,
         });
       }

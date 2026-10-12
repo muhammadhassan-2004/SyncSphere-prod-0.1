@@ -139,6 +139,23 @@ export async function updateInvitationStatus(
               const projData = projSnap.data();
               const existingTeam = projData.teamMembers || [];
               const alreadyInTeam = existingTeam.some((m: any) => m.uid === invData.symbioteId);
+              let specialistRate = 55;
+              if (invData.symbioteHourlyRate && invData.symbioteHourlyRate > 0 && invData.symbioteHourlyRate <= 500) {
+                specialistRate = invData.symbioteHourlyRate;
+              } else {
+                try {
+                  const uSnap = await getDoc(doc(db, 'users', invData.symbioteId));
+                  if (uSnap.exists() && uSnap.data()?.hourlyRate && uSnap.data().hourlyRate <= 500) {
+                    specialistRate = uSnap.data().hourlyRate;
+                  } else if (typeof invData.budgetRange === 'string' && invData.budgetRange.includes('/hr')) {
+                    const parsed = parseFloat(invData.budgetRange.replace(/[^0-9.]/g, ''));
+                    if (!isNaN(parsed) && parsed > 0 && parsed <= 500) specialistRate = parsed;
+                  }
+                } catch (e) {
+                  console.debug('Could not fetch user profile rate:', e);
+                }
+              }
+
               const updatedTeam = alreadyInTeam
                 ? existingTeam
                 : [
@@ -148,9 +165,7 @@ export async function updateInvitationStatus(
                       displayName: invData.symbioteName || 'Specialist',
                       role: (invData as any).role || 'Specialist Engineer',
                       avatarInitials: invData.symbioteAvatarInitials || 'SP',
-                      hourlyRate: typeof invData.budgetRange === 'string' && invData.budgetRange.includes('$')
-                        ? parseFloat(invData.budgetRange.replace(/[^0-9.]/g, '')) || 100
-                        : 100,
+                      hourlyRate: specialistRate,
                       matchScore: invData.aiMatchScore || (invData as any).matchScore || 95,
                       addedAt: new Date().toISOString(),
                     },

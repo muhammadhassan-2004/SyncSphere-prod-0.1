@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/src/context/AuthContext';
 import { Invoice, Project, UserProfile } from '@/src/types/firestore';
-import { subscribeToInvoices, createInvoice } from '@/src/lib/firestore/invoices';
+import { subscribeToInvoices, createInvoice, confirmInvoicePaymentBySymbiote } from '@/src/lib/firestore/invoices';
 import { subscribeToProjectsBySymbiote } from '@/src/lib/firestore/projects';
 import { getUserProfile } from '@/src/lib/firestore/users';
 import { Card } from '@/src/components/ui/card';
@@ -311,6 +311,21 @@ export const SymbioteInvoicesPage: React.FC = () => {
       .sort((a, b) => new Date(b.issuedDate || b.createdAt || 0).getTime() - new Date(a.issuedDate || a.createdAt || 0).getTime());
   }, [invoices, statusFilter, searchQuery]);
 
+  // Specialist Out-of-Platform Payment Confirmation Handler
+  const handleConfirmPaymentReceived = async (inv: Invoice) => {
+    if (!inv || !inv.id) return;
+    try {
+      await confirmInvoicePaymentBySymbiote(inv.id);
+      setToastMessage(`Payment of $${(inv.amount || 0).toLocaleString()} confirmed for Invoice ${inv.invoiceNumber}.`);
+      if (selectedInvoiceForDetails?.id === inv.id) {
+        setSelectedInvoiceForDetails(null);
+      }
+    } catch (err: any) {
+      console.error('Failed to confirm invoice payment:', err);
+      setToastMessage(err.message || 'Failed to confirm payment.');
+    }
+  };
+
   // Export Single Invoice / Download as Printable HTML PDF or Text
   const handleDownloadInvoice = (inv: Invoice, mode: 'pdf' | 'text' = 'pdf') => {
     if (mode === 'pdf') {
@@ -576,6 +591,9 @@ Thank you for your business!`;
               <option value="pending" className="bg-slate-900 text-white">
                 Pending
               </option>
+              <option value="marked_paid" className="bg-slate-900 text-white">
+                Payment Sent (Awaiting Confirmation)
+              </option>
               <option value="paid" className="bg-slate-900 text-white">
                 Paid
               </option>
@@ -647,6 +665,11 @@ Thank you for your business!`;
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Paid</span>
                           </span>
+                        ) : inv.status === 'marked_paid' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Payment Sent</span>
+                          </span>
                         ) : inv.status === 'overdue' ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
                             <XCircle className="w-3.5 h-3.5" />
@@ -660,7 +683,19 @@ Thank you for your business!`;
                         )}
                       </td>
 
-                      <td className="py-3 px-3 text-right whitespace-nowrap space-x-1">
+                      <td className="py-3 px-3 text-right whitespace-nowrap space-x-1.5">
+                        {inv.status === 'marked_paid' && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => handleConfirmPaymentReceived(inv)}
+                            className="h-7 px-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[11px] inline-flex items-center gap-1 shadow-sm"
+                            title="Confirm Payment Received"
+                          >
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>Confirm Receipt</span>
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -927,6 +962,36 @@ Thank you for your business!`;
                   ${(selectedInvoiceForDetails.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
+
+              {selectedInvoiceForDetails.status === 'marked_paid' && (
+                <div className="p-3.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 space-y-2.5 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      Client Marked as Paid (Direct Transfer)
+                    </span>
+                    <span className="text-[10px] text-cyan-300 font-bold uppercase px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/40">
+                      Awaiting Confirmation
+                    </span>
+                  </div>
+                  {selectedInvoiceForDetails.paymentDetails?.referenceNote && (
+                    <div className="p-2 rounded bg-black/30 border border-cyan-900/40 text-slate-300">
+                      <span className="text-slate-500 block text-[10px]">Client Reference Note:</span>
+                      <span className="font-mono text-cyan-300">{selectedInvoiceForDetails.paymentDetails.referenceNote}</span>
+                    </div>
+                  )}
+                  <p className="text-slate-400 text-[10px]">
+                    The client has completed payment out-of-platform (direct transfer / wire / cash). Please verify that the funds have reached your account before confirming.
+                  </p>
+                  <Button
+                    onClick={() => handleConfirmPaymentReceived(selectedInvoiceForDetails)}
+                    className="w-full h-9 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md"
+                  >
+                    <CheckCheck className="w-4 h-4" />
+                    <span>Confirm Payment Received (${(selectedInvoiceForDetails.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
+                  </Button>
+                </div>
+              )}
 
               {selectedInvoiceForDetails.status === 'paid' && (
                 <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 space-y-2 text-[11px] font-mono">

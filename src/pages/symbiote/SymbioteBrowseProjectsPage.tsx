@@ -8,6 +8,11 @@ import { EmptyState } from '@/src/components/ui/EmptyState';
 import { subscribeToOpenProjects, subscribeToSymbioteInvitations } from '@/src/lib/firestore';
 import { Project, Invitation } from '@/src/types/firestore';
 import {
+  formatProjectBudget,
+  getCleanProjectTitle,
+  isAiBriefProject,
+} from '@/src/lib/utils/projectBudget';
+import {
   Search,
   Filter,
   X,
@@ -243,29 +248,7 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
 
   // Helper for budget display
   const formatBudget = (proj: Project): string => {
-    const isHourly = proj.budgetType === 'hourly' || (proj as any).pricingModel === 'hourly';
-    if (isHourly) {
-      if (proj.minBudget && proj.maxBudget) {
-        return `$${proj.minBudget.toLocaleString()} – $${proj.maxBudget.toLocaleString()}/hr`;
-      }
-      if (proj.maxBudget) {
-        return `$${proj.maxBudget.toLocaleString()}/hr`;
-      }
-      return 'Dynamic Per-Task';
-    }
-    if (proj.minBudget && proj.maxBudget) {
-      return `$${proj.minBudget.toLocaleString()} – $${proj.maxBudget.toLocaleString()}`;
-    }
-    if (proj.maxBudget) {
-      return `Up to $${proj.maxBudget.toLocaleString()}`;
-    }
-    if (typeof proj.budget === 'number') {
-      return `$${proj.budget.toLocaleString()}`;
-    }
-    if (typeof proj.budget === 'object' && proj.budget?.total) {
-      return `$${proj.budget.total.toLocaleString()}`;
-    }
-    return 'Dynamic Per-Task';
+    return formatProjectBudget(proj);
   };
 
   return (
@@ -504,8 +487,15 @@ export const SymbioteBrowseProjectsPage: React.FC = () => {
                           onClick={() => navigate(`/symbiote/browse/${proj.id}`)}
                           className="text-base sm:text-lg font-bold text-[var(--color-text-primary)] group-hover:text-cyan-400 transition-colors cursor-pointer leading-snug"
                         >
-                          {proj.title}
+                          {getCleanProjectTitle(proj.title)}
                         </h3>
+
+                        {isAiBriefProject(proj) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border border-cyan-500/30 text-[11px] font-mono text-cyan-400 bg-cyan-500/10">
+                            <Sparkles className="w-3 h-3 text-cyan-400" />
+                            <span>PreSync AI Brief</span>
+                          </span>
+                        )}
 
                         {/* INVITATION BADGE IF INVITED BY CLIENT */}
                         {isInvited && (
