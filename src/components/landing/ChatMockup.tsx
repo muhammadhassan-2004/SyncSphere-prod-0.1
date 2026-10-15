@@ -40,11 +40,11 @@ const generateAIResponse = (query: string): { text: string; recommendation?: { t
 
   if (lower.includes('escrow') || lower.includes('payment') || lower.includes('milestone') || lower.includes('protect')) {
     return {
-      text: 'SyncSphere features automated milestone escrow. Client funds are locked securely prior to sprint execution and released only upon full review and approval of deliverables.',
+      text: 'SyncSphere features transparent milestone delivery governance. Deliverables are verified by the business owner with direct settlement records upon full review and approval.',
       recommendation: {
         team: 'Milestone Governance & SLA Protection',
-        timeline: 'Instant Settlement',
-        budget: '100% Protected Milestones',
+        timeline: 'Direct Settlement',
+        budget: 'Verified Milestones',
       },
     };
   }

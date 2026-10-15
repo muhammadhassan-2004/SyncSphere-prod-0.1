@@ -1,5 +1,6 @@
 import React from 'react';
 import { Project, UserProfile } from '@/src/types/firestore';
+import { formatProjectBudget, getProjectBillingModel } from '@/src/lib/utils/projectBudget';
 import { Card } from '@/src/components/ui/card';
 import { StatusPill } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
@@ -44,10 +45,6 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
     ? Math.round((completedMilestones / totalMilestones) * 100)
     : (project.progressPercent ?? 35);
   const healthStatus = project.healthStatus || 'On Track';
-
-  // Real-time project expenditure tracking
-  const totalSpent = Number(project.totalSpent || 0);
-  const totalSettledTasks = Number(project.totalSettledTasks || 0);
 
   const teamMembers = project.teamMembers || [];
 
@@ -259,18 +256,15 @@ export const SymbioteOverviewTab: React.FC<SymbioteOverviewTabProps> = ({
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-1">
-                <span className="text-[10px] text-[var(--color-text-secondary)] font-mono uppercase">
-                  Total Project Settlement
-                </span>
-                <p className="text-base font-mono font-bold text-emerald-400">
-                  ${totalSpent.toLocaleString()}
-                </p>
-                <span className="text-[10px] text-[var(--color-text-secondary)] block">
-                  {totalSettledTasks > 0
-                    ? `${totalSettledTasks} approved task${totalSettledTasks > 1 ? 's' : ''} settled`
-                    : 'Dynamic Per-Task Billing'}
-                </span>
+              <div className="p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[var(--color-text-secondary)] font-mono uppercase">
+                    Project Budget
+                  </span>
+                  <span className="text-xs font-bold font-mono text-[var(--color-text-primary)]">
+                    {formatProjectBudget(project)}
+                  </span>
+                </div>
               </div>
 
               <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] space-y-1.5">

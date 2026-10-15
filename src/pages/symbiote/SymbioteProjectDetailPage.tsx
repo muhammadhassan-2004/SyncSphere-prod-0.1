@@ -17,6 +17,12 @@ import {
 } from '@/src/lib/firestore';
 import { Project, Application, UserProfile, Invitation } from '@/src/types/firestore';
 import {
+  formatProjectBudget,
+  getProjectBillingModel,
+  getCleanProjectTitle,
+  isAiBriefProject,
+} from '@/src/lib/utils/projectBudget';
+import {
   ArrowLeft,
   ArrowRight,
   Sparkles,
@@ -462,11 +468,7 @@ export const SymbioteProjectDetailPage: React.FC = () => {
           <div className="flex items-center gap-2 text-caption">
             <span className="text-[var(--color-text-secondary)]">Payment Model:</span>
             <span className="font-bold text-emerald-400 text-body">
-              {project.maxBudget
-                ? `$${project.maxBudget.toLocaleString()}`
-                : project.minBudget
-                ? `$${project.minBudget.toLocaleString()}`
-                : 'Dynamic Per-Task'}
+              {getProjectBillingModel(project)} ({formatProjectBudget(project)})
             </span>
           </div>
         </div>
@@ -483,7 +485,16 @@ export const SymbioteProjectDetailPage: React.FC = () => {
           {/* MAIN PROJECT HEADER & OVERVIEW */}
           <Card className="p-6 border border-[var(--color-border)] bg-[var(--color-surface)] rounded-[12px] space-y-5">
             <div className="space-y-2">
-              <h1 className="text-h1 font-bold text-[var(--color-text-primary)]">{project.title}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-h1 font-bold text-[var(--color-text-primary)]">
+                  {getCleanProjectTitle(project.title)}
+                </h1>
+                {isAiBriefProject(project) && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">
+                    <Sparkles className="w-3 h-3" /> PreSync AI Brief
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3 text-caption text-[var(--color-text-secondary)] flex-wrap">
                 <span className="flex items-center gap-1">
                   <Building className="w-3.5 h-3.5 text-emerald-500" /> Client: {clientName}
@@ -503,7 +514,10 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                   Payment Model
                 </span>
                 <span className="text-body font-bold text-cyan-400">
-                  Dynamic Per-Task
+                  {getProjectBillingModel(project)}
+                </span>
+                <span className="text-[10px] font-mono text-[var(--color-text-secondary)] block mt-0.5">
+                  {formatProjectBudget(project)}
                 </span>
               </div>
               <div className="border-x border-[var(--color-border)] px-2">
@@ -682,7 +696,10 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                       Payment Model
                     </span>
                     <span className="text-body font-bold text-cyan-400 font-mono">
-                      Dynamic Per-Task
+                      {getProjectBillingModel(project)}
+                    </span>
+                    <span className="text-[10px] text-[var(--color-text-secondary)] font-mono block mt-0.5">
+                      {formatProjectBudget(project)}
                     </span>
                   </div>
                   <div>
@@ -734,7 +751,7 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                     <span className="font-semibold text-emerald-400 font-mono">Direct Application (Zero Bids)</span>
                   </div>
                   <span className="text-[11px] text-[var(--color-text-secondary)]">
-                    Payment: <span className="text-cyan-400 font-semibold font-mono">Dynamic Per-Task</span>
+                    Payment: <span className="text-cyan-400 font-semibold font-mono">{getProjectBillingModel(project)}</span>
                   </span>
                 </div>
 
@@ -754,12 +771,16 @@ export const SymbioteProjectDetailPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-caption font-semibold text-[var(--color-text-primary)]">
-                      Agreed Billing Rate
+                      {getProjectBillingModel(project) === 'Fixed Price' ? 'Project Compensation' : 'Agreed Billing Rate'}
                     </label>
                     <div className="w-full p-2.5 text-body rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] text-cyan-400 font-bold flex items-center justify-between font-mono">
-                      <span>${(userProfile as any)?.hourlyRate || 50}/hr</span>
+                      <span>
+                        {getProjectBillingModel(project) === 'Fixed Price'
+                          ? formatProjectBudget(project)
+                          : `$${(userProfile as any)?.hourlyRate || 50}/hr`}
+                      </span>
                       <span className="text-[10px] text-[var(--color-text-secondary)] font-normal uppercase">
-                        Profile Rate
+                        {getProjectBillingModel(project) === 'Fixed Price' ? 'Fixed Contract' : 'Profile Rate'}
                       </span>
                     </div>
                   </div>

@@ -12,6 +12,7 @@ import { subscribeToProjectsByOwner } from '@/src/lib/firestore/projects';
 import { subscribeToSymbiotesFromFirestore } from '@/src/lib/firestore/users';
 import { syncProjectCompletionAndProgress } from '@/src/lib/firestore/workspace';
 import { ResponsiveStatValue } from '@/src/components/ui/ResponsiveStatValue';
+import { formatProjectBudget, getCleanProjectTitle, isAiBriefProject } from '@/src/lib/utils/projectBudget';
 import {
   FolderKanban,
   Plus,
@@ -189,9 +190,8 @@ export const ClientProjectsPage: React.FC = () => {
     const active = projects.filter((p) => p.status === 'active' || p.status === 'in_progress').length;
     const matching = projects.filter((p) => p.status === 'matching' || p.status === 'submitted').length;
     const completed = projects.filter((p) => p.status === 'completed').length;
-    const totalSpent = projects.reduce((acc, p) => acc + (p.totalSpent || 0), 0);
 
-    return { total, active, matching, completed, totalSpent };
+    return { total, active, matching, completed };
   }, [projects]);
 
   const getStatusVariant = (status?: string): 'cyan' | 'green' | 'amber' | 'blue' | 'purple' | 'red' | 'gray' => {
@@ -301,16 +301,12 @@ export const ClientProjectsPage: React.FC = () => {
         <Card className="p-4 bg-[var(--color-surface)] border-[var(--color-border)] min-w-0 overflow-hidden">
           <div className="flex items-center justify-between gap-2">
             <span className="text-caption text-[var(--color-text-secondary)] uppercase tracking-wider font-semibold truncate">
-              Total Spent So Far
+              Completed
             </span>
-            <DollarSign className="w-4 h-4 text-[var(--color-warning-amber)] shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-[var(--color-accent-cyan)] shrink-0" />
           </div>
           <div className="mt-2">
-            <ResponsiveStatValue
-              value={`$${stats.totalSpent.toLocaleString()}`}
-              mono
-              tooltip={`Total Spent Across Projects: $${stats.totalSpent.toLocaleString()}`}
-            />
+            <ResponsiveStatValue value={stats.completed} />
           </div>
         </Card>
       </div>
@@ -421,7 +417,7 @@ export const ClientProjectsPage: React.FC = () => {
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/50 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
                   <th className="py-3 px-4">Project Name & Category</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Spent So Far</th>
+                  <th className="py-3 px-4">Budget</th>
                   <th className="py-3 px-4">Progress</th>
                   <th className="py-3 px-4">Assigned Specialist</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -429,7 +425,6 @@ export const ClientProjectsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)] text-xs">
                 {filteredProjects.map((project) => {
-                  const spentAmount = Number(project.totalSpent || 0);
                   const progressPct = getProjectProgress(project);
                   const specialist = getProjectSpecialist(project);
 
@@ -441,8 +436,13 @@ export const ClientProjectsPage: React.FC = () => {
                     >
                       {/* Title & Category */}
                       <td className="py-4 px-4 max-w-xs">
-                        <div className="font-bold text-[var(--color-text-primary)] text-sm group-hover:text-[var(--color-accent-cyan)] transition-colors">
-                          {project.title}
+                        <div className="font-bold text-[var(--color-text-primary)] text-sm group-hover:text-[var(--color-accent-cyan)] transition-colors flex items-center gap-1.5 flex-wrap">
+                          <span>{getCleanProjectTitle(project.title)}</span>
+                          {isAiBriefProject(project) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-accent-cyan)]/15 text-[var(--color-accent-cyan)] border border-[var(--color-accent-cyan)]/30">
+                              <Sparkles className="w-3 h-3" /> PreSync AI Brief
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
@@ -462,10 +462,11 @@ export const ClientProjectsPage: React.FC = () => {
                         />
                       </td>
 
-                      {/* Spent */}
-                      <td className="py-4 px-4 whitespace-nowrap font-mono font-bold text-[var(--color-text-primary)]">
-                        ${spentAmount.toLocaleString()}
-                        <span className="text-[10px] text-[var(--color-text-secondary)] font-normal ml-1">spent</span>
+                      {/* Budget */}
+                      <td className="py-4 px-4 whitespace-nowrap font-mono">
+                        <div className="font-bold text-[var(--color-text-primary)] text-xs">
+                          {formatProjectBudget(project)}
+                        </div>
                       </td>
 
                       {/* Progress */}
@@ -540,7 +541,6 @@ export const ClientProjectsPage: React.FC = () => {
         /* GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredProjects.map((project) => {
-            const spentAmount = Number(project.totalSpent || 0);
             const progressPct = getProjectProgress(project);
             const specialist = getProjectSpecialist(project);
 
@@ -561,12 +561,19 @@ export const ClientProjectsPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <h3
-                      onClick={() => navigate(`/client/projects/${project.id}`)}
-                      className="font-bold text-base text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors cursor-pointer line-clamp-1"
-                    >
-                      {project.title}
-                    </h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3
+                        onClick={() => navigate(`/client/projects/${project.id}`)}
+                        className="font-bold text-base text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors cursor-pointer line-clamp-1"
+                      >
+                        {getCleanProjectTitle(project.title)}
+                      </h3>
+                      {isAiBriefProject(project) && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-accent-cyan)]/15 text-[var(--color-accent-cyan)] border border-[var(--color-accent-cyan)]/30">
+                          <Sparkles className="w-3 h-3" /> PreSync AI Brief
+                        </span>
+                      )}
+                    </div>
                     <p className="text-caption text-[var(--color-text-secondary)] line-clamp-2 mt-1">
                       {project.description}
                     </p>
@@ -582,11 +589,11 @@ export const ClientProjectsPage: React.FC = () => {
                 </div>
 
                 <div className="pt-3 border-t border-[var(--color-border)] space-y-3">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs font-mono">
                     <div>
-                      <span className="text-caption text-[var(--color-text-secondary)] block">Spent So Far</span>
-                      <span className="font-mono font-bold text-[var(--color-text-primary)]">
-                        ${spentAmount.toLocaleString()}
+                      <span className="text-caption text-[var(--color-text-secondary)] block">Budget</span>
+                      <span className="font-bold text-[var(--color-text-primary)] text-xs">
+                        {formatProjectBudget(project)}
                       </span>
                     </div>
 

@@ -124,25 +124,45 @@ async function startServer() {
     });
   }
 
-  let targetPort = PORT;
-  const isOccupied = await new Promise<boolean>((resolve) => {
-    const socket = net.createConnection({ port: targetPort, host: "127.0.0.1" });
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("error", () => {
-      resolve(false);
-    });
-    socket.setTimeout(600, () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
+  async function findAvailablePort(startPort: number): Promise<number> {
+    let port = startPort;
+    while (port < startPort + 50) {
+      const isOccupied = await new Promise<boolean>((resolve) => {
+        const client = net.createConnection({ port, host: "127.0.0.1" });
+        client.once("connect", () => {
+          client.destroy();
+          resolve(true);
+        });
+        client.once("error", () => {
+          resolve(false);
+        });
+        client.setTimeout(300, () => {
+          client.destroy();
+          resolve(false);
+        });
+      });
 
-  if (isOccupied) {
-    console.warn(`[Server Notice] Port ${targetPort} is already occupied by another running application. Automatically switching to port ${targetPort + 1}...`);
-    targetPort += 1;
+      if (!isOccupied) {
+        const canBind = await new Promise<boolean>((resolve) => {
+          const testServer = net.createServer();
+          testServer.once("error", () => {
+            resolve(false);
+          });
+          testServer.once("listening", () => {
+            testServer.close(() => resolve(true));
+          });
+          testServer.listen(port, "0.0.0.0");
+        });
+        if (canBind) return port;
+      }
+      port++;
+    }
+    return startPort;
+  }
+
+  const targetPort = await findAvailablePort(PORT);
+  if (targetPort !== PORT) {
+    console.warn(`[Server Notice] Port ${PORT} is occupied by another application. Automatically running on port ${targetPort}...`);
   }
 
   app.listen(targetPort, "0.0.0.0", () => {

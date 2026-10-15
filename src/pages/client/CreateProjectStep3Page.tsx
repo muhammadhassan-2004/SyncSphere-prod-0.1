@@ -8,6 +8,7 @@ import { StatusPill } from '@/src/components/ui/badge';
 import { WizardStepIndicator } from '@/src/components/widgets/WizardStepIndicator';
 import { saveProjectDraft, getProjectById } from '@/src/lib/firestore/projects';
 import { Project } from '@/src/types/firestore';
+import { getCleanProjectTitle } from '@/src/lib/utils/projectBudget';
 import {
   Sparkles,
   ArrowLeft,
@@ -155,13 +156,14 @@ To synthesize a high-precision executive brief for our matching engine, please s
     try {
       await saveProjectDraft(draftId, {
         ownerId: firebaseUser.uid,
+        clientId: firebaseUser.uid,
         aiConversation: updatedMessages,
         aiBrief: updatedBrief || undefined,
         aiBriefAttached: attached,
         // Also sync title, description, and skills with AI brief if attached
         ...(attached && updatedBrief ? {
           description: updatedBrief.description,
-          ...(updatedBrief.title ? { title: updatedBrief.title } : {}),
+          ...(updatedBrief.title ? { title: getCleanProjectTitle(updatedBrief.title) } : {}),
           ...(updatedBrief.recommendedSkills && updatedBrief.recommendedSkills.length > 0
             ? { skills: updatedBrief.recommendedSkills }
             : {}),
@@ -309,7 +311,7 @@ To synthesize a high-precision executive brief for our matching engine, please s
         status: 'draft',
         ...(isBriefAttached && aiBrief ? {
           description: aiBrief.description,
-          ...(aiBrief.title ? { title: aiBrief.title } : {}),
+          ...(aiBrief.title ? { title: getCleanProjectTitle(aiBrief.title) } : {}),
           ...(aiBrief.recommendedSkills && aiBrief.recommendedSkills.length > 0
             ? { skills: aiBrief.recommendedSkills }
             : {}),

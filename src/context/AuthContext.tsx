@@ -62,6 +62,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             displayName: parsed.displayName || 'User',
             role: parsed.role,
             avatarUrl: parsed.avatarUrl,
+            emailVerified: parsed.emailVerified,
+            onboardingCompleted: parsed.onboardingCompleted,
             createdAt: parsed.createdAt || '2026-01-01T00:00:00.000Z',
             updatedAt: parsed.updatedAt || '2026-01-01T00:00:00.000Z',
           };
@@ -75,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [currentRole, setCurrentRoleState] = useState<UserRole>(getInitialRole);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(getInitialProfile);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unSubProfile: (() => void) | null = null;
@@ -121,8 +123,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (user.photoURL) {
                 basicData.avatarUrl = user.photoURL;
               }
-              if (typeof user.emailVerified === 'boolean') {
-                basicData.emailVerified = user.emailVerified;
+
+              const isGoogle = user.providerData?.some((p) => p.providerId === 'google.com');
+              if (isGoogle) {
+                basicData.authProvider = 'google';
+                basicData.providerId = 'google.com';
               }
 
               // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
@@ -130,6 +135,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const userSnap = await getDoc(userRef);
               if (!userSnap.exists() || !userSnap.data()?.createdAt) {
                 basicData.createdAt = new Date().toISOString();
+              }
+
+              // Preserve and auto-heal verified email status:
+              // If verified in Firebase Auth, OR in Firestore, OR if onboarding was completed, OR cached session is verified, retain true
+              let isAlreadyVerified =
+                user.emailVerified === true ||
+                (userSnap.exists() && (userSnap.data()?.emailVerified === true || userSnap.data()?.onboardingCompleted === true));
+
+              if (!isAlreadyVerified) {
+                try {
+                  const cachedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+                  if (cachedSession) {
+                    const parsed = JSON.parse(cachedSession);
+                    if (parsed.uid === user.uid && parsed.emailVerified === true) {
+                      isAlreadyVerified = true;
+                    }
+                  }
+                } catch {}
+              }
+
+              if (isAlreadyVerified) {
+                basicData.emailVerified = true;
+              } else if (!userSnap.exists()) {
+                basicData.emailVerified = false;
               }
 
               await setDoc(userRef, basicData, { merge: true });
@@ -164,9 +193,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     ? rawRole
                     : null;
 
+                let isProfileEmailVerified =
+                  profile.emailVerified === true ||
+                  profile.onboardingCompleted === true ||
+                  user.emailVerified === true;
+
+                if (!isProfileEmailVerified) {
+                  try {
+                    const cachedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+                    if (cachedSession) {
+                      const parsed = JSON.parse(cachedSession);
+                      if (parsed.uid === user.uid && parsed.emailVerified === true) {
+                        isProfileEmailVerified = true;
+                      }
+                    }
+                  } catch {}
+                }
+
                 const normalizedProfile: UserProfile = {
                   ...profile,
                   role: matchedRole,
+                  emailVerified: isProfileEmailVerified,
                 };
 
                 // Batched atomic update
@@ -183,6 +230,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       displayName: profile.displayName || user.displayName || 'User',
                       role: matchedRole,
                       avatarUrl: profile.avatarUrl,
+                      emailVerified: isProfileEmailVerified,
+                      onboardingCompleted: profile.onboardingCompleted === true,
                     })
                   );
                 }
@@ -284,11 +333,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (firebaseUser) {
       const defaultRoleName =
         currentRole === 'symbiote' ? 'Symbiote' : currentRole === 'admin' ? 'Admin' : 'Client';
+      const initial = getInitialProfile();
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
         displayName: firebaseUser.displayName || defaultRoleName,
         role: currentRole || 'client',
+        emailVerified: firebaseUser.emailVerified || (initial?.emailVerified === true),
+        onboardingCompleted: initial?.onboardingCompleted === true,
         createdAt: (firebaseUser.metadata as any)?.creationTime || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

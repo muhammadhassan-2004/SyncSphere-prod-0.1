@@ -145,6 +145,115 @@ export async function updateInvoiceStatus(
   }
 }
 
+/**
+ * Client marks that an external payment (bank transfer, wire, PayPal etc.) has been dispatched.
+ * Sets status to 'marked_paid' awaiting freelancer verification.
+ */
+export async function markInvoicePaidByClient(
+  invoiceId: string,
+  referenceNote?: string
+): Promise<void> {
+  if (!auth.currentUser || !invoiceId) return;
+  try {
+    const docRef = doc(db, INVOICES_COLLECTION, invoiceId);
+    const invSnap = await getDoc(docRef);
+    if (!invSnap.exists()) return;
+    const invData = invSnap.data() as Invoice;
+
+    await updateDoc(docRef, {
+      status: 'marked_paid',
+      paymentDetails: {
+        ...(invData.paymentDetails || {}),
+        gateway: 'direct_transfer',
+        markedPaidAt: new Date().toISOString(),
+        referenceNote: referenceNote || 'Direct transfer sent out-of-platform',
+      },
+    });
+
+    const formattedAmount = invData.amount
+      ? invData.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '0.00';
+
+    if (invData.projectId) {
+      await logProjectActivity(invData.projectId, {
+        title: 'Invoice Payment Dispatched',
+        description: `Client marked invoice ${invData.invoiceNumber || ''} ($${formattedAmount}) as Paid via direct transfer.`,
+        type: 'invoice',
+      });
+    }
+
+    if (invData.symbioteId) {
+      await createNotification({
+        userId: invData.symbioteId,
+        type: 'invoice',
+        title: 'Payment Dispatched — Please Confirm Receipt 💸',
+        description: `Client marked invoice ${invData.invoiceNumber || ''} ($${formattedAmount}) as Paid. Please verify your account and confirm receipt.`,
+        read: false,
+        relatedItemId: invoiceId,
+        relatedItemLink: '/symbiote/invoices',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${INVOICES_COLLECTION}/${invoiceId}`);
+    throw error;
+  }
+}
+
+/**
+ * Freelancer verifies and confirms that the payment was received into their bank/account.
+ * Finalizes status to 'paid'.
+ */
+export async function confirmInvoicePaymentBySymbiote(
+  invoiceId: string
+): Promise<void> {
+  if (!auth.currentUser || !invoiceId) return;
+  try {
+    const docRef = doc(db, INVOICES_COLLECTION, invoiceId);
+    const invSnap = await getDoc(docRef);
+    if (!invSnap.exists()) return;
+    const invData = invSnap.data() as Invoice;
+
+    const nowIso = new Date().toISOString();
+    await updateDoc(docRef, {
+      status: 'paid',
+      paymentDetails: {
+        ...(invData.paymentDetails || {}),
+        paidAt: nowIso,
+        confirmedAt: nowIso,
+      },
+    });
+
+    const formattedAmount = invData.amount
+      ? invData.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '0.00';
+
+    if (invData.projectId) {
+      await logProjectActivity(invData.projectId, {
+        title: 'Invoice Payment Confirmed',
+        description: `Specialist confirmed receipt of payment for invoice ${invData.invoiceNumber || ''} ($${formattedAmount}).`,
+        type: 'invoice',
+      });
+    }
+
+    if (invData.clientId) {
+      await createNotification({
+        userId: invData.clientId,
+        type: 'invoice',
+        title: 'Payment Receipt Confirmed ✓',
+        description: `Specialist confirmed payment receipt for invoice ${invData.invoiceNumber || ''} ($${formattedAmount}). Invoice is settled!`,
+        read: false,
+        relatedItemId: invoiceId,
+        relatedItemLink: '/client/invoices',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${INVOICES_COLLECTION}/${invoiceId}`);
+    throw error;
+  }
+}
+
 export function subscribeToInvoices(
   userId: string,
   userType: 'client' | 'symbiote',

@@ -4,7 +4,6 @@ import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Avatar } from '@/src/components/ui/avatar';
-import { addTeamMemberToProject } from '@/src/lib/firestore/projects';
 import { createInvitation, subscribeToProjectInvitations } from '@/src/lib/firestore/invitations';
 import {
   getAllSymbiotesFromFirestore,
@@ -20,7 +19,6 @@ import { Invitation, Project } from '@/src/types/firestore';
 import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   UserPlus,
-  UserCheck,
   X,
   Search,
   Sparkles,
@@ -208,13 +206,14 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
     })
     .sort((a, b) => b.matchScore - a.matchScore);
 
-  // Action (a): Send Invite (Candidate must accept before client approves onto team)
+  // Send Project Invitation (Candidate must accept before client approves onto team)
   const handleSendInvite = async (candidate: SymbioteCandidate, roleToAssign = assignedRole) => {
     if (isProjectCompleted) {
       setErrorText('Cannot send invitations for a completed or closed project.');
       return;
     }
     setSubmittingCandidateId(candidate.uid);
+    setIsSubmitting(true);
     setErrorText(null);
     setSuccessText(null);
 
@@ -245,61 +244,6 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
       setErrorText('Failed to send invitation. Please try again.');
     } finally {
       setSubmittingCandidateId(null);
-    }
-  };
-
-  // Action (b): Assign Directly (Adds straight to team roster without invite/accept round-trip)
-  const handleAssignDirectly = async (candidate: SymbioteCandidate, roleToAssign = assignedRole) => {
-    if (isProjectCompleted) {
-      setErrorText('Cannot assign members to a completed or closed project.');
-      return;
-    }
-    setSubmittingCandidateId(candidate.uid);
-    setIsSubmitting(true);
-    setErrorText(null);
-    setSuccessText(null);
-
-    try {
-      // Add directly to teamMembers array on project document
-      await addTeamMemberToProject(projectId, {
-        uid: candidate.uid,
-        displayName: candidate.displayName,
-        role: roleToAssign,
-        avatarInitials: candidate.avatarInitials,
-        avatarUrl: candidate.avatarUrl,
-        email: candidate.email,
-        hourlyRate: candidate.hourlyRate,
-        matchScore: candidate.matchScore,
-      });
-
-      // Also create an approved invitation record for history/tracking
-      await createInvitation({
-        projectId,
-        projectTitle: projectTitle && projectTitle !== 'Project Invitation' ? projectTitle : 'Project',
-        clientName: userProfile?.companyName || userProfile?.displayName || 'Client',
-        symbioteId: candidate.uid,
-        symbioteName: candidate.displayName,
-        symbioteTitle: candidate.title,
-        symbioteAvatarInitials: candidate.avatarInitials,
-        symbioteAvatarUrl: candidate.avatarUrl,
-        clientId: firebaseUser?.uid || '',
-        status: 'approved',
-        budgetRange: `$${candidate.hourlyRate}/hr`,
-        timeline: 'Project Duration',
-        techTags: candidate.skills,
-        matchScore: candidate.matchScore,
-        clientNote: `Directly assigned as ${roleToAssign}`,
-        createdAt: new Date().toISOString(),
-      });
-
-      setSuccessText(`Assigned ${candidate.displayName} directly to project team roster!`);
-      onMemberAdded();
-      onClose();
-    } catch (err) {
-      console.error('Failed to assign directly:', err);
-      setErrorText('Failed to assign directly. Please try again.');
-    } finally {
-      setSubmittingCandidateId(null);
       setIsSubmitting(false);
     }
   };
@@ -317,7 +261,7 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-[var(--color-text-primary)]">Add Team Member</h3>
                 <p className="text-[11px] text-[var(--color-text-secondary)]">
-                  Select a Symbiote specialist to send an invite or assign directly to your team
+                  Select a Symbiote specialist to send an invitation to join your project team
                 </p>
               </div>
             </div>
@@ -518,40 +462,29 @@ export const AddTeamMemberModal: React.FC<AddTeamMemberModalProps> = ({
                   <option value="QA & Compliance Auditor">QA & Compliance Auditor</option>
                 </select>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {/* OPTION A: SEND INVITE */}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={isSubmitting || isProjectCompleted}
-                    onClick={() => handleSendInvite(selectedCandidate, assignedRole)}
-                    className="p-2.5 h-auto text-left flex flex-col items-start gap-1 border-[var(--color-accent-cyan)]/40 hover:bg-[var(--color-accent-cyan)]/10 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--color-accent-cyan)]">
-                      <Send className="w-3.5 h-3.5" />
-                      <span>(a) Send Invite</span>
-                    </div>
-                    <p className="text-[10px] text-[var(--color-text-secondary)] leading-tight">
-                      Candidate must Accept before you approve them onto team.
-                    </p>
-                  </Button>
-
-                  {/* OPTION B: ASSIGN DIRECTLY */}
+                <div className="pt-2">
                   <Button
                     variant="primary"
                     size="sm"
                     disabled={isSubmitting || isProjectCompleted}
-                    onClick={() => handleAssignDirectly(selectedCandidate, assignedRole)}
-                    className="p-2.5 h-auto text-left flex flex-col items-start gap-1 bg-gradient-to-r from-[var(--color-accent-cyan)] to-emerald-400 text-slate-950 font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                    onClick={() => handleSendInvite(selectedCandidate, assignedRole)}
+                    className="w-full py-2.5 bg-gradient-to-r from-[var(--color-accent-cyan)] to-[var(--color-accent-green)] text-slate-950 font-bold hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 rounded-xl text-xs sm:text-sm border-0 disabled:opacity-50"
                   >
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-950">
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>(b) Assign Directly</span>
-                    </div>
-                    <p className="text-[10px] text-slate-900/80 leading-tight">
-                      Adds candidate straight to team roster without round-trip.
-                    </p>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Sending Invitation...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Send Project Invitation</span>
+                      </>
+                    )}
                   </Button>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] text-center mt-2 leading-relaxed">
+                    An official invitation will be sent to <strong className="text-white">{selectedCandidate.displayName}</strong> as <strong className="text-[var(--color-accent-cyan)]">{assignedRole}</strong>. Once accepted, they will join the project team.
+                  </p>
                 </div>
               </div>
             )}

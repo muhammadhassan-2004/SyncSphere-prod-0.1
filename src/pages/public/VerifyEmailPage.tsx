@@ -27,7 +27,8 @@ export const VerifyEmailPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { firebaseUser, setRole } = useAuth();
+  const { firebaseUser, userProfile, authenticatedUser, setRole } = useAuth();
+  const activeUser = authenticatedUser || userProfile;
 
   // Extract state passed from SignupPage or URL query params (from email magic link)
   const navState = location.state as {
@@ -76,15 +77,30 @@ export const VerifyEmailPage: React.FC = () => {
   // Completion guard ref to prevent multiple executions
   const hasCompletedRef = useRef(false);
 
-  // Redirect if no email present and no active user
+  // Redirect if already verified or if no email/user present
   useEffect(() => {
+    // If user is already verified, immediately forward them forward (no verification needed)
+    const isAlreadyVerified =
+      activeUser?.emailVerified === true ||
+      activeUser?.onboardingCompleted === true ||
+      firebaseUser?.emailVerified === true;
+
+    if (isAlreadyVerified) {
+      if (activeUser?.onboardingCompleted === true) {
+        navigate(`/${role}/dashboard`, { replace: true });
+      } else {
+        navigate(`/onboarding?role=${role}`, { replace: true });
+      }
+      return;
+    }
+
     if (!email && !firebaseUser?.uid) {
       const timer = setTimeout(() => {
         navigate('/signup', { replace: true });
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [email, firebaseUser?.uid, navigate]);
+  }, [activeUser, firebaseUser, email, role, navigate]);
 
   // Form & Status State
   const [otpValue, setOtpValue] = useState('');
@@ -117,6 +133,7 @@ export const VerifyEmailPage: React.FC = () => {
               doc(db, 'users', userId),
               {
                 emailVerified: true,
+                ...(role ? { role } : {}),
                 updatedAt: new Date().toISOString(),
                 lastActiveAt: serverTimestamp(),
               },
@@ -139,6 +156,22 @@ export const VerifyEmailPage: React.FC = () => {
         // Clean up pending verification state from sessionStorage
         try {
           sessionStorage.removeItem('syncsphere_pending_verification');
+        } catch {}
+
+        // Persist emailVerified into synchronous session cache
+        try {
+          const existingRaw = localStorage.getItem('syncsphere_user_session');
+          const existing = existingRaw ? JSON.parse(existingRaw) : {};
+          localStorage.setItem(
+            'syncsphere_user_session',
+            JSON.stringify({
+              ...existing,
+              uid: userId,
+              email: email || existing.email,
+              role: role || existing.role,
+              emailVerified: true,
+            })
+          );
         } catch {}
 
         setRole(role);

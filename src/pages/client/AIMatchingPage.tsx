@@ -5,6 +5,7 @@ import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
 import { useAuth } from '@/src/context/AuthContext';
 import { Project } from '@/src/types/firestore';
+import { formatProjectBudget, getCleanProjectTitle } from '@/src/lib/utils/projectBudget';
 import { getUserStatusDot } from '@/src/lib/utils/presence';
 import {
   subscribeToProjectsByOwner,
@@ -320,22 +321,7 @@ export const AIMatchingPage: React.FC = () => {
         symbioteName: symbioteName || 'Specialist',
         clientId: userId,
         status: 'pending',
-        budgetRange: (() => {
-          if (selectedProject.minBudget && selectedProject.maxBudget) {
-            return `$${Number(selectedProject.minBudget).toLocaleString()} - $${Number(selectedProject.maxBudget).toLocaleString()}`;
-          }
-          if (typeof selectedProject.budget === 'number' && selectedProject.budget > 0) {
-            return `$${selectedProject.budget.toLocaleString()}`;
-          }
-          if (typeof selectedProject.budget === 'object' && selectedProject.budget) {
-            const val = selectedProject.budget.total ?? selectedProject.budget.max ?? selectedProject.budget.min;
-            if (val && Number(val) > 0) return `$${Number(val).toLocaleString()}`;
-          }
-          if (selectedProject.budgetType === 'hourly') {
-            return 'Hourly Rate';
-          }
-          return 'Dynamic Per-Task';
-        })(),
+        budgetRange: formatProjectBudget(selectedProject),
         timeline: selectedProject.duration || '3 months',
         techTags: selectedProject.skills || ['AI', 'Python'],
         createdAt: new Date().toISOString(),
@@ -345,8 +331,8 @@ export const AIMatchingPage: React.FC = () => {
       await createNotification({
         userId: symbioteId,
         type: 'invitation',
-        title: `Project Invitation: ${selectedProject.title}`,
-        description: `You received an invitation to join "${selectedProject.title}" from ${userName || 'a client'}.`,
+        title: `Project Invitation: ${getCleanProjectTitle(selectedProject.title)}`,
+        description: `You received an invitation to join "${getCleanProjectTitle(selectedProject.title)}" from ${userName || 'a client'}.`,
         read: false,
         relatedItemId: selectedProject.id,
         createdAt: new Date().toISOString(),
@@ -394,17 +380,7 @@ export const AIMatchingPage: React.FC = () => {
   // Formatted budget without synthetic $5,000 fallback
   const formattedBudget = useMemo(() => {
     if (!selectedProject) return 'Not specified';
-    if (selectedProject.minBudget && selectedProject.maxBudget) {
-      return `$${Number(selectedProject.minBudget).toLocaleString()} - $${Number(selectedProject.maxBudget).toLocaleString()}`;
-    }
-    if (typeof selectedProject.budget === 'number' && selectedProject.budget > 0) {
-      return `$${selectedProject.budget.toLocaleString()}`;
-    }
-    if (typeof selectedProject.budget === 'object' && selectedProject.budget) {
-      const val = selectedProject.budget.total ?? selectedProject.budget.max ?? selectedProject.budget.min;
-      if (val && Number(val) > 0) return `$${Number(val).toLocaleString()}`;
-    }
-    return 'Flexible / Open';
+    return formatProjectBudget(selectedProject);
   }, [selectedProject]);
 
   // Formatted timeline without hardcoded 3 Months
@@ -488,7 +464,7 @@ export const AIMatchingPage: React.FC = () => {
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                      {p.title} ({p.category || 'AI Project'} • {p.status.toUpperCase()})
+                      {getCleanProjectTitle(p.title)} ({p.category || 'AI Project'} • {p.status.toUpperCase()})
                     </option>
                   ))}
                 </select>

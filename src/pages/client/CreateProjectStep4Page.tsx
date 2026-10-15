@@ -32,7 +32,7 @@ import {
 
 const WIZARD_STEPS = [
   { id: '1', label: 'Basic Info', description: 'Title, category & skills' },
-  { id: '2', label: 'Timeline & Schedule', description: 'Dates & work arrangement' },
+  { id: '2', label: 'Budget & Timeline', description: 'Cost parameters & schedule' },
   { id: '3', label: 'AI Matching', description: 'Preferences & criteria' },
   { id: '4', label: 'Review & Publish', description: 'Final audit & launch' },
 ];
@@ -325,13 +325,13 @@ export const CreateProjectStep4Page: React.FC = () => {
             </div>
           </Card>
 
-          {/* 2. TIMELINE & WORK ARRANGEMENT SUMMARY CARD */}
+          {/* 2. BUDGET, TIMELINE & WORK ARRANGEMENT SUMMARY CARD */}
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-[var(--color-accent-cyan)]" />
                 <h2 className="text-sm font-bold text-[var(--color-text-primary)] uppercase tracking-wider font-mono">
-                  2. Timeline & Work Arrangement Summary
+                  2. Budget, Timeline & Arrangement Summary
                 </h2>
               </div>
               <Button
@@ -344,7 +344,23 @@ export const CreateProjectStep4Page: React.FC = () => {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-[var(--color-text-secondary)]">Budget Model:</span>
+                  <span className="font-bold text-[var(--color-text-primary)] capitalize">
+                    {projectData?.budgetType === 'hourly' ? 'Hourly Rate' : 'Fixed Price'}
+                  </span>
+                </div>
+                <div className="pt-1 border-t border-[var(--color-border)]/50 text-[11px] font-mono text-[var(--color-accent-cyan)] font-bold">
+                  {projectData?.budgetType === 'hourly'
+                    ? `$${projectData.minBudget || 50} – $${projectData.maxBudget || 150}/hr`
+                    : projectData?.maxBudget
+                    ? `$${Number(projectData.minBudget || 0).toLocaleString()} – $${Number(projectData.maxBudget).toLocaleString()}`
+                    : 'Flexible Budget'}
+                </div>
+              </div>
+
               <div className="p-3.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-[var(--color-text-secondary)]">Duration:</span>
@@ -367,7 +383,7 @@ export const CreateProjectStep4Page: React.FC = () => {
                   </span>
                 </div>
                 <div className="pt-1 border-t border-[var(--color-border)]/50 text-[11px] text-[var(--color-text-secondary)]">
-                  Location & collaboration arrangement
+                  Location & arrangement
                 </div>
               </div>
 

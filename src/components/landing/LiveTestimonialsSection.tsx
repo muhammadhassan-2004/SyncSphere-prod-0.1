@@ -12,7 +12,7 @@ const BENCHMARK_REVIEWS: FeaturedReview[] = [
     authorRole: 'client',
     companyName: 'VP Engineering, FinTech Scaleup',
     rating: 5,
-    comment: 'SyncSphere matched us with a senior distributed systems architect within 48 hours. The milestone delivery tracking and automated escrow gave our leadership complete peace of mind.',
+    comment: 'SyncSphere matched us with a senior distributed systems architect within 48 hours. The milestone delivery tracking and direct settlement governance gave our leadership complete peace of mind.',
     projectName: 'High-Throughput Settlement Pipeline',
     createdAt: new Date().toISOString(),
     isRealData: true,
