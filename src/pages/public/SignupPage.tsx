@@ -37,10 +37,9 @@ export const SignupPage: React.FC = () => {
   const location = useLocation();
   const { setRole } = useAuth();
 
-  // Extract role from query param or route state (defaulting to client)
+  // Extract role from query param or route state (strictly restricted to public roles: client or symbiote)
   const rawRole = searchParams.get('role') || location.state?.role;
-  const role: 'client' | 'symbiote' | 'admin' =
-    rawRole === 'symbiote' || rawRole === 'admin' ? rawRole : 'client';
+  const role: 'client' | 'symbiote' = rawRole === 'symbiote' ? 'symbiote' : 'client';
 
   // Form state
   const [firstName, setFirstName] = useState('');
