@@ -703,6 +703,12 @@ authRouter.post("/reset-password", async (req: Request, res: Response) => {
     }
 
     if (!adminApp) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(500).json({
+          success: false,
+          error: "Authentication service unavailable. Firebase Admin credentials required for password update.",
+        });
+      }
       if (!resolvedUid) {
         return res.status(404).json({
           success: false,

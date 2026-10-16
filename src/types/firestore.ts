@@ -382,13 +382,14 @@ export interface TimeEntry {
   date: string;
   hours: number;
   description: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   hourlyRate?: number;
   invoiced?: boolean;
   invoiceId?: string;
   approvedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  isDeleted?: boolean;
 }
 
 export interface InvoiceLineItem {

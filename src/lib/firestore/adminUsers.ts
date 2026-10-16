@@ -306,15 +306,19 @@ export async function deleteAdminUser(
   adminEmail?: string,
   userEmail?: string
 ) {
-  await deleteDoc(doc(db, 'users', userId));
+  await updateDoc(doc(db, 'users', userId), {
+    status: 'disabled',
+    isDeleted: true,
+    updatedAt: new Date().toISOString(),
+  });
   await addDoc(collection(db, 'audit_logs'), {
     userId: adminUid,
     userEmail: adminEmail || 'admin@syncsphere.io',
-    action: 'DELETE_USER',
+    action: 'DEACTIVATE_USER',
     module: 'Users',
     targetId: userId,
     targetUserEmail: userEmail,
-    details: `Deleted user record ${userId} (${userEmail || 'unknown'})`,
+    details: `Deactivated user record ${userId} (${userEmail || 'unknown'})`,
     result: 'success',
     timestamp: Timestamp.now(),
   });

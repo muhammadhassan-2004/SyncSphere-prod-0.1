@@ -37,9 +37,9 @@ CLOUDINARY_API_SECRET=your-cloudinary-api-secret
 # Nodemailer SMTP Email Service (OTP, Invitations & Notifications)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
-SMTP_USER=team@pixelgenesys.com
-SMTP_PASS=ufosccidxxkpntjf
-SMTP_FROM=team@pixelgenesys.com
+SMTP_USER=your-smtp-email@example.com
+SMTP_PASS=your-smtp-app-password
+SMTP_FROM=your-smtp-from@example.com
 
 # Server Runtime Configuration
 NODE_ENV=production

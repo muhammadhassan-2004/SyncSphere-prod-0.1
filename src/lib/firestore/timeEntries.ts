@@ -18,10 +18,6 @@ const TIME_ENTRIES_COLLECTION = 'time_entries';
 
 export async function createTimeEntry(entry: Omit<TimeEntry, 'id'>): Promise<string> {
   if (!auth.currentUser) {
-    if (typeof window !== 'undefined' && localStorage.getItem('syncsphere_demo_mode') === 'true') {
-      const demoId = `time-demo-${Date.now()}`;
-      return demoId;
-    }
     console.warn('createTimeEntry skipped: User not authenticated.');
     return '';
   }
@@ -204,12 +200,14 @@ export function subscribeToTimeEntriesForClient(
     
     // Merge with persisted overrides so approvals NEVER revert across navigation
     const overrides = getPersistedTimeStatusOverrides();
-    const merged = Array.from(map.values()).map(e => {
-      if (e.id && overrides[e.id]) {
-        return { ...e, status: overrides[e.id].status };
-      }
-      return e;
-    });
+    const merged = Array.from(map.values())
+      .filter(e => !e.isDeleted && e.status !== 'cancelled')
+      .map(e => {
+        if (e.id && overrides[e.id]) {
+          return { ...e, status: overrides[e.id].status };
+        }
+        return e;
+      });
 
     callback(merged);
   };
@@ -272,7 +270,9 @@ export function subscribeToTimeEntriesForProject(
   return onSnapshot(
     q,
     (snapshot) => {
-      const entries = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TimeEntry));
+      const entries = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as TimeEntry))
+        .filter(e => !e.isDeleted && e.status !== 'cancelled');
       const overrides = getPersistedTimeStatusOverrides();
       const merged = entries.map(e => {
         if (e.id && overrides[e.id]) {
@@ -305,7 +305,9 @@ export function subscribeToAllTimeEntries(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      const entries = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TimeEntry));
+      const entries = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as TimeEntry))
+        .filter(e => !e.isDeleted && e.status !== 'cancelled');
       callback(entries);
     },
     (error) => {
@@ -329,7 +331,12 @@ export async function deleteTimeEntry(entryId: string): Promise<void> {
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data() as TimeEntry;
-      await deleteDoc(docRef);
+      await updateDoc(docRef, {
+        status: 'cancelled',
+        isDeleted: true,
+        hours: 0,
+        updatedAt: new Date().toISOString(),
+      });
 
       // Decrement task actual hours if attached
       if (data.projectId && data.taskId && data.hours) {

@@ -3023,6 +3023,67 @@ SyncSphere's real email verification system is fully wired into `/server/emailSe
 
 ---
 
+### 101. ✅ [P0] Pre-Deployment Security Hardening: SMTP Credential Purge, Fail-Closed Auth, No-Delete Alignment & Role Sanitization
+
+* **Category**: Platform Security, Authentication Hardening & Data Policy Integrity
+* **Date Logged**: 2026-10-16
+* **Location**:
+  - `documents/ENVIRONMENT_AND_DEPLOYMENT.md`
+  - `server/routes/auth.routes.ts`
+  - `src/lib/firestore/adminUsers.ts`
+  - `src/lib/firestore/timeEntries.ts`
+  - `src/types/firestore.ts`
+  - `src/pages/public/SignupPage.tsx`
+* **Original Problem**:
+  - Master Pre-Deployment Production Readiness Audit identified 4 high-priority deployment risks:
+    1. Plaintext SMTP application password committed in `documents/ENVIRONMENT_AND_DEPLOYMENT.md`.
+    2. Password reset route in `server/routes/auth.routes.ts` fell back to a silent in-memory success if Firebase Admin SDK was uninitialized, creating a false-success state in production.
+    3. UI actions (`adminUsers.ts`, `timeEntries.ts`) invoked hard physical deletion (`deleteDoc`) which collided with the newly deployed immutable no-delete Firestore rule (`allow delete: if false;`), causing `PERMISSION_DENIED` errors on delete button click.
+    4. Public registration (`SignupPage.tsx`) accepted `?role=admin` and attempted to write an admin role document, crashing with a Firestore security rule denial.
+* **Resolution & Implementation**:
+  1. **Documentation Sanitization (`ENVIRONMENT_AND_DEPLOYMENT.md`)**:
+     - Purged plaintext SMTP password and replaced with safe configuration placeholders.
+  2. **Fail-Closed Auth Enforcement (`auth.routes.ts`)**:
+     - In production (`NODE_ENV === 'production'`), if `adminApp` is null, `/api/auth/reset-password` strictly returns a 500 error ("Authentication service unavailable. Firebase Admin credentials required for password update") rather than simulated success.
+  3. **Immutable No-Delete Policy Alignment (`adminUsers.ts`, `timeEntries.ts`, `types/firestore.ts`)**:
+     - Converted physical deletion to soft-deactivation (`updateDoc({ status: 'disabled', isDeleted: true })`) in `deleteAdminUser`.
+     - Converted physical time entry deletion to soft-cancellation (`updateDoc({ status: 'cancelled', isDeleted: true, hours: 0 })`) in `deleteTimeEntry`.
+     - Updated real-time listeners (`subscribeToUserTimeEntries`, `subscribeToTimeEntriesForProject`, `subscribeToAllTimeEntries`) to exclude cancelled/soft-deleted entries.
+     - Added `'cancelled'` to `TimeEntry.status` and `isDeleted?: boolean` in `src/types/firestore.ts`.
+  4. **Signup Role Parameter Sanitization (`SignupPage.tsx`)**:
+     - Restricted public registration strictly to `'client' | 'symbiote'`.
+     - Automatically falls back to `'client'` if an invalid or administrative role parameter is supplied.
+* **Verification**:
+  - `npm run lint` (`tsc --noEmit`) → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ 178/178 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (clean production build)
+* **Status**: Resolved & Verified ✅ (2026-10-16)
+
+---
+
+### 102. ✅ [P1] Pre-Deployment Residual Demo Purge & Production Documentation Alignment
+* **Category**: Code Hygiene, Production Hardening & Documentation
+* **Date Logged**: 2026-10-16
+* **Location**:
+  - `src/components/DevRoleSwitcher.tsx` (Deleted)
+  - `src/lib/firestore/timeEntries.ts`
+  - `README.md`
+* **Problem**:
+  1. Orphan unmounted component `DevRoleSwitcher.tsx` remained on disk after decoupling from `App.tsx`.
+  2. `createTimeEntry` retained an obsolete `syncsphere_demo_mode` localStorage check bypassing authentication in development.
+  3. `README.md` was a 38-line stub lacking production hosting environment variables, Docker instructions, and architecture specifications.
+* **Resolution & Implementation**:
+  1. Purged orphan `src/components/DevRoleSwitcher.tsx`.
+  2. Removed `syncsphere_demo_mode` check from `src/lib/firestore/timeEntries.ts`, enforcing strict authentication across all time entry submissions.
+  3. Overhauled `README.md` with comprehensive prerequisites, local setup guide, detailed environment variables table, test & lint instructions, production build/start flows, and Docker deployment guidelines.
+* **Verification**:
+  - `npm run lint` (`tsc --noEmit`) → ✅ Exit code 0 (0 TypeScript errors)
+  - `npm test` → ✅ 178/178 Automated tests passed (100%)
+  - `npm run build` → ✅ Exit code 0 (Vite client + server bundles built successfully)
+* **Status**: Resolved & Verified ✅ (2026-10-16)
+
+---
+
 ## 📝 How to Log New Bugs in this File
 
 When identifying a new issue:
