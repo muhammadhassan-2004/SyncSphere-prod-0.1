@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, AlertCircle, X } from 'lucide-react';
+import { Search, AlertCircle, X, Trash2 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
@@ -11,6 +11,7 @@ import { useToast } from '@/src/lib/toast/ToastProvider';
 import {
   getUsersPage,
   setUserStatus,
+  deleteAdminUser,
   type AdminUserRow,
   type UserFilters,
 } from '@/src/lib/firestore/adminUsers';
@@ -133,6 +134,39 @@ export function UserManagementPage() {
           await load(true);
         } catch (err: any) {
           showToast('error', `Failed to update status: ${err?.message || err}`);
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteUser = (userId: string, userName: string, userEmail: string) => {
+    if (userId === currentAdminUid) {
+      showToast('error', 'You cannot delete your own administrative account.');
+      return;
+    }
+
+    setConfirmDialog({
+      open: true,
+      title: 'Delete User',
+      description: `Are you sure you want to permanently delete ${userName} (${userEmail})?`,
+      confirmLabel: 'Delete User',
+      destructive: true,
+      action: async () => {
+        setActionLoading(true);
+        try {
+          await deleteAdminUser(
+            userId,
+            currentAdminUid,
+            authenticatedUser?.email || userProfile?.email || 'admin@syncsphere.io',
+            userEmail
+          );
+          showToast('success', `User ${userName} has been successfully deleted.`);
+          setConfirmDialog((prev) => ({ ...prev, open: false }));
+          await load(true);
+        } catch (err: any) {
+          showToast('error', `Failed to delete user: ${err?.message || err}`);
         } finally {
           setActionLoading(false);
         }
@@ -314,7 +348,7 @@ export function UserManagementPage() {
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-white/5 border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
               <tr>
-                <th className="p-3.5 w-10 text-center">
+                <th className="py-3 px-3 w-10 text-center">
                   <input
                     type="checkbox"
                     checked={rows.length > 0 && selected.size === rows.length}
@@ -322,13 +356,13 @@ export function UserManagementPage() {
                     className="rounded border-[var(--color-border)] bg-black/40 accent-[var(--color-accent-cyan)]"
                   />
                 </th>
-                <th className="p-3.5 font-medium">Name</th>
-                <th className="p-3.5 font-medium">Email</th>
-                <th className="p-3.5 font-medium">Role</th>
-                <th className="p-3.5 font-medium">Registered</th>
-                <th className="p-3.5 font-medium">Status</th>
-                <th className="p-3.5 font-medium">Last Login</th>
-                <th className="p-3.5 font-medium text-right">Actions</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Name</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Email</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Role</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Registered</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Status</th>
+                <th className="py-3 px-3 font-medium whitespace-nowrap">Last Login</th>
+                <th className="py-3 px-3 font-medium text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
@@ -348,7 +382,7 @@ export function UserManagementPage() {
               )}
               {rows.map((u) => (
                 <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                  <td className="p-3.5 text-center">
+                  <td className="py-3 px-3 text-center">
                     <input
                       type="checkbox"
                       checked={selected.has(u.id)}
@@ -356,35 +390,35 @@ export function UserManagementPage() {
                       className="rounded border-[var(--color-border)] bg-black/40 accent-[var(--color-accent-cyan)]"
                     />
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-primary)] font-medium">
+                  <td className="py-3 px-3 text-[var(--color-text-primary)] font-medium whitespace-nowrap">
                     <Link
                       to={`/admin/users/${u.id}`}
                       className="flex items-center gap-2.5 hover:text-[var(--color-accent-cyan)] transition-colors group"
                       title="View user details"
                     >
                       <Avatar name={u.name} initials={u.avatarInitials} src={u.avatarUrl} size="sm" />
-                      <span className="group-hover:underline">{u.name}</span>
+                      <span className="group-hover:underline truncate max-w-[140px] md:max-w-[180px]">{u.name}</span>
                     </Link>
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-secondary)]">
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                  <td className="py-3 px-3 text-[var(--color-text-secondary)]">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
                       {u.isGoogleUser && (
                         <span title="Registered via Google OAuth" className="inline-flex shrink-0">
                           <GoogleColorIcon className="w-3.5 h-3.5" />
                         </span>
                       )}
-                      <span>{u.email}</span>
+                      <span className="truncate max-w-[160px] md:max-w-[220px]" title={u.email}>{u.email}</span>
                     </div>
                   </td>
-                  <td className="p-3.5">
+                  <td className="py-3 px-3 whitespace-nowrap">
                     <Badge variant={roleBadgeVariant[u.role] || 'gray'}>
                       {u.role === 'client' ? 'Client' : u.role === 'symbiote' ? 'Freelancer' : 'Admin'}
                     </Badge>
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-secondary)]">
+                  <td className="py-3 px-3 text-[var(--color-text-secondary)] whitespace-nowrap">
                     {u.registeredAt ? u.registeredAt.toDate().toLocaleDateString() : '—'}
                   </td>
-                  <td className="p-3.5">
+                  <td className="py-3 px-3 whitespace-nowrap">
                     <div className="flex flex-col gap-1 items-start">
                       <Badge variant={statusBadgeVariant[u.status] || 'gray'}>
                         {u.status === 'active' ? 'Active' : 'Inactive'}
@@ -396,7 +430,7 @@ export function UserManagementPage() {
                             title={u.incompleteReason || 'Incomplete Profile: Missing required fields'}
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            <span>Incomplete Profile</span>
+                            <span>Incomplete</span>
                           </span>
                           {/* Rich hover tooltip */}
                           <div className="absolute left-0 bottom-full mb-1 hidden group-hover/incomplete:block z-50 p-2.5 rounded-md bg-slate-900 border border-amber-500/40 text-amber-200 text-[11px] shadow-2xl whitespace-nowrap font-sans pointer-events-none">
@@ -409,31 +443,58 @@ export function UserManagementPage() {
                       )}
                     </div>
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-secondary)]">
-                    {u.lastLoginAt ? u.lastLoginAt.toDate().toLocaleString() : 'Never'}
-                  </td>
-                  <td className="p-3.5 text-right">
-                    {u.status === 'active' ? (
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() => handleSingleStatusToggle(u.id, 'suspended', u.name)}
-                        className="px-2.5 py-1 rounded text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors cursor-pointer"
-                        title={`Mark ${u.name} as Inactive`}
-                      >
-                        Mark Inactive
-                      </button>
+                  <td className="py-3 px-3 text-[var(--color-text-secondary)] whitespace-nowrap">
+                    {u.lastLoginAt ? (
+                      <span title={u.lastLoginAt.toDate().toLocaleString()}>
+                        {u.lastLoginAt.toDate().toLocaleDateString()}
+                      </span>
                     ) : (
+                      'Never'
+                    )}
+                  </td>
+                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                      {u.status === 'active' ? (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => handleSingleStatusToggle(u.id, 'suspended', u.name)}
+                          className="px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors cursor-pointer"
+                          title={`Mark ${u.name} as Inactive`}
+                        >
+                          Mark Inactive
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => handleSingleStatusToggle(u.id, 'active', u.name)}
+                          className="px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors cursor-pointer"
+                          title={`Mark ${u.name} as Active`}
+                        >
+                          Mark Active
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        disabled={actionLoading}
-                        onClick={() => handleSingleStatusToggle(u.id, 'active', u.name)}
-                        className="px-2.5 py-1 rounded text-xs font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors cursor-pointer"
-                        title={`Mark ${u.name} as Active`}
+                        disabled={actionLoading || u.id === currentAdminUid}
+                        onClick={() => handleDeleteUser(u.id, u.name, u.email)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors ${
+                          u.id === currentAdminUid
+                            ? 'text-gray-500 bg-gray-500/10 border border-gray-500/20 cursor-not-allowed opacity-60'
+                            : 'text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 cursor-pointer'
+                        }`}
+                        title={
+                          u.id === currentAdminUid
+                            ? 'You cannot delete your own admin account'
+                            : `Delete ${u.name}`
+                        }
                       >
-                        Mark Active
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Delete</span>
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

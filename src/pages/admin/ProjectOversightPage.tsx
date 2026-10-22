@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { Search, Download, FolderKanban, AlertCircle, Eye, X, Calendar, User, DollarSign, Tag, Clock, Layers } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Download, FolderKanban, AlertCircle, Eye, X, Calendar, User, DollarSign, Tag, Clock, Layers, Trash2 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
 import { AvatarStack } from '@/src/components/ui/AvatarStack';
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
+import { useToast } from '@/src/lib/toast/ToastProvider';
 import {
   getProjectsPage,
+  deleteAdminProject,
   type ProjectOversightRow,
   type ProjectOversightFilters,
   type ProjectOversightStatus,
@@ -52,6 +55,9 @@ export function ProjectOversightPage() {
   const [cursor, setCursor] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [selectedProject, setSelectedProject] = useState<ProjectOversightRow | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectOversightRow | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const { showToast } = useToast();
 
   const load = useCallback(
     async (reset = true) => {
@@ -126,6 +132,32 @@ export function ProjectOversightPage() {
     a.download = `project-oversight-${activeTab ?? 'all'}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const executeDelete = async () => {
+    if (!projectToDelete) return;
+    setDeleteLoading(true);
+    try {
+      await deleteAdminProject(projectToDelete.id);
+      showToast({
+        title: 'Project deleted',
+        message: `${projectToDelete.name} (${projectToDelete.projectIdLabel}) has been permanently deleted.`,
+        type: 'success',
+      });
+      setRows((prev) => prev.filter((r) => r.id !== projectToDelete.id));
+      if (selectedProject?.id === projectToDelete.id) {
+        setSelectedProject(null);
+      }
+      setProjectToDelete(null);
+    } catch (err) {
+      showToast({
+        title: 'Delete failed',
+        message: err instanceof Error ? err.message : 'Could not delete project',
+        type: 'error',
+      });
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -282,14 +314,24 @@ export function ProjectOversightPage() {
                   <td className="p-3.5 text-[var(--color-text-secondary)]">
                     {p.createdAt ? p.createdAt.toDate().toLocaleDateString() : '—'}
                   </td>
-                  <td className="p-3.5 text-right">
-                    <button
-                      onClick={() => setSelectedProject(p)}
-                      className="px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors text-xs font-semibold flex items-center gap-1.5 ml-auto cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View Details</span>
-                    </button>
+                  <td className="p-3.5 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      <button
+                        onClick={() => setSelectedProject(p)}
+                        className="px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-colors text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">View Details</span>
+                      </button>
+                      <button
+                        onClick={() => setProjectToDelete(p)}
+                        className="px-2.5 py-1 rounded bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0"
+                        title={`Delete ${p.name}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">Delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -460,7 +502,19 @@ export function ProjectOversightPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-[var(--color-border)] bg-white/5 flex items-center justify-end">
+            <div className="p-4 border-t border-[var(--color-border)] bg-white/5 flex items-center justify-between">
+              <button
+                onClick={() => {
+                  const target = selectedProject;
+                  setSelectedProject(null);
+                  setProjectToDelete(target);
+                }}
+                className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Project</span>
+              </button>
+
               <button
                 onClick={() => setSelectedProject(null)}
                 className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-white/10 transition-colors cursor-pointer"
@@ -471,6 +525,18 @@ export function ProjectOversightPage() {
           </Card>
         </div>
       )}
+
+      {/* Confirmation Dialog for Project Deletion */}
+      <ConfirmDialog
+        open={Boolean(projectToDelete)}
+        title="Delete Project"
+        description={`Are you sure you want to permanently delete ${projectToDelete?.name || ''} (${projectToDelete?.projectIdLabel || ''})? This will permanently remove the project and its associated applications, invitations, milestones, time entries, and project activities.`}
+        confirmLabel="Delete Project"
+        destructive
+        loading={deleteLoading}
+        onConfirm={executeDelete}
+        onCancel={() => setProjectToDelete(null)}
+      />
     </div>
   );
 }

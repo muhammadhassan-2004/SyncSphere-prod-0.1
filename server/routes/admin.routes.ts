@@ -176,3 +176,85 @@ adminRouter.post("/test-email", requireAdminAuth, async (req: Request, res: Resp
   }
 });
 
+// 4. Admin Delete Project & Associated Artifacts
+adminRouter.delete("/projects/:projectId", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const adminUser = (req as any).user;
+    const adminUid = adminUser?.uid || "admin";
+
+    if (!projectId) {
+      return res.status(400).json({ success: false, error: "Project ID is required." });
+    }
+
+    const adminApp = getFirebaseAdmin();
+    if (!adminApp) {
+      return res.status(500).json({ success: false, error: "Firebase Admin SDK not initialized." });
+    }
+
+    const firestoreAdmin = getAdminFirestore(adminApp);
+    const projRef = firestoreAdmin.collection("projects").doc(projectId);
+    const projSnap = await projRef.get();
+
+    if (!projSnap.exists) {
+      return res.status(404).json({ success: false, error: "Project record not found." });
+    }
+
+    const projData = projSnap.data();
+    const projTitle = projData?.title || projData?.name || projectId;
+
+    // Helper to safely delete matching documents in batches
+    const deleteMatchingDocs = async (collectionName: string, field: string, value: any) => {
+      try {
+        const snap = await firestoreAdmin.collection(collectionName).where(field, "==", value).get();
+        if (!snap.empty) {
+          const batch = firestoreAdmin.batch();
+          snap.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn(`[Delete Project] Batch delete in ${collectionName} (${field} == ${value}) warning:`, err);
+      }
+    };
+
+    // 1. Delete main project document
+    await projRef.delete();
+
+    // 2. Clean up associated project artifacts
+    await deleteMatchingDocs("applications", "projectId", projectId);
+    await deleteMatchingDocs("invitations", "projectId", projectId);
+    await deleteMatchingDocs("time_entries", "projectId", projectId);
+    await deleteMatchingDocs("invoices", "projectId", projectId);
+    await deleteMatchingDocs("tasks", "projectId", projectId);
+    await deleteMatchingDocs("milestones", "projectId", projectId);
+    await deleteMatchingDocs("project_activities", "projectId", projectId);
+
+    // 3. Record audit log
+    try {
+      await firestoreAdmin.collection("audit_logs").add({
+        userId: adminUid,
+        userEmail: adminUser?.email || "admin@syncsphere.io",
+        action: "DELETE_PROJECT",
+        module: "Projects",
+        targetId: projectId,
+        details: `Permanently deleted project '${projTitle}' (${projectId}) and all associated sub-artifacts.`,
+        result: "success",
+        timestamp: new Date(),
+      });
+    } catch (auditErr) {
+      console.warn("[Delete Project] Audit log warning:", auditErr);
+    }
+
+    return res.json({
+      success: true,
+      message: `Project '${projTitle}' was permanently deleted successfully.`,
+    });
+  } catch (error: any) {
+    console.error("API DELETE /api/admin/projects error:", error);
+    return res.status(500).json({
+      success: false,
+      error: `Failed to delete project: ${error?.message || "Internal server error"}.`,
+    });
+  }
+});
+

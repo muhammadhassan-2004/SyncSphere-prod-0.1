@@ -889,3 +889,194 @@ authRouter.post("/generate-reset-link", requireAdminAuth, async (req: Request, r
     });
   }
 });
+
+// 7. Admin Hard Delete User (Deletes from Firebase Auth + Firestore + Cleans User Projects)
+authRouter.delete("/admin/delete-user/:targetUserId", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { targetUserId } = req.params;
+    const adminUser = (req as any).user;
+    const adminUid = adminUser?.uid || "admin";
+
+    if (!targetUserId) {
+      return res.status(400).json({ success: false, error: "Target user ID is required." });
+    }
+
+    if (targetUserId === adminUid) {
+      return res.status(400).json({ success: false, error: "You cannot delete your own administrative account." });
+    }
+
+    const adminApp = getFirebaseAdmin();
+    if (!adminApp) {
+      return res.status(500).json({ success: false, error: "Firebase Admin SDK not initialized." });
+    }
+
+    const authAdmin = getAuth(adminApp);
+    const firestoreAdmin = getAdminFirestore(adminApp);
+
+    // Get user doc details before deletion for audit logging and email referencing
+    const userDocRef = firestoreAdmin.collection("users").doc(targetUserId);
+    const userDocSnap = await userDocRef.get();
+    const userData = userDocSnap.exists ? userDocSnap.data() : null;
+    const userEmail = userData?.email || "unknown";
+    const userName = userData?.displayName || userData?.name || userEmail;
+
+    // 1. Delete from Firebase Authentication (Frees up the email for re-signup)
+    try {
+      await authAdmin.deleteUser(targetUserId);
+    } catch (authErr: any) {
+      if (authErr?.code !== "auth/user-not-found") {
+        console.warn(`[Delete User] Firebase Auth deletion warning for ${targetUserId}:`, authErr?.message);
+      }
+    }
+
+    // 2. Delete Firestore users document
+    await userDocRef.delete();
+
+    // 3. Delete verifications document if present
+    await firestoreAdmin.collection("verifications").doc(targetUserId).delete().catch(() => {});
+
+    // Helper to safely delete matching documents in batches
+    const deleteMatchingDocs = async (collectionName: string, field: string, value: any, op: FirebaseFirestore.WhereFilterOp = "==") => {
+      try {
+        const snap = await firestoreAdmin.collection(collectionName).where(field, op, value).get();
+        if (!snap.empty) {
+          const batch = firestoreAdmin.batch();
+          snap.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn(`[Delete User] Batch delete in ${collectionName} (${field} ${op} ${value}) warning:`, err);
+      }
+    };
+
+    // 4. Delete All Projects Owned or Created by This User
+    try {
+      const projectsSnap1 = await firestoreAdmin
+        .collection("projects")
+        .where("ownerId", "==", targetUserId)
+        .get();
+
+      const projectsSnap2 = await firestoreAdmin
+        .collection("projects")
+        .where("clientId", "==", targetUserId)
+        .get();
+
+      const projectsSnap3 = await firestoreAdmin
+        .collection("projects")
+        .where("clientUid", "==", targetUserId)
+        .get();
+
+      const projectDocsMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      projectsSnap1.docs.forEach((d) => projectDocsMap.set(d.id, d));
+      projectsSnap2.docs.forEach((d) => projectDocsMap.set(d.id, d));
+      projectsSnap3.docs.forEach((d) => projectDocsMap.set(d.id, d));
+
+      const batch = firestoreAdmin.batch();
+      projectDocsMap.forEach((pDoc) => {
+        batch.delete(pDoc.ref);
+      });
+      await batch.commit();
+
+      // Clean up project sub-artifacts for these deleted projects
+      for (const projectId of projectDocsMap.keys()) {
+        await deleteMatchingDocs("applications", "projectId", projectId);
+        await deleteMatchingDocs("invitations", "projectId", projectId);
+        await deleteMatchingDocs("time_entries", "projectId", projectId);
+        await deleteMatchingDocs("invoices", "projectId", projectId);
+      }
+    } catch (projErr) {
+      console.warn(`[Delete User] Project deletion warning for user ${targetUserId}:`, projErr);
+    }
+
+    // 5. Clean up team membership in other projects (if deleted user was a freelancer)
+    try {
+      const teamProjectsSnap = await firestoreAdmin
+        .collection("projects")
+        .where("teamMemberUids", "array-contains", targetUserId)
+        .get();
+
+      for (const pDoc of teamProjectsSnap.docs) {
+        const pData = pDoc.data();
+        const updatedTeamMembers = Array.isArray(pData.teamMembers)
+          ? pData.teamMembers.filter((m: any) => m.uid !== targetUserId)
+          : [];
+        const updatedTeamUids = Array.isArray(pData.teamMemberUids)
+          ? pData.teamMemberUids.filter((uid: string) => uid !== targetUserId)
+          : [];
+
+        const updates: Record<string, any> = {
+          teamMembers: updatedTeamMembers,
+          teamMemberUids: updatedTeamUids,
+        };
+
+        if (pData.assignedSymbioteId === targetUserId) {
+          updates.assignedSymbioteId = null;
+          updates.assignedSymbioteName = "[Deleted Specialist]";
+        }
+        if (pData.symbioteId === targetUserId) {
+          updates.symbioteId = null;
+        }
+
+        await pDoc.ref.update(updates);
+      }
+    } catch (teamErr) {
+      console.warn(`[Delete User] Team membership cleanup warning for ${targetUserId}:`, teamErr);
+    }
+
+    // 6. Delete all associated user artifacts (Proposals, Invitations, Notifications, Time Entries, etc.)
+    await deleteMatchingDocs("applications", "symbioteId", targetUserId);
+    await deleteMatchingDocs("invitations", "symbioteId", targetUserId);
+    await deleteMatchingDocs("invitations", "clientId", targetUserId);
+    await deleteMatchingDocs("notifications", "userId", targetUserId);
+    await deleteMatchingDocs("reviews", "userId", targetUserId);
+    await deleteMatchingDocs("reviews", "reviewerId", targetUserId);
+
+    // If target was a freelancer, clean their unbilled/test time entries
+    await deleteMatchingDocs("time_entries", "userId", targetUserId);
+    await deleteMatchingDocs("time_entries", "symbioteId", targetUserId);
+
+    // Remove user conversations participation
+    try {
+      const convsSnap = await firestoreAdmin
+        .collection("conversations")
+        .where("participants", "array-contains", targetUserId)
+        .get();
+
+      const convBatch = firestoreAdmin.batch();
+      convsSnap.docs.forEach((cDoc) => {
+        convBatch.delete(cDoc.ref);
+      });
+      await convBatch.commit();
+    } catch (convErr) {
+      console.warn(`[Delete User] Conversations cleanup warning for ${targetUserId}:`, convErr);
+    }
+
+    // 7. Record formal audit log
+    try {
+      await firestoreAdmin.collection("audit_logs").add({
+        userId: adminUid,
+        userEmail: adminUser?.email || "admin@syncsphere.io",
+        action: "HARD_DELETE_USER",
+        module: "Users",
+        targetId: targetUserId,
+        targetUserEmail: userEmail,
+        details: `Permanently deleted user account ${userName} (${userEmail}) from Firebase Auth, Firestore, and cleaned all associated artifacts.`,
+        result: "success",
+        timestamp: new Date(),
+      });
+    } catch (auditErr) {
+      console.warn("[Delete User] Audit log warning:", auditErr);
+    }
+
+    return res.json({
+      success: true,
+      message: `User ${userName} (${userEmail}) was permanently deleted successfully.`,
+    });
+  } catch (error: any) {
+    console.error("API DELETE /api/auth/admin/delete-user error:", error);
+    return res.status(500).json({
+      success: false,
+      error: `Failed to permanently delete user: ${error?.message || "Internal server error"}.`,
+    });
+  }
+});

@@ -9,12 +9,13 @@ import {
   Activity,
   Clock,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
-import { getUserById, setUserStatus } from '@/src/lib/firestore/adminUsers';
+import { getUserById, setUserStatus, deleteAdminUser } from '@/src/lib/firestore/adminUsers';
 import {
   getProjectHistory,
   getActivitySummary,
@@ -27,7 +28,7 @@ import { EmptyState } from '@/src/components/ui/EmptyState';
 import { GoogleColorIcon } from '@/src/components/ui/GoogleColorIcon';
 import { useAuth } from '@/src/context/AuthContext';
 
-type PendingAction = 'inactive' | 'active' | null;
+type PendingAction = 'inactive' | 'active' | 'delete' | null;
 
 export function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -149,6 +150,18 @@ export function UserDetailPage() {
       } else if (pendingAction === 'active') {
         await setUserStatus(userId, 'active', currentAdminUid);
         setActionSuccess(`User ${name} has been marked active.`);
+      } else if (pendingAction === 'delete') {
+        if (userId === currentAdminUid) {
+          throw new Error('You cannot delete your own administrative account.');
+        }
+        await deleteAdminUser(
+          userId,
+          currentAdminUid,
+          currentAdminEmail || 'admin@syncsphere.io',
+          email
+        );
+        navigate('/admin/users', { replace: true });
+        return;
       }
 
       const refreshed = await getUserById(userId);
@@ -220,7 +233,7 @@ export function UserDetailPage() {
             {status === 'active' ? (
               <button
                 onClick={() => setPendingAction('inactive')}
-                className="px-3.5 py-2 rounded-lg text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                className="px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                 <span>Mark Inactive</span>
@@ -228,12 +241,26 @@ export function UserDetailPage() {
             ) : (
               <button
                 onClick={() => setPendingAction('active')}
-                className="px-3.5 py-2 rounded-lg text-xs font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                className="px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Mark Active</span>
               </button>
             )}
+
+            <button
+              disabled={userId === currentAdminUid || actionLoading}
+              onClick={() => setPendingAction('delete')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-xs ${
+                userId === currentAdminUid
+                  ? 'text-gray-500 bg-gray-500/10 border border-gray-500/20 cursor-not-allowed opacity-60'
+                  : 'text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 cursor-pointer'
+              }`}
+              title={userId === currentAdminUid ? 'You cannot delete your own admin account' : `Delete ${name}`}
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Delete User</span>
+            </button>
           </div>
         </div>
       </Card>
@@ -475,6 +502,17 @@ export function UserDetailPage() {
         title="Mark this user as active?"
         description={`${name} will regain full platform access.`}
         confirmLabel="Mark Active"
+        loading={actionLoading}
+        onConfirm={runAction}
+        onCancel={() => setPendingAction(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingAction === 'delete'}
+        title="Delete User"
+        description={`Are you sure you want to permanently delete ${name} (${email})?`}
+        confirmLabel="Delete User"
+        destructive
         loading={actionLoading}
         onConfirm={runAction}
         onCancel={() => setPendingAction(null)}
