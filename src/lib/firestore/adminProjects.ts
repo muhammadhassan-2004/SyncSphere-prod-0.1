@@ -8,10 +8,11 @@ import {
   getDocs,
   getDoc,
   doc,
+  deleteDoc,
   type QueryDocumentSnapshot,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { db, auth } from '@/src/lib/firebase';
 
 export type ProjectOversightStatus = 'active' | 'completed' | 'in_review' | 'suspended';
 
@@ -379,6 +380,38 @@ export async function getProjectsPage(
   } catch (err) {
     console.error('Failed to get projects page:', err);
     return { rows: [], nextCursor: null, hasMore: false };
+  }
+}
+
+export async function deleteAdminProject(projectId: string): Promise<void> {
+  // 1. Attempt server-side delete
+  try {
+    const currentAuthUser = auth.currentUser;
+    const token = currentAuthUser ? await currentAuthUser.getIdToken() : '';
+
+    const res = await fetch(`/api/admin/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return;
+    }
+    console.warn('Backend delete-project returned non-success, attempting fallback:', data?.error);
+  } catch (err) {
+    console.warn('Failed to call backend delete project endpoint, using fallback:', err);
+  }
+
+  // 2. Direct Firestore Fallback
+  try {
+    await deleteDoc(doc(db, 'projects', projectId));
+  } catch (directErr) {
+    console.error('Failed direct deleteDoc on project:', directErr);
+    throw directErr;
   }
 }
 

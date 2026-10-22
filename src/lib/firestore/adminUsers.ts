@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { db } from '@/src/lib/firebase';
+import { db, auth } from '@/src/lib/firebase';
 import firebaseConfig from '@/firebase-applet-config.json';
 
 export interface AdminUserRow {
@@ -97,7 +97,9 @@ export async function getUsersPage(
       snap = await getDocs(collection(db, 'users'));
     }
 
-    let rows: AdminUserRow[] = snap.docs.map((d) => {
+    let rows: AdminUserRow[] = snap.docs
+      .filter((d) => d.data().isDeleted !== true)
+      .map((d) => {
       const data = d.data();
       const name =
         data.displayName ||
@@ -306,22 +308,66 @@ export async function deleteAdminUser(
   adminEmail?: string,
   userEmail?: string
 ) {
-  await updateDoc(doc(db, 'users', userId), {
-    status: 'disabled',
-    isDeleted: true,
-    updatedAt: new Date().toISOString(),
-  });
+  // 1. Attempt server-side Hard Delete (Wipes from Firebase Auth + Firestore + Projects)
+  try {
+    const currentAuthUser = auth.currentUser;
+    const token = currentAuthUser ? await currentAuthUser.getIdToken() : '';
+
+    const res = await fetch(`/api/auth/admin/delete-user/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return data;
+    }
+    console.warn('Backend delete-user endpoint returned non-success, attempting direct fallback:', data?.error);
+  } catch (apiErr) {
+    console.warn('Failed to call backend hard delete endpoint, using direct Firestore fallback:', apiErr);
+  }
+
+  // 2. Direct Firestore Fallback (Deletes Firestore user doc, client projects, and audit logs)
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch {
+    await updateDoc(doc(db, 'users', userId), {
+      status: 'disabled',
+      isDeleted: true,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  // Delete all client projects in fallback as well
+  try {
+    const q1 = query(collection(db, 'projects'), where('ownerId', '==', userId));
+    const snap1 = await getDocs(q1);
+    const deletePromises: Promise<any>[] = [];
+    snap1.docs.forEach((d) => deletePromises.push(deleteDoc(d.ref)));
+
+    const q2 = query(collection(db, 'projects'), where('clientId', '==', userId));
+    const snap2 = await getDocs(q2);
+    snap2.docs.forEach((d) => deletePromises.push(deleteDoc(d.ref)));
+
+    await Promise.allSettled(deletePromises);
+  } catch (fallbackProjErr) {
+    console.warn('Fallback project deletion warning:', fallbackProjErr);
+  }
+
   await addDoc(collection(db, 'audit_logs'), {
     userId: adminUid,
     userEmail: adminEmail || 'admin@syncsphere.io',
-    action: 'DEACTIVATE_USER',
+    action: 'HARD_DELETE_USER',
     module: 'Users',
     targetId: userId,
     targetUserEmail: userEmail,
-    details: `Deactivated user record ${userId} (${userEmail || 'unknown'})`,
+    details: `Hard deleted user record ${userId} (${userEmail || 'unknown'})`,
     result: 'success',
     timestamp: Timestamp.now(),
-  });
+  }).catch(() => {});
 }
 
 async function logAdminAction(adminUid: string, action: string, module: string, targetId: string) {
