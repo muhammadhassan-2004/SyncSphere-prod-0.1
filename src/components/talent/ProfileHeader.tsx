@@ -98,12 +98,47 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
             </div>
 
             {/* AVAILABILITY LINE */}
-            <div className="flex items-center gap-2 pt-1 text-[11px] font-mono">
-              <span className="w-2 h-2 rounded-full bg-[var(--color-success-green)] animate-pulse" />
-              <span className="text-[var(--color-success-green)] font-semibold">
-                Available: {symbiote.availability || 'Inquire'}
-              </span>
-            </div>
+            {(() => {
+              const isSuspended = symbiote.status === 'suspended';
+              const isInactive = symbiote.status === 'disabled' || symbiote.status === 'inactive' || symbiote.isDeleted === true;
+              const isExplicitlyUnavailable = symbiote.availability?.toLowerCase().trim() === 'unavailable';
+
+              if (isSuspended) {
+                return (
+                  <div className="flex items-center gap-2 pt-1 text-[11px] font-mono">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span className="text-rose-400 font-semibold">Account Suspended</span>
+                  </div>
+                );
+              }
+
+              if (isInactive) {
+                return (
+                  <div className="flex items-center gap-2 pt-1 text-[11px] font-mono">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-amber-400 font-semibold">Currently Inactive</span>
+                  </div>
+                );
+              }
+
+              if (isExplicitlyUnavailable) {
+                return (
+                  <div className="flex items-center gap-2 pt-1 text-[11px] font-mono">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-amber-400 font-semibold">Currently Unavailable</span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="flex items-center gap-2 pt-1 text-[11px] font-mono">
+                  <span className="w-2 h-2 rounded-full bg-[var(--color-success-green)] animate-pulse" />
+                  <span className="text-[var(--color-success-green)] font-semibold">
+                    Available: {symbiote.availability || 'Inquire'}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -112,7 +147,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
           <Button
             variant="secondary"
             onClick={onMessageClick}
-            disabled={isMessaging}
+            disabled={isMessaging || symbiote.status === 'suspended'}
             className="flex-1 md:flex-initial flex items-center justify-center gap-2 text-xs"
           >
             <MessageSquare className="w-4 h-4 text-[var(--color-accent-cyan)]" />
@@ -132,7 +167,8 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
             <Button
               variant="primary"
               onClick={onInviteClick}
-              className="flex-1 md:flex-initial flex items-center justify-center gap-2 text-xs"
+              disabled={symbiote.status === 'suspended' || symbiote.status === 'disabled' || symbiote.status === 'inactive'}
+              className="flex-1 md:flex-initial flex items-center justify-center gap-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send className="w-4 h-4" />
               <span>Invite to Project</span>

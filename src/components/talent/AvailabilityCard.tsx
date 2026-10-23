@@ -49,25 +49,36 @@ function deriveWorkingTimezone(location?: string, timeZone?: string): string {
   return location;
 }
 
-function formatAvailabilityText(avail?: string): { text: string; isImmediate: boolean } {
-  if (!avail) return { text: 'Contact for Availability', isImmediate: false };
+function formatAvailabilityText(avail?: string, status?: string): { text: string; isImmediate: boolean; isUnavailable: boolean } {
+  if (status === 'suspended') {
+    return { text: 'Account Suspended', isImmediate: false, isUnavailable: true };
+  }
+  if (status === 'disabled' || status === 'inactive') {
+    return { text: 'Currently Inactive', isImmediate: false, isUnavailable: true };
+  }
+  if (!avail) return { text: 'Contact for Availability', isImmediate: false, isUnavailable: false };
   const lower = avail.toLowerCase().trim();
+  if (lower === 'unavailable' || lower === 'not available' || lower === 'inactive') {
+    return { text: 'Currently Unavailable', isImmediate: false, isUnavailable: true };
+  }
   if (lower === 'immediate' || lower === 'available now') {
-    return { text: 'Available Now', isImmediate: true };
+    return { text: 'Available Now', isImmediate: true, isUnavailable: false };
   }
   if (/^\d+$/.test(lower)) {
-    return { text: `Available (~${avail} hrs/wk)`, isImmediate: true };
+    return { text: `Available (~${avail} hrs/wk)`, isImmediate: true, isUnavailable: false };
   }
-  return { text: `Available: ${avail}`, isImmediate: true };
+  return { text: `Available: ${avail}`, isImmediate: false, isUnavailable: false };
 }
 
 export const AvailabilityCard: React.FC<AvailabilityCardProps> = ({ symbiote }) => {
-  const { text: availText, isImmediate } = formatAvailabilityText(symbiote.availability);
+  const { text: availText, isImmediate, isUnavailable } = formatAvailabilityText(symbiote.availability, symbiote.status);
   const workingTz = deriveWorkingTimezone(symbiote.location, symbiote.timeZone);
 
   // Capacity formatting
   let capacityText = 'Flexible / Project-based';
-  if (symbiote.availability) {
+  if (isUnavailable) {
+    capacityText = '0 hrs / week (Unavailable)';
+  } else if (symbiote.availability) {
     if (/^\d+$/.test(symbiote.availability.trim())) {
       capacityText = `${symbiote.availability} hrs / week`;
     } else if (symbiote.availability.toLowerCase().includes('hrs') || symbiote.availability.toLowerCase().includes('hr')) {
@@ -92,11 +103,19 @@ export const AvailabilityCard: React.FC<AvailabilityCardProps> = ({ symbiote }) 
           className={`p-3 rounded-[8px] border flex items-center justify-between ${
             isImmediate
               ? 'bg-[var(--color-success-green)]/10 border-[var(--color-success-green)]/30 text-[var(--color-success-green)]'
+              : isUnavailable
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
               : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
           }`}
         >
           <div className="flex items-center gap-2 font-mono font-bold text-xs">
-            <span className="w-2 h-2 rounded-full bg-current animate-ping shrink-0" />
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                isImmediate
+                  ? 'bg-current animate-ping'
+                  : 'bg-current'
+              }`}
+            />
             <span>{availText}</span>
           </div>
           <CheckCircle2 className="w-4 h-4 shrink-0" />

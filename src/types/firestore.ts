@@ -113,7 +113,8 @@ export interface UserProfile {
   adminTitle?: string;
   yearsOfExperience?: string;
   primaryGoal?: string;
-  budgetRange?: string;
+  status?: 'active' | 'suspended' | 'disabled' | 'inactive';
+  isDeleted?: boolean;
   createdAt: string;
   updatedAt: string;
 }

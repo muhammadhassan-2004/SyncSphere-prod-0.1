@@ -154,7 +154,9 @@ export const FindTalentPage: React.FC = () => {
         completedProjects: u.completedProjects ?? 0,
         hourlyRate: typeof u.hourlyRate === 'number' ? u.hourlyRate : (parseFloat(u.hourlyRate) || 0),
         experience: (u.experience as any) || 'Senior',
-        availability: (u.availability as any) || 'Immediate',
+        availability: (u.availability as any) || (u.status === 'suspended' || u.status === 'disabled' || u.status === 'inactive' ? 'Unavailable' : 'Available'),
+        status: u.status || 'active',
+        isDeleted: u.isDeleted,
         location: u.location || 'Remote',
         bio: u.bio || '',
         skills: Array.isArray(u.skills) ? u.skills : [],
@@ -198,6 +200,16 @@ export const FindTalentPage: React.FC = () => {
   // Filtered and Sorted Symbiotes logic
   const filteredSymbiotes = useMemo(() => {
     const list = symbiotesList.filter((symbiote) => {
+      // Exclude suspended, disabled, inactive, or deleted users
+      if (
+        symbiote.isDeleted === true ||
+        symbiote.status === 'suspended' ||
+        symbiote.status === 'disabled' ||
+        symbiote.status === 'inactive'
+      ) {
+        return false;
+      }
+
       // Search Query
       if (searchQuery) {
         const q = searchQuery.toLowerCase().trim();
@@ -832,7 +844,13 @@ export const FindTalentPage: React.FC = () => {
                           <span>•</span>
                           <span>{symbiote.location}</span>
                           <span>•</span>
-                          <span className="text-[var(--color-success-green)]">{symbiote.availability}</span>
+                          <span className={
+                            symbiote.availability?.toLowerCase().includes('unavail') || symbiote.status !== 'active'
+                              ? 'text-amber-400'
+                              : 'text-[var(--color-success-green)]'
+                          }>
+                            {symbiote.availability}
+                          </span>
                         </div>
                       </div>
                     </div>
