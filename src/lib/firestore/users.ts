@@ -214,7 +214,11 @@ export async function getAllSymbiotesFromFirestore(): Promise<UserProfile[]> {
     const colRef = collection(db, USERS_COLLECTION);
     const snap = await getDocs(colRef);
     const all = snap.docs.map((d) => ({ uid: d.id, ...d.data() }) as UserProfile);
-    const symbiotes = all.filter((u) => u.role === 'symbiote' || u.role === 'freelancer' || (u as any).hourlyRate);
+    const symbiotes = all.filter((u) => {
+      const isSymbioteRole = u.role === 'symbiote' || u.role === 'freelancer' || (u as any).hourlyRate;
+      const isNotActive = u.isDeleted === true || u.status === 'suspended' || u.status === 'disabled' || u.status === 'inactive';
+      return isSymbioteRole && !isNotActive;
+    });
     return symbiotes;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, USERS_COLLECTION);
@@ -229,7 +233,11 @@ export function subscribeToSymbiotesFromFirestore(callback: (profiles: UserProfi
       colRef,
       (snap) => {
         const all = snap.docs.map((d) => ({ uid: d.id, ...d.data() }) as UserProfile);
-        const symbiotes = all.filter((u) => u.role === 'symbiote' || u.role === 'freelancer' || (u as any).hourlyRate);
+        const symbiotes = all.filter((u) => {
+          const isSymbioteRole = u.role === 'symbiote' || u.role === 'freelancer' || (u as any).hourlyRate;
+          const isNotActive = u.isDeleted === true || u.status === 'suspended' || u.status === 'disabled' || u.status === 'inactive';
+          return isSymbioteRole && !isNotActive;
+        });
         callback(symbiotes);
       },
       (error) => {

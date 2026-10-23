@@ -8,6 +8,8 @@ export type PresenceStatus = 'online' | 'away' | 'offline';
 export interface PresenceUser {
   uid?: string;
   isOnline?: boolean;
+  status?: string;
+  isDeleted?: boolean;
   lastActiveAt?: any;
   lastSeen?: any;
   updatedAt?: any;
@@ -28,6 +30,21 @@ export function getUserPresence(user?: PresenceUser | null): {
 } {
   if (!user) {
     return { status: 'offline', statusDot: undefined, isOnline: false, label: 'Offline' };
+  }
+
+  // Account-level inactive/suspended/deleted check: must never appear online or away
+  if (
+    user.isDeleted === true ||
+    user.status === 'suspended' ||
+    user.status === 'disabled' ||
+    user.status === 'inactive'
+  ) {
+    return {
+      status: 'offline',
+      statusDot: undefined,
+      isOnline: false,
+      label: user.status === 'suspended' ? 'Suspended' : 'Inactive',
+    };
   }
 
   // Parse raw activity date from explicit heartbeat / presence fields ONLY (NEVER use updatedAt)

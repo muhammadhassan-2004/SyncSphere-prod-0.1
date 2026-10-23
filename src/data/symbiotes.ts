@@ -24,6 +24,8 @@ export interface SymbioteProfile {
   createdAt?: string;
   updatedAt?: string;
   isOnline?: boolean;
+  status?: 'active' | 'suspended' | 'disabled' | 'inactive';
+  isDeleted?: boolean;
   lastActiveAt?: any;
   lastSeen?: any;
 }
