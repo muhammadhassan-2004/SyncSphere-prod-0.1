@@ -566,7 +566,7 @@ export const InvoiceManagementPage: React.FC = () => {
               <Search className="w-3.5 h-3.5 text-[var(--color-text-secondary)] absolute left-2.5 top-2.5" />
               <input
                 type="text"
-                placeholder="Search Invoice#, Project, Freelancer..."
+                placeholder="Search invoices..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-8 pl-8 pr-2.5 rounded-[6px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)]"
@@ -624,7 +624,10 @@ export const InvoiceManagementPage: React.FC = () => {
                       </td>
 
                       {/* PROJECT */}
-                      <td className="py-3 px-2 text-[var(--color-text-primary)] max-w-[120px] truncate">
+                      <td
+                        className="py-3 px-2 text-[var(--color-text-primary)] max-w-[120px] truncate"
+                        title={pName}
+                      >
                         {pName}
                       </td>
 
@@ -734,9 +737,16 @@ export const InvoiceManagementPage: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center py-1 border-b border-[var(--color-border)]/40">
-                  <span className="text-[var(--color-text-secondary)]">Project Brief:</span>
-                  <span className="font-semibold text-[var(--color-accent-cyan)] truncate max-w-[180px]">
+                <div className="flex justify-between items-center gap-3 py-1 border-b border-[var(--color-border)]/40">
+                  <span className="text-[var(--color-text-secondary)] shrink-0">Project Brief:</span>
+                  <span
+                    className="font-semibold text-[var(--color-accent-cyan)] truncate max-w-[180px] text-right"
+                    title={
+                      activeInvoice.projectName ||
+                      projectMap[activeInvoice.projectId] ||
+                      'Project Brief'
+                    }
+                  >
                     {activeInvoice.projectName || projectMap[activeInvoice.projectId] || 'Project Brief'}
                   </span>
                 </div>

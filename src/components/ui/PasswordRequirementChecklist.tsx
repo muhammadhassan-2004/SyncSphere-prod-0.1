@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, X } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
+import { validateStrongPassword } from '@/src/lib/validation/formValidators';
 
 interface PasswordRequirementChecklistProps {
   password: string;
@@ -13,9 +14,14 @@ export function PasswordRequirementChecklist({
   confirmPassword,
   className = '',
 }: PasswordRequirementChecklistProps) {
-  const hasMinLength = password.length >= 8;
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
+  const {
+    hasMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumber,
+    hasSpecialChar,
+  } = validateStrongPassword(password);
+
   const passwordsMatch =
     confirmPassword !== undefined && confirmPassword.length > 0 && password === confirmPassword;
 
@@ -24,7 +30,7 @@ export function PasswordRequirementChecklist({
       <span className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider block">
         Password Requirements
       </span>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
         <div
           className={`flex items-center gap-1.5 transition-colors ${
             hasMinLength
@@ -52,7 +58,22 @@ export function PasswordRequirementChecklist({
           ) : (
             <X className="w-3.5 h-3.5 opacity-40" />
           )}
-          <span>1 Uppercase</span>
+          <span>Uppercase (A-Z)</span>
+        </div>
+
+        <div
+          className={`flex items-center gap-1.5 transition-colors ${
+            hasLowercase
+              ? 'text-[var(--color-success-green)] font-medium'
+              : 'text-[var(--color-text-secondary)]'
+          }`}
+        >
+          {hasLowercase ? (
+            <Check className="w-3.5 h-3.5 stroke-[3]" />
+          ) : (
+            <X className="w-3.5 h-3.5 opacity-40" />
+          )}
+          <span>Lowercase (a-z)</span>
         </div>
 
         <div
@@ -67,7 +88,22 @@ export function PasswordRequirementChecklist({
           ) : (
             <X className="w-3.5 h-3.5 opacity-40" />
           )}
-          <span>1 Number</span>
+          <span>Number (0-9)</span>
+        </div>
+
+        <div
+          className={`flex items-center gap-1.5 transition-colors ${
+            hasSpecialChar
+              ? 'text-[var(--color-success-green)] font-medium'
+              : 'text-[var(--color-text-secondary)]'
+          }`}
+        >
+          {hasSpecialChar ? (
+            <Check className="w-3.5 h-3.5 stroke-[3]" />
+          ) : (
+            <X className="w-3.5 h-3.5 opacity-40" />
+          )}
+          <span>Special (!@#$...)</span>
         </div>
       </div>
 

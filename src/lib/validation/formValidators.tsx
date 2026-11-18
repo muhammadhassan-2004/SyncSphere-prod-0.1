@@ -39,6 +39,41 @@ export const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): vo
   }
 };
 
+export interface PasswordValidationResult {
+  hasMinLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasNumber: boolean;
+  hasSpecialChar: boolean;
+  isValid: boolean;
+  errors: string[];
+}
+
+export const validateStrongPassword = (password: string): PasswordValidationResult => {
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+
+  const errors: string[] = [];
+  if (!hasMinLength) errors.push('At least 8 characters');
+  if (!hasUppercase) errors.push('At least one uppercase letter (A-Z)');
+  if (!hasLowercase) errors.push('At least one lowercase letter (a-z)');
+  if (!hasNumber) errors.push('At least one number (0-9)');
+  if (!hasSpecialChar) errors.push('At least one special character (!@#$%^&*...)');
+
+  return {
+    hasMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumber,
+    hasSpecialChar,
+    isValid: hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecialChar,
+    errors,
+  };
+};
+
 export const validators = {
   required: (v: string) => (v.trim() ? null : 'This field is required'),
   email: (v: string) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : 'Enter a valid email'),
@@ -46,8 +81,10 @@ export const validators = {
   passwordMatch: (other: string) => (v: string) => (v === other ? null : 'Passwords do not match'),
   passwordStrength: (v: string) => {
     if (v.length < 8) return 'Min. 8 characters';
-    if (!/[A-Z]/.test(v)) return 'At least one uppercase letter';
-    if (!/[0-9]/.test(v)) return 'At least one number';
+    if (!/[A-Z]/.test(v)) return 'At least one uppercase letter (A-Z)';
+    if (!/[a-z]/.test(v)) return 'At least one lowercase letter (a-z)';
+    if (!/[0-9]/.test(v)) return 'At least one number (0-9)';
+    if (!/[^A-Za-z0-9]/.test(v)) return 'At least one special character (!@#$%^&*...)';
     return null;
   },
   phone: (v: string) => {

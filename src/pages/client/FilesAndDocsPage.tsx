@@ -298,11 +298,11 @@ export const FilesAndDocsPage: React.FC = () => {
         {/* RIGHT CONTROLS: SEARCH & GRID/LIST TOGGLE */}
         <div className="flex items-center gap-2.5 px-1">
           {/* SEARCH INPUT */}
-          <div className="relative w-full sm:w-56">
+          <div className="relative w-full sm:w-48">
             <Search className="w-3.5 h-3.5 text-[var(--color-text-secondary)] absolute left-2.5 top-2.5" />
             <input
               type="text"
-              placeholder="Search by filename or project..."
+              placeholder="Search files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-8 pl-8 pr-2.5 rounded-[6px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)]"
@@ -347,12 +347,14 @@ export const FilesAndDocsPage: React.FC = () => {
             const isPdf = file.type?.includes('pdf') || /\.pdf$/i.test(file.name);
             const hasDownloadUrl = Boolean(file.downloadUrl && file.downloadUrl !== '#' && !file.downloadUrl.startsWith('blob:'));
 
+            const projectLabel = file.projectName || projectMap[file.projectId] || 'Project Brief';
+
             return (
               <Card
                 key={file.id}
-                className="p-4 bg-[var(--color-surface)] border-[var(--color-border)] hover:border-[var(--color-accent-cyan)]/50 rounded-[12px] space-y-3.5 transition-all shadow-sm hover:shadow-md group relative flex flex-col justify-between"
+                className="p-4 bg-[var(--color-surface)] border-[var(--color-border)] hover:border-[var(--color-accent-cyan)]/50 rounded-[12px] space-y-3.5 transition-all shadow-sm hover:shadow-md group relative flex flex-col justify-between min-w-0 overflow-hidden"
               >
-                <div className="space-y-3">
+                <div className="space-y-3 min-w-0">
                   {/* IMAGE THUMBNAIL IF IMAGE */}
                   {isImage && hasDownloadUrl ? (
                     <div
@@ -371,52 +373,53 @@ export const FilesAndDocsPage: React.FC = () => {
                           <span>Preview</span>
                         </span>
                       </div>
-                      <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-black/60 backdrop-blur-xs text-white border border-white/10">
+                      <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-black/60 backdrop-blur-xs text-white border border-white/10 max-w-[45%] truncate">
                         {file.category}
                       </span>
                     </div>
                   ) : isPdf ? (
                     <div
                       onClick={() => setPreviewFile(file)}
-                      className="relative w-full h-24 rounded-[10px] bg-gradient-to-br from-rose-950/30 to-slate-900/60 border border-rose-500/20 p-3 flex flex-col justify-between cursor-pointer group/pdf hover:border-rose-500/40 transition-colors"
+                      className="relative w-full h-24 rounded-[10px] bg-gradient-to-br from-rose-950/30 to-slate-900/60 border border-rose-500/20 p-3 flex flex-col justify-between cursor-pointer group/pdf hover:border-rose-500/40 transition-colors overflow-hidden"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="p-2 rounded-[8px] bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="p-2 rounded-[8px] bg-rose-500/15 border border-rose-500/30 text-rose-400 shrink-0">
                           <FileText className="w-5 h-5" />
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-rose-500/10 text-rose-300 border border-rose-500/30">
-                          PDF · {file.category}
+                        <span className="px-2 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider bg-rose-500/10 text-rose-300 border border-rose-500/30 truncate max-w-[70%]">
+                          {file.category}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[10.5px] text-[var(--color-text-secondary)] font-mono">
-                        <span>Document Spec</span>
-                        <span className="text-rose-400 group-hover/pdf:underline flex items-center gap-1">
-                          <Eye className="w-3 h-3" /> Click Preview
+                      <div className="flex items-center justify-between gap-2 text-[10.5px] text-[var(--color-text-secondary)] font-mono min-w-0">
+                        <span className="shrink-0">PDF</span>
+                        <span className="text-rose-400 group-hover/pdf:underline flex items-center gap-1 shrink-0">
+                          <Eye className="w-3 h-3" /> Preview
                         </span>
                       </div>
                     </div>
                   ) : (
                     /* TOP ROW: ICON + CATEGORY BADGE */
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start justify-between gap-2 min-w-0">
                       <div
-                        className={`p-2.5 rounded-[10px] border ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}
+                        className={`p-2.5 rounded-[10px] border shrink-0 ${iconInfo.bgClass} ${iconInfo.borderClass} ${iconInfo.colorClass}`}
                       >
                         <IconComp className="w-5 h-5" />
                       </div>
 
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)]">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-[var(--color-background)] border border-[var(--color-border)] text-[var(--color-text-secondary)] truncate max-w-[60%]">
                         {file.category}
                       </span>
                     </div>
                   )}
 
                   {/* FILENAME (BOLD) §11.11 */}
-                  <div>
+                  <div className="min-w-0">
                     <h3
                       onClick={() => setPreviewFile(file)}
-                      className="font-bold text-xs text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors break-words leading-snug cursor-pointer flex items-center gap-1"
+                      title={file.name}
+                      className="font-bold text-xs text-[var(--color-text-primary)] group-hover:text-[var(--color-accent-cyan)] transition-colors leading-snug cursor-pointer break-all line-clamp-2"
                     >
-                      <span>{file.name}</span>
+                      {file.name}
                     </h3>
 
                     {/* METADATA LINE (SIZE · DATE) §11.11 */}
@@ -429,13 +432,16 @@ export const FilesAndDocsPage: React.FC = () => {
                 </div>
 
                 {/* BOTTOM ROW: PROJECT TAG & DOWNLOAD / DELETE ACTIONS */}
-                <div className="pt-3 border-t border-[var(--color-border)]/60 flex items-center justify-between text-[10px] font-mono text-[var(--color-text-secondary)]">
-                  <span className="truncate max-w-[150px] text-[var(--color-accent-cyan)] flex items-center gap-1">
+                <div className="pt-3 border-t border-[var(--color-border)]/60 flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-secondary)] min-w-0">
+                  <span
+                    className="min-w-0 flex-1 truncate text-[var(--color-accent-cyan)] flex items-center gap-1"
+                    title={projectLabel}
+                  >
                     <Folder className="w-3 h-3 shrink-0" />
-                    {file.projectName || projectMap[file.projectId] || 'Project Brief'}
+                    <span className="truncate">{projectLabel}</span>
                   </span>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => setPreviewFile(file)}
                       className="p-1.5 rounded bg-[var(--color-background)] hover:bg-[var(--color-accent-cyan)]/20 text-[var(--color-text-secondary)] hover:text-[var(--color-accent-cyan)] border border-[var(--color-border)] transition-colors cursor-pointer"
@@ -498,6 +504,7 @@ export const FilesAndDocsPage: React.FC = () => {
               {filteredFiles.map((file) => {
                 const iconInfo = getFileTypeIconInfo(file.name, file.category, file.type);
                 const IconComp = iconInfo.icon;
+                const projectLabel = file.projectName || projectMap[file.projectId] || 'Project Brief';
 
                 return (
                   <tr
@@ -512,7 +519,10 @@ export const FilesAndDocsPage: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3 px-3 font-bold text-[var(--color-text-primary)]">
+                    <td
+                      className="py-3 px-3 font-bold text-[var(--color-text-primary)] max-w-[220px] truncate"
+                      title={file.name}
+                    >
                       {file.name}
                     </td>
 
@@ -522,12 +532,15 @@ export const FilesAndDocsPage: React.FC = () => {
                       </span>
                     </td>
 
-                    <td className="py-3 px-3 text-[var(--color-text-secondary)]">
+                    <td className="py-3 px-3 text-[var(--color-text-secondary)] whitespace-nowrap">
                       {file.size}
                     </td>
 
-                    <td className="py-3 px-3 text-[var(--color-accent-cyan)]">
-                      {file.projectName || projectMap[file.projectId] || 'Project Brief'}
+                    <td
+                      className="py-3 px-3 text-[var(--color-accent-cyan)] max-w-[180px] truncate"
+                      title={projectLabel}
+                    >
+                      {projectLabel}
                     </td>
 
                     <td className="py-3 px-3 text-[var(--color-text-secondary)]">

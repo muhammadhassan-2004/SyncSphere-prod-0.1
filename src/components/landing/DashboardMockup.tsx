@@ -5,7 +5,7 @@ import { Sparkles, Layers, Users, DollarSign, TrendingUp, CheckCircle2, ShieldCh
 export const DashboardMockup: React.FC = () => {
   // Hardcoded curated showcase metrics for pristine presentation
   const activeProjectsCount = 248;
-  const hiredProsCount = '1,420+';
+  const hiredProsCount = '1,500+';
   const averageRating = '4.9 ★';
 
   const showcaseProjects = [

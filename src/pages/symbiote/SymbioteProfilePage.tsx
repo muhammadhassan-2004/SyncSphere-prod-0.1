@@ -1277,7 +1277,7 @@ export const SymbioteProfilePage: React.FC = () => {
                 Cancel
               </Button>
               <Button onClick={handleAddCertification} className="bg-[var(--color-accent-cyan)] hover:bg-cyan-400 text-black text-caption font-bold cursor-pointer">
-                Add Credential
+                Add Certificate
               </Button>
             </div>
           </Card>

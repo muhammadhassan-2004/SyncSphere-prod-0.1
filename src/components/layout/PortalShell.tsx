@@ -49,6 +49,8 @@ import {
   Inbox,
   CheckCircle2,
   ChevronRight,
+  Menu,
+  X,
 } from 'lucide-react';
 
 export interface NavItemConfig {
@@ -70,9 +72,11 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
+  const isMessagesRoute = location.pathname.includes('/messages');
 
   // Live Firestore Badge Counts
   const [notifBadgeCount, setNotifBadgeCount] = useState<number>(0);
@@ -147,6 +151,11 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close mobile nav on route change
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
 
   // Configure portal role metadata
   const roleConfig = {
@@ -395,19 +404,44 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
   return (
     <EmailVerificationGuard role={role}>
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased">
-      {/* SIDEBAR: ~240px width, fixed left, full height, surface fill, 1px border right */}
-      <aside className="w-[240px] shrink-0 h-full bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col justify-between z-20 select-none">
+      {/* Mobile nav backdrop */}
+      {mobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR: drawer on mobile, fixed 240px on md+ */}
+      <aside
+        className={cn(
+          'w-[min(280px,85vw)] md:w-[240px] shrink-0 h-full bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col justify-between z-50 select-none',
+          'fixed md:static inset-y-0 left-0 transition-transform duration-200 ease-out',
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        )}
+      >
         {/* TOP BRANDING HEADER */}
         <div className="p-4 border-b border-[var(--color-border)] space-y-2">
-          <Link
-            to={roleConfig.defaultPath}
-
-            className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-cyan)] rounded-md transition-opacity hover:opacity-85 cursor-pointer"
-            title="Go to Dashboard"
-            aria-label="Go to Dashboard"
-          >
-            <SyncSphereLogo iconSize={26} textSize="md" />
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              to={roleConfig.defaultPath}
+              className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-cyan)] rounded-md transition-opacity hover:opacity-85 cursor-pointer"
+              title="Go to Dashboard"
+              aria-label="Go to Dashboard"
+            >
+              <SyncSphereLogo iconSize={26} textSize="md" />
+            </Link>
+            <button
+              type="button"
+              className="md:hidden p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-background)]"
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Close menu"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-1.5 pl-0.5">
             <span
@@ -504,9 +538,23 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
       {/* RIGHT SIDE MAIN WRAPPER */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* TOP BAR: Fixed top, surface fill, border bottom */}
-        <header className="h-14 shrink-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 flex items-center justify-between gap-4 z-30">
-          {/* Left-center Spacer (Global Search Bar hidden per platform privacy directive) */}
-          <div className="flex-1" />
+        <header className="h-14 shrink-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-3 sm:px-4 md:px-6 flex items-center justify-between gap-3 z-30">
+          {/* Mobile menu + spacer */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <button
+              type="button"
+              className="md:hidden p-2 -ml-1 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] transition-colors"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            {isMessagesRoute && (
+              <span className="md:hidden text-sm font-semibold text-[var(--color-text-primary)] truncate">
+                Messages
+              </span>
+            )}
+          </div>
 
           {/* Right side controls */}
           <div className="flex items-center gap-4 shrink-0">
@@ -730,9 +778,9 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
         <main
           className={cn(
             'flex-1 bg-[var(--color-background)] min-h-0',
-            location.pathname.includes('/messages')
-              ? 'overflow-hidden p-3 sm:p-4 md:p-6 flex flex-col'
-              : 'overflow-y-auto p-8 md:p-10'
+            isMessagesRoute
+              ? 'overflow-hidden p-0 sm:p-3 md:p-4 lg:p-5 flex flex-col'
+              : 'overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10'
           )}
         >
           {children || <Outlet />}

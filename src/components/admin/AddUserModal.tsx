@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { PasswordInput } from '@/src/components/ui/PasswordInput';
+import { validateStrongPassword } from '@/src/lib/validation/formValidators';
 import { createAdminUser, CreateAdminUserParams } from '@/src/lib/firestore/adminUsers';
 
 interface AddUserModalProps {
@@ -48,12 +49,22 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   if (!isOpen) return null;
 
   const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
-    let res = '';
-    for (let i = 0; i < 12; i++) {
-      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowers = 'abcdefghijkmnopqrstuvwxyz';
+    const numbers = '23456789';
+    const specials = '!@#$%&*';
+    const all = uppers + lowers + numbers + specials;
+    const res = [
+      uppers.charAt(Math.floor(Math.random() * uppers.length)),
+      lowers.charAt(Math.floor(Math.random() * lowers.length)),
+      numbers.charAt(Math.floor(Math.random() * numbers.length)),
+      specials.charAt(Math.floor(Math.random() * specials.length)),
+    ];
+    for (let i = 4; i < 12; i++) {
+      res.push(all.charAt(Math.floor(Math.random() * all.length)));
     }
-    setPassword(res);
+    res.sort(() => Math.random() - 0.5);
+    setPassword(res.join(''));
   };
 
   const handleCopyCredentials = () => {
@@ -69,8 +80,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       setError('Please provide a valid email address.');
       return;
     }
-    if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    const pwdValidation = validateStrongPassword(password);
+    if (!pwdValidation.isValid) {
+      setError(
+        'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      );
       return;
     }
 
@@ -262,7 +276,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               name="newPassword"
               autoComplete="new-password"
               required
-              placeholder="Minimum 6 characters"
+              placeholder="Minimum 8 characters (Aa1@)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={<Lock className="w-4 h-4 text-[var(--color-text-secondary)]" />}

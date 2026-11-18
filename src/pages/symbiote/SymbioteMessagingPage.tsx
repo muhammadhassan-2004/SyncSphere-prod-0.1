@@ -67,6 +67,8 @@ export const SymbioteMessagingPage: React.FC = () => {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<string>(activeConvIdFromUrl);
+  /** Mobile list/thread toggle — desktop always shows both panes */
+  const [mobileShowThread, setMobileShowThread] = useState<boolean>(Boolean(activeConvIdFromUrl));
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -158,6 +160,7 @@ export const SymbioteMessagingPage: React.FC = () => {
   useEffect(() => {
     if (activeConvIdFromUrl) {
       setSelectedConvId(activeConvIdFromUrl);
+      setMobileShowThread(true);
     }
   }, [activeConvIdFromUrl]);
 
@@ -535,39 +538,43 @@ export const SymbioteMessagingPage: React.FC = () => {
   }, [messages]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto h-full flex flex-col min-h-0 space-y-3">
+    <div className="w-full h-full flex flex-col min-h-0 gap-2 sm:gap-3">
       {/* PAGE TITLE BAR */}
-      <div className="shrink-0 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-[10px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-            <MessageSquare className="w-5 h-5" />
+      <div
+        className={`shrink-0 items-center justify-between border-b border-[var(--color-border)] pb-2 sm:pb-3 ${
+          mobileShowThread ? 'hidden md:flex' : 'flex'
+        }`}
+      >
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div className="p-1.5 sm:p-2 rounded-[10px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0">
+            <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-[var(--color-text-primary)] tracking-tight">
-              Client Workspace Messaging
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-bold text-[var(--color-text-primary)] tracking-tight truncate">
+              Messages
             </h1>
-            <p className="text-xs text-[var(--color-text-secondary)] font-mono">
+            <p className="hidden sm:block text-xs text-[var(--color-text-secondary)] font-mono truncate">
               Direct project messaging & client communication.
             </p>
           </div>
         </div>
 
         {toastNotification && (
-          <div className="px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono animate-fadeIn flex items-center gap-2">
+          <div className="px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono animate-fadeIn flex items-center gap-2 shrink-0">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>{toastNotification}</span>
+            <span className="truncate max-w-[160px] sm:max-w-none">{toastNotification}</span>
           </div>
         )}
       </div>
 
       {/* THREE-COLUMN GRID (CONVERSATIONS, CHAT, PROJECT INFO) */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
-        {/* COLUMN 1 & 2: CONVERSATION LIST + ACTIVE THREAD (lg:col-span-9) */}
-        <Card className="lg:col-span-9 border border-[var(--color-border)] bg-[var(--color-surface)] rounded-[12px] overflow-hidden shadow-sm grid grid-cols-1 md:grid-cols-12 h-full min-h-0">
-          {/* LEFT PANE: CONVERSATION LIST (4 COLS) */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-0 sm:gap-3 h-full">
+        {/* COLUMN 1 & 2: CONVERSATION LIST + ACTIVE THREAD */}
+        <Card className="col-span-full xl:col-span-9 border border-[var(--color-border)] bg-[var(--color-surface)] rounded-none sm:rounded-[12px] overflow-hidden shadow-sm grid grid-cols-1 md:grid-cols-12 h-full min-h-0 border-x-0 sm:border-x">
+          {/* LEFT PANE: CONVERSATION LIST */}
           <div
-            className={`md:col-span-4 border-r border-[var(--color-border)] flex flex-col h-full min-h-0 bg-[var(--color-surface)] ${
-              selectedConvId ? 'hidden md:flex' : 'flex'
+            className={`md:col-span-5 lg:col-span-4 border-r border-[var(--color-border)] flex flex-col h-full min-h-0 bg-[var(--color-surface)] ${
+              mobileShowThread ? 'hidden md:flex' : 'flex'
             }`}
           >
             {/* SEARCH INPUT */}
@@ -638,10 +645,11 @@ export const SymbioteMessagingPage: React.FC = () => {
                       onClick={() => {
                         if (conv.id) {
                           setSelectedConvId(conv.id);
+                          setMobileShowThread(true);
                           navigate(`/symbiote/messages?convId=${conv.id}`);
                         }
                       }}
-                      className={`w-full p-3.5 text-left flex items-start gap-3 transition-colors relative ${
+                      className={`w-full p-3 sm:p-3.5 text-left flex items-start gap-3 transition-colors relative min-h-[64px] ${
                         isSelected
                           ? 'bg-emerald-500/10 border-l-4 border-l-emerald-500'
                           : 'hover:bg-[var(--color-background)]/60'
@@ -699,20 +707,22 @@ export const SymbioteMessagingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ACTIVE THREAD CONTAINER (8 COLS) */}
+          {/* ACTIVE THREAD CONTAINER */}
           <div
-            className={`md:col-span-8 flex flex-col h-full min-h-0 bg-[var(--color-background)] ${
-              !selectedConvId ? 'hidden md:flex' : 'flex'
+            className={`md:col-span-7 lg:col-span-8 flex flex-col h-full min-h-0 bg-[var(--color-background)] ${
+              !mobileShowThread ? 'hidden md:flex' : 'flex'
             }`}
           >
             {activeConversation ? (
               <>
                 {/* THREAD HEADER */}
-                <div className="shrink-0 p-3.5 px-5 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 px-3 py-2.5 sm:px-4 sm:py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-between gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                     <button
-                      onClick={() => setSelectedConvId('')}
-                      className="md:hidden p-1.5 rounded hover:bg-[var(--color-background)] text-[var(--color-text-secondary)]"
+                      type="button"
+                      onClick={() => setMobileShowThread(false)}
+                      className="md:hidden p-2 -ml-1 rounded-lg hover:bg-[var(--color-background)] text-[var(--color-text-secondary)] shrink-0"
+                      aria-label="Back to conversations"
                     >
                       <ArrowLeft className="w-5 h-5" />
                     </button>
@@ -741,15 +751,15 @@ export const SymbioteMessagingPage: React.FC = () => {
                     </button>
 
                     {/* CLICKABLE NAME -> OPENS CLIENT PROFILE MODAL */}
-                    <div className="min-w-0 cursor-pointer" onClick={() => setIsProfileModalOpen(true)}>
-                      <h2 className="text-sm font-bold text-[var(--color-text-primary)] hover:text-emerald-400 transition-colors flex items-center gap-2 flex-wrap">
+                    <div className="min-w-0 cursor-pointer flex-1" onClick={() => setIsProfileModalOpen(true)}>
+                      <h2 className="text-sm font-bold text-[var(--color-text-primary)] hover:text-emerald-400 transition-colors flex items-center gap-1.5 sm:gap-2">
                         <span className="truncate">{clientName}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0">
+                        <span className="hidden sm:inline-flex px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0">
                           Verified Client
                         </span>
                       </h2>
-                      <div className="flex items-center gap-2 text-[11px] font-mono text-[var(--color-text-secondary)]">
-                        <span className="truncate max-w-[180px] sm:max-w-xs">{clientTitle}</span>
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono text-[var(--color-text-secondary)]">
+                        <span className="truncate max-w-[120px] sm:max-w-[200px] lg:max-w-xs">{clientTitle}</span>
                         <span>·</span>
                         <span
                           className={
@@ -829,9 +839,9 @@ export const SymbioteMessagingPage: React.FC = () => {
                 </div>
 
                 {/* MESSAGES SCROLL CONTAINER */}
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5 sm:py-5 lg:px-6 space-y-5">
                   {groupedMessages.map((group) => (
-                    <div key={group.dateLabel} className="space-y-4">
+                    <div key={group.dateLabel} className="space-y-3 sm:space-y-4">
                       <div className="flex items-center justify-center">
                         <span className="px-3 py-1 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[10px] font-mono text-[var(--color-text-secondary)] shadow-sm">
                           {group.dateLabel}
@@ -844,7 +854,7 @@ export const SymbioteMessagingPage: React.FC = () => {
                         return (
                           <div
                             key={msg.id || msg.sentAt}
-                            className={`flex items-end gap-2.5 ${
+                            className={`flex items-end gap-2 sm:gap-3 ${
                               isOutgoing ? 'justify-end' : 'justify-start'
                             }`}
                           >
@@ -852,7 +862,7 @@ export const SymbioteMessagingPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => setIsProfileModalOpen(true)}
-                                className="shrink-0 mb-1 hover:scale-105 transition-transform"
+                                className="shrink-0 mb-0.5 hover:scale-105 transition-transform"
                               >
                                 <Avatar
                                   name={clientName}
@@ -864,14 +874,14 @@ export const SymbioteMessagingPage: React.FC = () => {
                             )}
 
                             <div
-                              className={`max-w-[80%] sm:max-w-[70%] space-y-1.5 p-3.5 rounded-[14px] shadow-sm ${
+                              className={`max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] space-y-1.5 px-3.5 py-2.5 sm:p-3.5 rounded-2xl shadow-sm ${
                                 isOutgoing
-                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 rounded-br-xs font-medium'
-                                  : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-bl-xs'
+                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 rounded-br-md font-medium'
+                                  : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-bl-md'
                               }`}
                             >
                               {msg.text && (
-                                <p className="text-xs leading-relaxed whitespace-pre-wrap break-words font-sans">
+                                <p className="text-sm sm:text-xs leading-relaxed whitespace-pre-wrap break-words font-sans">
                                   {msg.text}
                                 </p>
                               )}
@@ -963,7 +973,7 @@ export const SymbioteMessagingPage: React.FC = () => {
                 ) : (
                   <form
                     onSubmit={handleSendMessage}
-                    className="shrink-0 p-3.5 border-t border-[var(--color-border)] bg-[var(--color-surface)] flex items-center gap-2"
+                    className="shrink-0 p-2.5 sm:p-3.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] border-t border-[var(--color-border)] bg-[var(--color-surface)] flex items-center gap-2"
                   >
                     <input
                       type="file"
@@ -977,7 +987,7 @@ export const SymbioteMessagingPage: React.FC = () => {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       title="Attach File"
-                      className="p-2.5 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] hover:border-emerald-500 text-[var(--color-text-secondary)] hover:text-emerald-400 transition-colors shrink-0"
+                      className="p-2.5 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] hover:border-emerald-500 text-[var(--color-text-secondary)] hover:text-emerald-400 transition-colors shrink-0 touch-manipulation"
                     >
                       <Paperclip className="w-4 h-4" />
                     </button>
@@ -987,13 +997,13 @@ export const SymbioteMessagingPage: React.FC = () => {
                       placeholder={`Message ${clientName}...`}
                       value={messageText}
                       onChange={handleInputChange}
-                      className="flex-1 h-11 px-4 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-medium text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500 transition-colors"
+                      className="flex-1 h-11 min-w-0 px-3 sm:px-4 rounded-[10px] bg-[var(--color-background)] border border-[var(--color-border)] text-sm sm:text-xs font-medium text-[var(--color-text-primary)] focus:outline-none focus:border-emerald-500 transition-colors"
                     />
 
                     <Button
                       type="submit"
                       disabled={(!messageText.trim() && pendingAttachments.length === 0) || sending}
-                      className="w-11 h-11 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold p-0 flex items-center justify-center shrink-0 shadow-sm hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                      className="w-11 h-11 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold p-0 flex items-center justify-center shrink-0 shadow-sm hover:scale-105 active:scale-95 transition-all disabled:opacity-50 touch-manipulation"
                     >
                       <Send className="w-4 h-4" />
                     </Button>
@@ -1014,8 +1024,8 @@ export const SymbioteMessagingPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* COLUMN 3: RIGHT PROJECT INFO SIDEBAR (lg:col-span-3) */}
-        <Card className="lg:col-span-3 border border-[var(--color-border)] bg-[var(--color-surface)] rounded-[12px] flex flex-col h-full min-h-0 overflow-hidden shadow-sm">
+        {/* COLUMN 3: RIGHT PROJECT INFO SIDEBAR — desktop only */}
+        <Card className="hidden xl:flex xl:col-span-3 border border-[var(--color-border)] bg-[var(--color-surface)] rounded-[12px] flex-col h-full min-h-0 overflow-hidden shadow-sm">
           {/* SIDEBAR HEADER */}
           <div className="p-3.5 border-b border-[var(--color-border)] bg-[var(--color-background)] shrink-0">
             <h3 className="text-body font-bold text-[var(--color-text-primary)] flex items-center gap-2">

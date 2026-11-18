@@ -57,8 +57,10 @@ export const SignupPage: React.FC = () => {
   // Live password requirement checklist
   const hasMinLength = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
-  const isPasswordValid = hasMinLength && hasUppercase && hasNumber;
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+  const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecialChar;
   const passwordsMatch = password.length > 0 && password === confirmPassword;
 
   // Form validity check
@@ -228,6 +230,14 @@ export const SignupPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPasswordValid) {
+      setError('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.');
+      return;
+    }
+    if (!passwordsMatch) {
+      setError('Passwords do not match.');
+      return;
+    }
     if (!isFormValid) return;
 
     if (phoneNumber.trim()) {

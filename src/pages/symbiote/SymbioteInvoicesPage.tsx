@@ -643,7 +643,10 @@ Thank you for your business!`;
                         {inv.invoiceNumber}
                       </td>
 
-                      <td className="py-3 px-3 font-semibold text-[var(--color-text-primary)] max-w-xs truncate">
+                      <td
+                        className="py-3 px-3 font-semibold text-[var(--color-text-primary)] max-w-xs truncate"
+                        title={inv.projectName || 'Project Engagement'}
+                      >
                         {inv.projectName || 'Project Engagement'}
                       </td>
 
@@ -924,9 +927,12 @@ Thank you for your business!`;
 
             <div className="p-5 space-y-4 text-caption">
               <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
-                <div>
+                <div className="min-w-0">
                   <span className="text-[11px] text-[var(--color-text-secondary)] block">Project</span>
-                  <span className="font-semibold text-[var(--color-text-primary)] block truncate">
+                  <span
+                    className="font-semibold text-[var(--color-text-primary)] block truncate"
+                    title={selectedInvoiceForDetails.projectName || 'Project Engagement'}
+                  >
                     {selectedInvoiceForDetails.projectName || 'Project Engagement'}
                   </span>
                 </div>
