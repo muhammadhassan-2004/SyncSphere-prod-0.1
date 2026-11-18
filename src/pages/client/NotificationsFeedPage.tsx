@@ -180,7 +180,7 @@ export const NotificationsFeedPage: React.FC = () => {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-xl font-bold font-mono text-[var(--color-text-primary)] tracking-tight">
-                  Notifications Feed
+                  Notifications
                 </h1>
                 {unreadTotal > 0 ? (
                   <span className="px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/40 text-blue-400 font-mono text-xs font-bold">
@@ -270,7 +270,7 @@ export const NotificationsFeedPage: React.FC = () => {
         {loading ? (
           <div className="p-12 text-center space-y-3 font-mono">
             <Loader2 className="w-6 h-6 animate-spin text-[var(--color-accent-cyan)] mx-auto" />
-            <p className="text-xs text-[var(--color-text-secondary)]">Syncing notifications feed...</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">Syncing notifications...</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="p-12 text-center space-y-3 font-mono">

@@ -80,7 +80,8 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
   onCompleteProject,
 }) => {
   const projectId = project.id || '';
-  const isProjectCompleted = project.status === 'completed' || isReadOnly;
+  const isProjectCompleted =
+    project.status === 'completed' || project.status === 'closed' || Boolean(isReadOnly);
   const { userProfile, firebaseUser } = useAuth();
   const currentUid = firebaseUser?.uid;
   const isClientOrAdmin = userProfile?.role === 'client' || userProfile?.role === 'admin' || currentUid === (project.clientId || project.ownerId);
@@ -477,7 +478,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
 
           {/* 4-COLUMN KANBAN BOARD */}
           {/* MOBILE COLUMN TAB SELECTOR (MAX-WIDTH: 768px) */}
-          <div className="flex md:hidden items-center p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] overflow-x-auto gap-1">
+          <div className="flex md:hidden items-center p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[10px] overflow-x-auto no-scrollbar gap-1 min-w-0">
             {KANBAN_COLUMNS.map((col) => {
               const count = filteredTasks.filter((t) => t.status === col.id).length;
               const isActive = mobileActiveColumn === col.id;
@@ -524,6 +525,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
                       isProjectCompleted={isProjectCompleted}
                       onOpenReviewQueue={() => setViewMode('approvals')}
                       onAddTask={() => {
+                        if (isProjectCompleted) return;
                         setEditingTask(null);
                         setDrawerInitialStatus(col.id);
                         setIsTaskDrawerOpen(true);
@@ -570,6 +572,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
         taskToEdit={editingTask}
         initialStatus={drawerInitialStatus}
         onOpenCreateMilestoneModal={onOpenCreateMilestoneModal}
+        isReadOnly={isProjectCompleted}
       />
     </div>
   );
@@ -656,6 +659,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
               task={task}
               milestones={milestones}
               isClientOrAdmin={isClientOrAdmin}
+              isProjectCompleted={isProjectCompleted}
               onOpenReviewQueue={onOpenReviewQueue}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
@@ -689,6 +693,7 @@ interface KanbanCardItemProps {
   task: WorkspaceTask;
   milestones?: WorkspaceMilestone[];
   isClientOrAdmin?: boolean;
+  isProjectCompleted?: boolean;
   onOpenReviewQueue?: () => void;
   onEdit: (task: WorkspaceTask) => void;
   onDelete: (id: string) => void;
@@ -698,6 +703,7 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
   task,
   milestones = [],
   isClientOrAdmin = true,
+  isProjectCompleted = false,
   onOpenReviewQueue,
   onEdit,
   onDelete,
@@ -721,7 +727,7 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id || '' });
+  } = useSortable({ id: task.id || '', disabled: isProjectCompleted });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -819,23 +825,27 @@ const KanbanCardItem: React.FC<KanbanCardItemProps> = ({
       <div className="flex items-center justify-between pt-2 border-t border-[var(--color-border)]/50 text-[11px]">
         <div className="flex items-center gap-2">
           {task.status === 'in_progress' ? (
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!task.id) return;
-                const notes = window.prompt('Add any completion notes or PR link for the client (optional):') || '';
-                try {
-                  const { submitTaskForReview } = await import('@/src/lib/firestore/workspace');
-                  await submitTaskForReview(task.projectId, task.id, notes);
-                } catch (err) {
-                  console.error('Failed to submit task for review:', err);
-                }
-              }}
-              title="Submit for Client Review & Approval"
-              className="px-2.5 py-1 rounded-[6px] bg-[var(--color-accent-cyan)]/15 hover:bg-[var(--color-accent-cyan)]/25 text-[var(--color-accent-cyan)] border border-[var(--color-accent-cyan)]/30 font-medium text-[10.5px] transition-colors cursor-pointer"
-            >
-              Submit for Review →
-            </button>
+            isProjectCompleted ? (
+              <span className="text-slate-400 text-[11px]">In Progress</span>
+            ) : (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!task.id) return;
+                  const notes = window.prompt('Add any completion notes or PR link for the client (optional):') || '';
+                  try {
+                    const { submitTaskForReview } = await import('@/src/lib/firestore/workspace');
+                    await submitTaskForReview(task.projectId, task.id, notes);
+                  } catch (err) {
+                    console.error('Failed to submit task for review:', err);
+                  }
+                }}
+                title="Submit for Client Review & Approval"
+                className="px-2.5 py-1 rounded-[6px] bg-[var(--color-accent-cyan)]/15 hover:bg-[var(--color-accent-cyan)]/25 text-[var(--color-accent-cyan)] border border-[var(--color-accent-cyan)]/30 font-medium text-[10.5px] transition-colors cursor-pointer"
+              >
+                Submit for Review →
+              </button>
+            )
           ) : task.status === 'review' ? (
             isClientOrAdmin ? (
               <button

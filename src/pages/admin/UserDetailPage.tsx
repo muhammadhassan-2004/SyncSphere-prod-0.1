@@ -358,7 +358,7 @@ export function UserDetailPage() {
               description="This user has not created or been assigned to any active projects yet."
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-w-full">
               <table className="w-full text-sm">
                 <thead className="text-[var(--color-text-secondary)] text-left border-b border-[var(--color-border)]">
                   <tr>

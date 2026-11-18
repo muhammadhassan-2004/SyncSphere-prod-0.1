@@ -15,10 +15,12 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Prefer Firestore role first — custom claims may be absent in local/dev accounts.
       return isSignedIn() && (
-        (request.auth.token.keys().contains('admin') && request.auth.token.admin == true) ||
-        (request.auth.token.keys().contains('role') && request.auth.token.role == 'admin') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          getUserData().get('role', '') == 'admin') ||
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        ('role' in request.auth.token && request.auth.token.role == 'admin')
       );
     }
 
@@ -32,7 +34,7 @@ service cloud.firestore {
           request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.creatorId ||
           request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.assignedSymbioteId ||
           request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.symbioteId ||
-          (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().contains('teamMemberUids') && 
+          ('teamMemberUids' in get(/databases/$(database)/documents/projects/$(projectId)).data &&
            request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.teamMemberUids)
         ))
       );
@@ -80,7 +82,7 @@ service cloud.firestore {
         request.auth.uid == resource.data.clientUid ||
         request.auth.uid == resource.data.assignedSymbioteId ||
         request.auth.uid == resource.data.symbioteId ||
-        (resource.data.keys().contains('teamMemberUids') && request.auth.uid in resource.data.teamMemberUids) ||
+        ('teamMemberUids' in resource.data && request.auth.uid in resource.data.teamMemberUids) ||
         isAdmin()
       );
       allow delete: if false;
@@ -127,7 +129,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.clientId ||
         request.auth.uid == resource.data.uploadedBy ||
-        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
+        ('projectId' in resource.data && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
         isAdmin()
       );
       allow create: if isSignedIn();
@@ -201,14 +203,14 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.symbioteId ||
         ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
-        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
+        ('projectId' in resource.data && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
         isAdmin()
       );
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.symbioteId ||
         ('clientId' in resource.data && request.auth.uid == resource.data.clientId) ||
-        (resource.data.keys().contains('projectId') && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
+        ('projectId' in resource.data && resource.data.projectId != '' && isProjectParticipant(resource.data.projectId)) ||
         isAdmin()
       );
       allow delete: if false;

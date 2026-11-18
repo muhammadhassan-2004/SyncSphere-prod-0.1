@@ -176,7 +176,128 @@ adminRouter.post("/test-email", requireAdminAuth, async (req: Request, res: Resp
   }
 });
 
-// 4. Admin Delete Project & Associated Artifacts
+// 4. Admin Audit Logs (Admin SDK bypasses client Firestore rules)
+adminRouter.get("/audit-logs", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const adminApp = getFirebaseAdmin();
+    if (!adminApp) {
+      return res.status(500).json({ success: false, error: "Firebase Admin SDK not initialized." });
+    }
+
+    const firestoreAdmin = getAdminFirestore(adminApp);
+    const moduleFilter = typeof req.query.module === "string" ? req.query.module.trim() : "";
+    const resultFilter = typeof req.query.result === "string" ? req.query.result.trim() : "";
+    const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+    const startDate = typeof req.query.startDate === "string" ? req.query.startDate : "";
+    const endDate = typeof req.query.endDate === "string" ? req.query.endDate : "";
+    const pageSize = Math.min(Math.max(parseInt(String(req.query.limit || "100"), 10) || 100, 1), 250);
+
+    let snap;
+    try {
+      if (moduleFilter) {
+        snap = await firestoreAdmin
+          .collection("audit_logs")
+          .where("module", "==", moduleFilter)
+          .orderBy("timestamp", "desc")
+          .limit(pageSize)
+          .get();
+      } else if (resultFilter) {
+        snap = await firestoreAdmin
+          .collection("audit_logs")
+          .where("result", "==", resultFilter)
+          .orderBy("timestamp", "desc")
+          .limit(pageSize)
+          .get();
+      } else {
+        snap = await firestoreAdmin
+          .collection("audit_logs")
+          .orderBy("timestamp", "desc")
+          .limit(pageSize)
+          .get();
+      }
+    } catch (queryErr) {
+      console.warn("[Audit Logs] Constrained query failed, falling back to unfiltered fetch:", queryErr);
+      snap = await firestoreAdmin.collection("audit_logs").limit(pageSize).get();
+    }
+
+    let rows = snap.docs.map((d) => {
+      const data = d.data() || {};
+      let timestampIso: string | null = null;
+      const ts = data.timestamp;
+      if (ts?.toDate) {
+        timestampIso = ts.toDate().toISOString();
+      } else if (typeof ts === "string") {
+        timestampIso = ts;
+      } else if (typeof ts === "number") {
+        timestampIso = new Date(ts).toISOString();
+      } else if (ts instanceof Date) {
+        timestampIso = ts.toISOString();
+      }
+
+      const email = data.userEmail || data.actorEmail || "admin@syncsphere.com";
+      const actorName =
+        data.actorName || data.userName || (email ? String(email).split("@")[0] : "Platform Admin");
+
+      return {
+        id: d.id,
+        userId: data.userId || "system",
+        userEmail: email,
+        actorName: String(actorName).charAt(0).toUpperCase() + String(actorName).slice(1),
+        action: data.action || "SYSTEM_EVENT",
+        module: data.module || "System",
+        targetId: data.targetId || undefined,
+        targetName: data.targetName || data.targetUserName || undefined,
+        targetEmail: data.targetUserEmail || data.targetEmail || undefined,
+        timestamp: timestampIso,
+        result: data.result === "failure" ? "failure" : data.result === "warning" ? "warning" : "success",
+        details: data.details || "",
+        ipAddress: data.ipAddress || undefined,
+      };
+    });
+
+    if (moduleFilter) {
+      rows = rows.filter((r) => String(r.module).toLowerCase() === moduleFilter.toLowerCase());
+    }
+    if (resultFilter) {
+      rows = rows.filter((r) => r.result === resultFilter);
+    }
+    if (startDate) {
+      const startMs = new Date(startDate).getTime();
+      rows = rows.filter((r) => r.timestamp && new Date(r.timestamp).getTime() >= startMs);
+    }
+    if (endDate) {
+      const endMs = new Date(endDate).getTime() + 86400000;
+      rows = rows.filter((r) => r.timestamp && new Date(r.timestamp).getTime() <= endMs);
+    }
+    if (search) {
+      rows = rows.filter(
+        (r) =>
+          String(r.action).toLowerCase().includes(search) ||
+          String(r.userEmail || "").toLowerCase().includes(search) ||
+          String(r.userId).toLowerCase().includes(search) ||
+          String(r.module).toLowerCase().includes(search) ||
+          String(r.details || "").toLowerCase().includes(search) ||
+          String(r.targetId || "").toLowerCase().includes(search)
+      );
+    }
+
+    rows.sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return res.json({ success: true, rows, hasMore: snap.size === pageSize });
+  } catch (error: any) {
+    console.error("API GET /api/admin/audit-logs error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Failed to load audit logs.",
+    });
+  }
+});
+
+// 5. Admin Delete Project & Associated Artifacts
 adminRouter.delete("/projects/:projectId", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;

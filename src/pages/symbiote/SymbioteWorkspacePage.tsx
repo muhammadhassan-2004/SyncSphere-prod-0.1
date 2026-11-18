@@ -61,6 +61,8 @@ import {
   Target,
   Layers,
   Eye,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 
 type SubTab = 'overview' | 'milestones' | 'workspace' | 'files' | 'progress' | 'updates' | 'activity';
@@ -220,10 +222,13 @@ export const SymbioteWorkspacePage: React.FC = () => {
     return () => unsubUpdates();
   }, [activeProjectId, isAssigned]);
 
+  const isProjectLocked =
+    project?.status === 'completed' || project?.status === 'closed';
+
   // File Upload & Delete Handlers
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !activeProjectId) return;
+    if (!file || !activeProjectId || isProjectLocked) return;
 
     const formatSize = (bytes: number) => {
       if (bytes < 1024) return `${bytes} B`;
@@ -259,6 +264,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
   };
 
   const handleDeleteFile = async (fileId: string) => {
+    if (isProjectLocked) return;
     try {
       await deleteProjectFile(fileId);
     } catch (err) {
@@ -269,7 +275,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
   // Post Update Handler
   const handlePostUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeProjectId || !newUpdateContent.trim()) return;
+    if (!activeProjectId || !newUpdateContent.trim() || isProjectLocked) return;
 
     setPostingUpdate(true);
     try {
@@ -291,7 +297,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
 
   // Milestone Toggle Handler
   const handleToggleMilestone = async (milestoneId: string, currentCompleted: boolean) => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || isProjectLocked) return;
     try {
       await toggleMilestone(activeProjectId, milestoneId, !currentCompleted);
     } catch (err) {
@@ -441,7 +447,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
   const [taskFilter, setTaskFilter] = useState<'all' | 'todo' | 'in_progress' | 'completed'>('all');
 
   const handleToggleTask = async (task: WorkspaceTask) => {
-    if (!activeProjectId || !task.id) return;
+    if (!activeProjectId || !task.id || isProjectLocked) return;
     const newStatus = task.status === 'completed' ? 'todo' : 'completed';
     try {
       await updateTaskStatus(activeProjectId, task.id, newStatus);
@@ -452,7 +458,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeProjectId || !newTaskTitle.trim()) return;
+    if (!activeProjectId || !newTaskTitle.trim() || isProjectLocked) return;
 
     try {
       await createTask(activeProjectId, {
@@ -472,7 +478,7 @@ export const SymbioteWorkspacePage: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || isProjectLocked) return;
     try {
       await deleteTask(activeProjectId, taskId);
     } catch (err) {
@@ -617,20 +623,47 @@ export const SymbioteWorkspacePage: React.FC = () => {
               <span>Message Client</span>
             </Button>
 
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => navigate(`/symbiote/time-tracking?project=${activeProjectId}`)}
-              className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold text-caption py-2 px-3.5 border-0 shadow-sm flex items-center gap-1.5"
-            >
-              <Clock className="w-4 h-4" />
-              <span>Log Time</span>
-            </Button>
+            {isProjectLocked ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled
+                title="Time logging is locked for completed projects"
+                className="border-[var(--color-border)] text-[var(--color-text-secondary)] text-caption font-semibold py-2 px-3.5 flex items-center gap-1.5 opacity-60 cursor-not-allowed"
+              >
+                <Clock className="w-4 h-4" />
+                <span>Time Locked</span>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => navigate(`/symbiote/time-tracking?project=${activeProjectId}`)}
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold text-caption py-2 px-3.5 border-0 shadow-sm flex items-center gap-1.5"
+              >
+                <Clock className="w-4 h-4" />
+                <span>Log Time</span>
+              </Button>
+            )}
           </div>
         </div>
 
+        {isProjectLocked && (
+          <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+            <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-200">
+                Project {project.status === 'closed' ? 'Closed' : 'Completed'} — Read Only
+              </p>
+              <p className="text-[11px] text-amber-300/90 mt-0.5">
+                Tasks, milestones, files, updates, and time logging are locked. You can still view project history.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* SUB-NAV TABS (UNDERLINE STYLE) */}
-        <div className="flex items-center gap-8 border-b border-[var(--color-border)] pt-2 overflow-x-auto">
+        <div className="flex items-center gap-4 sm:gap-8 border-b border-[var(--color-border)] pt-2 overflow-x-auto no-scrollbar min-w-0">
           {[
             { id: 'overview', label: 'Overview', icon: CheckSquare },
             { id: 'milestones', label: 'Milestones', icon: Target },
@@ -679,14 +712,14 @@ export const SymbioteWorkspacePage: React.FC = () => {
       {activeTab === 'milestones' && project && (
         <MilestonesTab
           project={project}
-          isReadOnly={false}
+          isReadOnly={isProjectLocked}
           userRole="specialist"
         />
       )}
 
       {/* WORKSPACE TAB BODY (FULL KANBAN BOARD) */}
       {activeTab === 'workspace' && project && (
-        <WorkspaceTab project={project} />
+        <WorkspaceTab project={project} isReadOnly={isProjectLocked} />
       )}
 
       {/* FILES TAB BODY */}
@@ -714,15 +747,22 @@ export const SymbioteWorkspacePage: React.FC = () => {
               </div>
 
               {/* UPLOAD BUTTON */}
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption py-1.5 px-3.5 flex items-center gap-1.5 shadow-sm"
-              >
-                <Upload className="w-4 h-4" />
-                <span>↑ Upload</span>
-              </Button>
+              {isProjectLocked ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] font-semibold">
+                  <Lock className="w-3.5 h-3.5" />
+                  Uploads locked
+                </span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption py-1.5 px-3.5 flex items-center gap-1.5 shadow-sm"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>↑ Upload</span>
+                </Button>
+              )}
             </div>
 
             {/* 2x2 GRID OF FILE CARDS */}
@@ -841,14 +881,16 @@ export const SymbioteWorkspacePage: React.FC = () => {
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteFile(file.id!)}
-                          className="p-2 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-red-500/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                          title="Delete File"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isProjectLocked && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFile(file.id!)}
+                            className="p-2 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-red-500/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Delete File"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -860,13 +902,15 @@ export const SymbioteWorkspacePage: React.FC = () => {
                 title="No Shared Files Yet"
                 description="Upload technical specs, agreements, or deliverable assets to share with the client."
                 action={
-                  <Button
-                    variant="primary"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption"
-                  >
-                    ↑ Upload First File
-                  </Button>
+                  !isProjectLocked ? (
+                    <Button
+                      variant="primary"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption"
+                    >
+                      ↑ Upload First File
+                    </Button>
+                  ) : undefined
                 }
               />
             )}
@@ -886,32 +930,39 @@ export const SymbioteWorkspacePage: React.FC = () => {
               </h2>
             </div>
 
-            <form onSubmit={handlePostUpdate} className="space-y-3">
-              <textarea
-                required
-                rows={3}
-                value={newUpdateContent}
-                onChange={(e) => setNewUpdateContent(e.target.value)}
-                placeholder="Share a milestone progress report, deployment notes, or blocker update with the project team..."
-                className="w-full p-3.5 text-body bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-
-              <div className="flex items-center justify-between">
-                <span className="text-caption text-[var(--color-text-secondary)] font-medium">
-                  Updates are broadcasted in real-time to the project feed.
-                </span>
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={postingUpdate || !newUpdateContent.trim()}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption py-2 px-4 flex items-center gap-2 shadow-sm"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{postingUpdate ? 'Posting...' : 'Post Update'}</span>
-                </Button>
+            {isProjectLocked ? (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>Updates are locked because this project is {project?.status === 'closed' ? 'closed' : 'completed'}.</span>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handlePostUpdate} className="space-y-3">
+                <textarea
+                  required
+                  rows={3}
+                  value={newUpdateContent}
+                  onChange={(e) => setNewUpdateContent(e.target.value)}
+                  placeholder="Share a milestone progress report, deployment notes, or blocker update with the project team..."
+                  className="w-full p-3.5 text-body bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+
+                <div className="flex items-center justify-between">
+                  <span className="text-caption text-[var(--color-text-secondary)] font-medium">
+                    Updates are broadcasted in real-time to the project feed.
+                  </span>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={postingUpdate || !newUpdateContent.trim()}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-caption py-2 px-4 flex items-center gap-2 shadow-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{postingUpdate ? 'Posting...' : 'Post Update'}</span>
+                  </Button>
+                </div>
+              </form>
+            )}
           </Card>
 
           {/* CHRONOLOGICAL UPDATE FEED */}

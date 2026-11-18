@@ -109,13 +109,19 @@ export async function requireAdminAuth(req: Request, res: Response, next: NextFu
     }
 
     const userData = userDocSnap.data();
-    const userRole = userData?.role || decodedToken.role;
+    const userRole = String(userData?.role || decodedToken.role || "").toLowerCase();
+    const claimAdmin =
+      decodedToken.admin === true ||
+      String((decodedToken as any).role || "").toLowerCase() === "admin";
 
-    if (userRole !== "admin") {
-      console.warn(`[Admin Middleware] Access denied for UID ${uid} with role '${userRole}'`);
+    if (userRole !== "admin" && !claimAdmin) {
+      console.warn(
+        `[Admin Middleware] Access denied for UID ${uid} with role '${userData?.role || "missing"}' (claims admin=${Boolean(decodedToken.admin)}, claimRole=${(decodedToken as any).role || "none"})`
+      );
       return res.status(403).json({
         success: false,
-        error: "Forbidden: Admin privileges required. Caller is not an administrator.",
+        error:
+          "Forbidden: Admin privileges required. Ensure your users/{uid} document has role: \"admin\".",
       });
     }
 

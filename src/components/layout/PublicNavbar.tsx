@@ -170,70 +170,8 @@ export const PublicNavbar: React.FC = () => {
           </button>
         </div>
 
-        {/* Tablet / Medium Screen Nav (Compact items) */}
-        <div className="hidden md:flex xl:hidden items-center gap-4 text-sm font-medium">
-          <Link
-            to="/about"
-            className={`transition-colors py-1 ${
-              location.pathname === '/about'
-                ? 'text-[var(--color-accent-cyan)] font-semibold'
-                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-            }`}
-          >
-            About
-          </Link>
-          <button
-            type="button"
-            onClick={() => handleNavClick('how-it-works')}
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer py-1"
-          >
-            How It Works
-          </button>
-          <button
-            type="button"
-            onClick={() => handleNavClick('features')}
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer py-1"
-          >
-            Features
-          </button>
-          <button
-            type="button"
-            onClick={() => handleNavClick('ai-engine')}
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer py-1"
-          >
-            AI Engine
-          </button>
-          <Link
-            to="/help"
-            className={`transition-colors py-1 ${
-              location.pathname === '/help'
-                ? 'text-[var(--color-accent-cyan)] font-semibold'
-                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-            }`}
-          >
-            Help
-          </Link>
-          <Link
-            to="/contact"
-            className={`transition-colors py-1 ${
-              location.pathname === '/contact'
-                ? 'text-[var(--color-accent-cyan)] font-semibold'
-                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-            }`}
-          >
-            Contact
-          </Link>
-          <button
-            type="button"
-            onClick={() => handleNavClick('faq')}
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer py-1"
-          >
-            FAQ
-          </button>
-        </div>
-
         {/* Right Action Buttons & Mobile Toggle */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           {isAuthenticated ? (
             /* AUTHENTICATED STATE HEADER ACTIONS (Restored Clean 2-Button Layout) */
             <>
@@ -271,12 +209,12 @@ export const PublicNavbar: React.FC = () => {
             </>
           )}
 
-          {/* Mobile menu trigger */}
+          {/* Mobile / tablet menu trigger (full desktop nav starts at xl) */}
           <button
             type="button"
             id="mobile-nav-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)] transition-colors focus:outline-none"
+            className="xl:hidden p-2 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] border border-transparent hover:border-[var(--color-border)] transition-colors focus:outline-none"
             aria-label="Toggle navigation menu"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -284,9 +222,9 @@ export const PublicNavbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
+      {/* Mobile / tablet Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden w-full bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="xl:hidden w-full bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Authenticated User Banner on Mobile */}
           {isAuthenticated && (
             <div className="p-3.5 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-between gap-3">

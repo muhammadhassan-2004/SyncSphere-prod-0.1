@@ -344,7 +344,7 @@ export function UserManagementPage() {
 
       {/* Users Table */}
       <Card className="overflow-hidden border border-[var(--color-border)]">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-white/5 border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
               <tr>

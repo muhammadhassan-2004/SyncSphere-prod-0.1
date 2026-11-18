@@ -290,7 +290,7 @@ export const ContractSigningModal: React.FC<ContractSigningModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs overflow-y-auto">
-      <Card className="w-full max-w-3xl bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+      <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl animate-in fade-in zoom-in-95">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between bg-black/40">
           <div className="flex items-center gap-3">

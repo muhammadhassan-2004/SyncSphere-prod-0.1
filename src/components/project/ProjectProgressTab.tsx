@@ -360,7 +360,7 @@ export const ProjectProgressTab: React.FC<ProjectProgressTabProps> = ({
           <h3 className="text-h3 font-bold text-[var(--color-text-primary)] border-b border-[var(--color-border)] pb-3">
             Task Priority Distribution
           </h3>
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-center space-y-1">
               <span className="text-caption font-bold text-red-400 uppercase tracking-wider block">
                 High Priority

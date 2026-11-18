@@ -448,7 +448,7 @@ export const CreateProjectStep2Page: React.FC = () => {
               <label className="text-xs font-semibold text-[var(--color-text-primary)] block">
                 Work Arrangement / Location Mode
               </label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(['Remote', 'Hybrid', 'Onsite'] as const).map((mode) => {
                   const isActive = workMode === mode;
                   return (

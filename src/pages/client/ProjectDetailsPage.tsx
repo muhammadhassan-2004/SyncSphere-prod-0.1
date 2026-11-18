@@ -293,7 +293,7 @@ export const ProjectDetailsPage: React.FC = () => {
           <MilestonesTab
             project={project}
             userRole="client"
-            isReadOnly={project.status === 'completed'}
+            isReadOnly={project.status === 'completed' || project.status === 'closed'}
             onOpenAddTeamModal={() => setIsAddTeamModalOpen(true)}
           />
         )}
@@ -301,7 +301,7 @@ export const ProjectDetailsPage: React.FC = () => {
         {currentTab === 'workspace' && (
           <WorkspaceTab
             project={project}
-            isReadOnly={project.status === 'completed'}
+            isReadOnly={project.status === 'completed' || project.status === 'closed'}
             onCompleteProject={handleCompleteProject}
           />
         )}

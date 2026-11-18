@@ -143,15 +143,41 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
     return `${h}h ${m}m`;
   };
 
+  const isProjectClosedForLogging = (project?: Project | null) => {
+    const status = (project?.status || '').toLowerCase();
+    return status === 'completed' || status === 'closed';
+  };
+
+  // Active projects only — completed/closed cannot accept new time logs
+  const loggableProjects = useMemo(
+    () => projects.filter((p) => !isProjectClosedForLogging(p)),
+    [projects]
+  );
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId) || null,
+    [projects, selectedProjectId]
+  );
+
+  const isSelectedProjectClosed = isProjectClosedForLogging(selectedProject);
+
   // 1. Subscribe to Projects (Symbiote Assigned Projects ONLY)
   useEffect(() => {
     if (!uid) return;
     const unsubSymbiote = subscribeToProjectsBySymbiote(uid, (symProjects) => {
       const list = symProjects || [];
       setProjects(list);
-      if (list.length > 0) {
-        if (!selectedProjectId || !list.some((p) => p.id === selectedProjectId)) {
-          const match = list.find((p) => p.id === initialProjectId) || list[0];
+      const active = list.filter((p) => {
+        const status = (p.status || '').toLowerCase();
+        return status !== 'completed' && status !== 'closed';
+      });
+
+      if (active.length > 0) {
+        const stillValid = active.some((p) => p.id === selectedProjectId);
+        if (!selectedProjectId || !stillValid) {
+          const match =
+            active.find((p) => p.id === initialProjectId) ||
+            active[0];
           if (match?.id) setSelectedProjectId(match.id);
         }
       } else {
@@ -330,6 +356,16 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
         console.warn('Could not fetch project info:', e);
       }
     }
+
+    if (isProjectClosedForLogging(projectObj)) {
+      showToast(
+        'This project is completed. Time logging is locked — you can still view past entries.',
+        'error'
+      );
+      setSubmitting(false);
+      return;
+    }
+
     const projectName = projectObj?.title || 'Project';
     const clientOwnerId = projectObj?.clientId || projectObj?.ownerId || (projectObj as any)?.clientUid || undefined;
 
@@ -359,9 +395,15 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
       setEntryDescription('');
       setSelectedTaskId('');
       setEntryHours('3');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error logging time:', err);
-      showToast('Failed to log time entry. Please try again.');
+      const msg = String(err?.message || '');
+      showToast(
+        msg.includes('completed') || msg.includes('closed')
+          ? 'This project is completed. Time logging is locked.'
+          : 'Failed to log time entry. Please try again.',
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -582,6 +624,22 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
 
           {/* MANUAL ENTRY FORM */}
           <form onSubmit={handleLogTime} className="space-y-3.5">
+            {isSelectedProjectClosed && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  This project is completed. New time entries are disabled. Past logs remain available in the history table.
+                </span>
+              </div>
+            )}
+
+            {loggableProjects.length === 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-slate-500/10 border border-slate-500/30 text-[var(--color-text-secondary)] text-[11px]">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>No active projects available for time logging. Completed or closed projects are locked.</span>
+              </div>
+            )}
+
             {/* 1. PROJECT DROPDOWN */}
             <div>
               <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
@@ -594,13 +652,14 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
                   setSelectedMilestoneId('');
                   setSelectedTaskId('');
                 }}
-                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer"
+                disabled={loggableProjects.length === 0}
+                className="w-full bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)]/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 required
               >
-                {projects.length === 0 ? (
+                {loggableProjects.length === 0 ? (
                   <option value="">No active assigned projects</option>
                 ) : (
-                  projects.map((p) => (
+                  loggableProjects.map((p) => (
                     <option key={p.id} value={p.id} className="bg-slate-900 text-white">
                       {p.title}
                     </option>
@@ -753,8 +812,8 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
             {/* 6. SUBMIT BUTTON */}
             <button
               type="submit"
-              disabled={submitting}
-              className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-[#22D3EE] to-[#34D399] hover:opacity-90 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={submitting || isSelectedProjectClosed || loggableProjects.length === 0}
+              className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-[#22D3EE] to-[#34D399] hover:opacity-90 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
               <span>{submitting ? 'Logging Time...' : 'Log Time Entry'}</span>
@@ -854,7 +913,7 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-w-full">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] font-normal">
@@ -975,8 +1034,8 @@ export const SymbioteTimeTrackingPage: React.FC = () => {
 
       {/* EDIT DESCRIPTION MODAL */}
       {editingEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-[var(--color-accent-cyan)]" />

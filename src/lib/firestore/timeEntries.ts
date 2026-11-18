@@ -21,6 +21,18 @@ export async function createTimeEntry(entry: Omit<TimeEntry, 'id'>): Promise<str
     console.warn('createTimeEntry skipped: User not authenticated.');
     return '';
   }
+
+  // Block new time logs on completed/closed projects
+  if (entry.projectId) {
+    const projectSnap = await getDoc(doc(db, 'projects', entry.projectId));
+    if (projectSnap.exists()) {
+      const status = String(projectSnap.data()?.status || '').toLowerCase();
+      if (status === 'completed' || status === 'closed') {
+        throw new Error('Cannot log time on a completed or closed project.');
+      }
+    }
+  }
+
   try {
     const colRef = collection(db, TIME_ENTRIES_COLLECTION);
     // Sanitize payload to strip any undefined or null keys that crash Firestore addDoc SDK

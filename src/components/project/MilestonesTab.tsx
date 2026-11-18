@@ -1020,8 +1020,8 @@ export const MilestonesTab: React.FC<MilestonesTabProps> = ({
 
       {/* CREATE MILESTONE MODAL WITH TEMPLATE PRESETS (§3) */}
       {isCreateMilestoneModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
-          <Card className="w-full max-w-2xl bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl p-5 space-y-5 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
+          <Card className="w-full max-w-2xl bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl p-4 sm:p-5 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-[var(--color-accent-cyan)]" />

@@ -307,7 +307,7 @@ export async function completePasswordReset(
           return {
             success: false,
             role: 'client',
-            error: 'The password is too weak. Please include uppercase letters, numbers, and at least 8 characters.',
+            error: 'The password is too weak. Please include uppercase letters, lowercase letters, numbers, special characters, and at least 8 characters.',
           };
         }
       }

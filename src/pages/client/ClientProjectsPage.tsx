@@ -411,8 +411,8 @@ export const ClientProjectsPage: React.FC = () => {
       ) : viewMode === 'table' ? (
         /* TABLE VIEW */
         <Card className="bg-[var(--color-surface)] border-[var(--color-border)] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto max-w-full">
+            <table className="w-full min-w-[640px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/50 text-[11px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
                   <th className="py-3 px-4">Project Name & Category</th>

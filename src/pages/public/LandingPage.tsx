@@ -81,7 +81,7 @@ export const LandingPage: React.FC = () => {
   const isLiveDb = Boolean(metrics && metrics.isLiveFirestore && metrics.totalUsers >= 1000);
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased selection:bg-[var(--color-accent-cyan)]/20 selection:text-[var(--color-accent-cyan)] flex flex-col">
+    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased selection:bg-[var(--color-accent-cyan)]/20 selection:text-[var(--color-accent-cyan)] flex flex-col overflow-x-hidden">
       {/* UNIFIED TOP NAV */}
       <PublicNavbar />
 
@@ -146,7 +146,7 @@ export const LandingPage: React.FC = () => {
               </div>
 
               {/* Stat Trio Row (Curated Platform Benchmarks) */}
-              <div className="pt-6 border-t border-[var(--color-border)]/60 grid grid-cols-3 gap-4">
+              <div className="pt-6 border-t border-[var(--color-border)]/60 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Link
                   to="/portal-select"
                   className="space-y-1 block group hover:opacity-90 transition-opacity"

@@ -8,9 +8,10 @@ import { SettingsLeftNav } from '@/src/components/settings/SettingsLeftNav';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { PasswordInput } from '@/src/components/ui/PasswordInput';
+import { PasswordRequirementChecklist } from '@/src/components/ui/PasswordRequirementChecklist';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
 import { useToast } from '@/src/lib/toast/ToastProvider';
-import { sanitizePhoneNumber, handlePhoneKeyDown, validators } from '@/src/lib/validation/formValidators';
+import { sanitizePhoneNumber, handlePhoneKeyDown, validators, validateStrongPassword } from '@/src/lib/validation/formValidators';
 import {
   Shield,
   KeyRound,
@@ -108,8 +109,11 @@ export const SecuritySettingsPage: React.FC = () => {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters long.');
+    const passwordCheck = validateStrongPassword(newPassword);
+    if (!passwordCheck.isValid) {
+      setPasswordError(
+        'New password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      );
       return;
     }
 
@@ -229,7 +233,7 @@ export const SecuritySettingsPage: React.FC = () => {
       {/* 2. TWO-COLUMN LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT NAV PANEL (4 COLS) */}
-        <div className="lg:col-span-4 sticky top-20">
+        <div className="lg:col-span-4 lg:sticky lg:top-20 min-w-0">
           <SettingsLeftNav />
         </div>
 
@@ -293,7 +297,7 @@ export const SecuritySettingsPage: React.FC = () => {
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="Min 8 chars, Aa1@"
                     leftIcon={<Lock className="w-4 h-4" />}
                     className="h-9 rounded-[8px] bg-[var(--color-background)] border border-[var(--color-border)] text-xs font-mono text-[var(--color-text-primary)] focus:border-[var(--color-accent-cyan)]"
                   />
@@ -315,6 +319,14 @@ export const SecuritySettingsPage: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Password Requirement Checklist */}
+              {(newPassword.length > 0 || confirmPassword.length > 0) && (
+                <PasswordRequirementChecklist
+                  password={newPassword}
+                  confirmPassword={confirmPassword}
+                />
+              )}
 
               <div className="pt-2 flex justify-end">
                 <Button

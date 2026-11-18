@@ -27,7 +27,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({
   return (
     <div
       className={cn(
-        'flex items-center gap-6 border-b border-[var(--color-border)] overflow-x-auto no-scrollbar',
+        'flex items-center gap-3 sm:gap-6 border-b border-[var(--color-border)] overflow-x-auto no-scrollbar min-w-0',
         className
       )}
     >

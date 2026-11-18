@@ -193,7 +193,7 @@ export function ProjectOversightPage() {
           </div>
 
           <select
-            className="px-3 py-2 bg-black/40 border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] min-w-[160px]"
+            className="px-3 py-2 bg-black/40 border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] w-full md:w-auto md:min-w-[160px]"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
           >
@@ -241,7 +241,7 @@ export function ProjectOversightPage() {
 
       {/* Projects Table */}
       <Card className="overflow-hidden border border-[var(--color-border)]">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-white/5 border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
               <tr>
@@ -354,7 +354,7 @@ export function ProjectOversightPage() {
 
       {/* READ-ONLY PROJECT DETAIL MODAL */}
       {selectedProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <Card className="w-full max-w-2xl bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
             <div className="p-5 border-b border-[var(--color-border)] flex items-start justify-between gap-4 bg-white/5">

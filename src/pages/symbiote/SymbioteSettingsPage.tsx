@@ -7,9 +7,10 @@ import { UserProfile, NotificationPreferences, UserSession } from '@/src/types/f
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { PasswordInput } from '@/src/components/ui/PasswordInput';
+import { PasswordRequirementChecklist } from '@/src/components/ui/PasswordRequirementChecklist';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
 import { useToast } from '@/src/lib/toast/ToastProvider';
-import { sanitizePhoneNumber, handlePhoneKeyDown, validators } from '@/src/lib/validation/formValidators';
+import { sanitizePhoneNumber, handlePhoneKeyDown, validators, validateStrongPassword } from '@/src/lib/validation/formValidators';
 import {
   Settings,
   User,
@@ -208,8 +209,11 @@ export const SymbioteSettingsPage: React.FC = () => {
     e.preventDefault();
     setPasswordError(null);
 
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters long.');
+    const passwordCheck = validateStrongPassword(newPassword);
+    if (!passwordCheck.isValid) {
+      setPasswordError(
+        'New password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -368,7 +372,7 @@ export const SymbioteSettingsPage: React.FC = () => {
       </header>
 
       {/* Navigation Tab Bar */}
-      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto pb-px">
+      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto no-scrollbar pb-px min-w-0">
         {SETTINGS_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -593,7 +597,7 @@ export const SymbioteSettingsPage: React.FC = () => {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
-                    placeholder="Minimum 6 characters"
+                    placeholder="Min 8 chars, Aa1@"
                     className="px-3.5 py-2.5 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent-cyan)] font-mono"
                   />
                 </div>
@@ -613,6 +617,14 @@ export const SymbioteSettingsPage: React.FC = () => {
                     className="px-3.5 py-2.5 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:border-[var(--color-accent-cyan)] font-mono"
                   />
                 </div>
+
+                {/* Password Requirement Checklist */}
+                {(newPassword.length > 0 || confirmPassword.length > 0) && (
+                  <PasswordRequirementChecklist
+                    password={newPassword}
+                    confirmPassword={confirmPassword}
+                  />
+                )}
 
                 <div className="pt-2">
                   <Button

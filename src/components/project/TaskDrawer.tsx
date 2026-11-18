@@ -47,6 +47,7 @@ interface TaskDrawerProps {
   initialStatus?: 'todo' | 'in_progress' | 'review' | 'completed';
   onTaskSaved?: () => void;
   onOpenCreateMilestoneModal?: () => void;
+  isReadOnly?: boolean;
 }
 
 export const TaskDrawer: React.FC<TaskDrawerProps> = ({
@@ -60,6 +61,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
   initialStatus = 'todo',
   onTaskSaved,
   onOpenCreateMilestoneModal,
+  isReadOnly = false,
 }) => {
   const projectId = project.id || '';
   const approvedTeamMembers = project.teamMembers || [];
@@ -68,6 +70,10 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
     userProfile?.role === 'client' ||
     userProfile?.role === 'admin' ||
     firebaseUser?.uid === (project.clientId || project.ownerId);
+  const isLocked =
+    isReadOnly ||
+    project.status === 'completed' ||
+    project.status === 'closed';
 
   // Form states
   const [title, setTitle] = useState('');
@@ -248,6 +254,10 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) {
+      setErrorText('This project is completed or closed and cannot be modified.');
+      return;
+    }
 
     // Freelancer Task Guard: Freelancers cannot edit task metadata (title, description, budget, milestones).
     // Freelancers only update task progress status (To Do, In Progress, Submit for Review).
@@ -892,30 +902,32 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
               )}
 
               {/* ADD COMMENT INPUT */}
-              <div className="pt-2 border-t border-[var(--color-border)] flex items-start gap-2">
-                <textarea
-                  rows={2}
-                  value={newCommentText}
-                  onChange={(e) => setNewCommentText(e.target.value)}
-                  placeholder="Write a comment or progress note..."
-                  className="flex-1 p-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[8px] text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] resize-none"
-                />
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={submittingComment || !newCommentText.trim()}
-                  onClick={handleAddComment}
-                  className="h-9 px-3 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white text-xs font-bold rounded-[8px] flex items-center gap-1.5 shrink-0 cursor-pointer"
-                >
-                  {submittingComment ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Send className="w-3.5 h-3.5" />
-                  )}
-                  <span>Post</span>
-                </Button>
-              </div>
+              {!isLocked && (
+                <div className="pt-2 border-t border-[var(--color-border)] flex items-start gap-2">
+                  <textarea
+                    rows={2}
+                    value={newCommentText}
+                    onChange={(e) => setNewCommentText(e.target.value)}
+                    placeholder="Write a comment or progress note..."
+                    className="flex-1 p-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[8px] text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent-cyan)] resize-none"
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={submittingComment || !newCommentText.trim()}
+                    onClick={handleAddComment}
+                    className="h-9 px-3 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white text-xs font-bold rounded-[8px] flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    {submittingComment ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>Post</span>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </form>
@@ -926,21 +938,27 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             Cancel
           </Button>
 
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            disabled={isSubmitting}
-            className="bg-gradient-to-r from-[var(--color-accent-cyan)] to-emerald-400 text-slate-950 font-bold flex items-center gap-1.5 shadow-sm"
-          >
-            {isSubmitting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            )}
-            <span>{isClientOrAdmin ? (taskToEdit ? 'Update Task' : 'Save Task') : 'Update Status'}</span>
-          </Button>
+          {!isLocked ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              disabled={isSubmitting}
+              className="bg-gradient-to-r from-[var(--color-accent-cyan)] to-emerald-400 text-slate-950 font-bold flex items-center gap-1.5 shadow-sm"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              )}
+              <span>{isClientOrAdmin ? (taskToEdit ? 'Update Task' : 'Save Task') : 'Update Status'}</span>
+            </Button>
+          ) : (
+            <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
+              Read only
+            </span>
+          )}
         </div>
       </div>
     </div>

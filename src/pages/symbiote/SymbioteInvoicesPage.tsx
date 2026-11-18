@@ -610,7 +610,7 @@ Thank you for your business!`;
             Loading invoices...
           </div>
         ) : filteredInvoices.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left border-collapse text-caption">
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] uppercase text-[10px] tracking-wider font-semibold bg-[var(--color-background)]/50">
@@ -643,7 +643,10 @@ Thank you for your business!`;
                         {inv.invoiceNumber}
                       </td>
 
-                      <td className="py-3 px-3 font-semibold text-[var(--color-text-primary)] max-w-xs truncate">
+                      <td
+                        className="py-3 px-3 font-semibold text-[var(--color-text-primary)] max-w-xs truncate"
+                        title={inv.projectName || 'Project Engagement'}
+                      >
                         {inv.projectName || 'Project Engagement'}
                       </td>
 
@@ -732,8 +735,8 @@ Thank you for your business!`;
 
       {/* CREATE INVOICE MODAL (~500px CENTERED MODAL) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-[500px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] shadow-2xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-[500px] max-h-[90vh] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] shadow-2xl overflow-hidden flex flex-col">
             {/* MODAL HEADER */}
             <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-background)]/50">
               <div>
@@ -755,7 +758,7 @@ Thank you for your business!`;
             </div>
 
             {/* MODAL FORM */}
-            <form onSubmit={handleCreateInvoice} className="p-5 space-y-4">
+            <form onSubmit={handleCreateInvoice} className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               {projects.length === 0 && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -901,8 +904,8 @@ Thank you for your business!`;
 
       {/* VIEW DETAILS MODAL */}
       {selectedInvoiceForDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-[500px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] shadow-2xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-[500px] max-h-[90vh] overflow-y-auto bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] shadow-2xl flex flex-col">
             <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-background)]/50">
               <div>
                 <h2 className="text-body font-bold text-[var(--color-text-primary)] flex items-center gap-2">
@@ -923,10 +926,13 @@ Thank you for your business!`;
             </div>
 
             <div className="p-5 space-y-4 text-caption">
-              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
+                <div className="min-w-0">
                   <span className="text-[11px] text-[var(--color-text-secondary)] block">Project</span>
-                  <span className="font-semibold text-[var(--color-text-primary)] block truncate">
+                  <span
+                    className="font-semibold text-[var(--color-text-primary)] block truncate"
+                    title={selectedInvoiceForDetails.projectName || 'Project Engagement'}
+                  >
                     {selectedInvoiceForDetails.projectName || 'Project Engagement'}
                   </span>
                 </div>

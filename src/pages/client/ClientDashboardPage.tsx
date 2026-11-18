@@ -328,7 +328,7 @@ export const ClientDashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12">
+    <div className="space-y-8 max-w-7xl mx-auto pb-12 min-w-0 w-full">
       {/* PAGE HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -537,7 +537,7 @@ export const ClientDashboardPage: React.FC = () => {
               onAction={() => navigate('/client/projects/new')}
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-w-full -mx-1 px-1">
               <table className="w-full min-w-[600px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] font-medium">

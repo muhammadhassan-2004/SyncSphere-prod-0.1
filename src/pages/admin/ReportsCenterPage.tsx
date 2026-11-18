@@ -263,7 +263,7 @@ export function ReportsCenterPage() {
                   No records match the requested report query or date range.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-w-full">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-[var(--color-border)] bg-black/30 text-[var(--color-text-secondary)] font-medium">

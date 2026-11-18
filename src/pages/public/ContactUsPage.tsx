@@ -67,7 +67,7 @@ export const ContactUsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased flex flex-col selection:bg-[var(--color-accent-cyan)]/20 selection:text-[var(--color-accent-cyan)]">
+    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] font-sans antialiased flex flex-col selection:bg-[var(--color-accent-cyan)]/20 selection:text-[var(--color-accent-cyan)] overflow-x-hidden">
       <PublicNavbar />
 
       <main className="flex-1 space-y-8 pb-20">

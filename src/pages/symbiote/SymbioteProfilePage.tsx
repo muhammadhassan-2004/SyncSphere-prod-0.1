@@ -1074,8 +1074,8 @@ export const SymbioteProfilePage: React.FC = () => {
 
       {/* MODAL: ADD WORK EXPERIENCE */}
       {showExpModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4 rounded-[12px] shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6 space-y-4 rounded-[12px] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-body font-bold text-[var(--color-text-primary)]">Add Work Experience</h3>
               <button onClick={() => setShowExpModal(false)} className="text-[var(--color-text-secondary)] hover:text-white cursor-pointer">
@@ -1165,8 +1165,8 @@ export const SymbioteProfilePage: React.FC = () => {
 
       {/* MODAL: ADD PORTFOLIO PROJECT */}
       {showPortModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4 rounded-[12px] shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6 space-y-4 rounded-[12px] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-body font-bold text-[var(--color-text-primary)]">Add Portfolio Project</h3>
               <button onClick={() => setShowPortModal(false)} className="text-[var(--color-text-secondary)] hover:text-white cursor-pointer">
@@ -1231,8 +1231,8 @@ export const SymbioteProfilePage: React.FC = () => {
 
       {/* MODAL: ADD CERTIFICATION */}
       {showCertModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4 rounded-[12px] shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6 space-y-4 rounded-[12px] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-body font-bold text-[var(--color-text-primary)]">Add Certification</h3>
               <button onClick={() => setShowCertModal(false)} className="text-[var(--color-text-secondary)] hover:text-white cursor-pointer">
@@ -1277,7 +1277,7 @@ export const SymbioteProfilePage: React.FC = () => {
                 Cancel
               </Button>
               <Button onClick={handleAddCertification} className="bg-[var(--color-accent-cyan)] hover:bg-cyan-400 text-black text-caption font-bold cursor-pointer">
-                Add Credential
+                Add Certificate
               </Button>
             </div>
           </Card>

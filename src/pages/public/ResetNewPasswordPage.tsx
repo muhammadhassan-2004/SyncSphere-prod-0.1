@@ -103,14 +103,26 @@ export const ResetNewPasswordPage: React.FC = () => {
   // Live Requirement Checklist Validation
   const hasMinLength = newPassword.length >= 8;
   const hasUppercase = /[A-Z]/.test(newPassword);
+  const hasLowercase = /[a-z]/.test(newPassword);
   const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(newPassword);
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
-  const isPasswordValid = hasMinLength && hasUppercase && hasNumber;
+  const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecialChar;
   const isFormValid = isPasswordValid && passwordsMatch && !loading && !verifyingToken && !tokenError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPasswordValid) {
+      setSubmitError(
+        'Password must be at least 8 characters long and include an uppercase letter, lowercase letter, number, and special character.'
+      );
+      return;
+    }
+    if (!passwordsMatch) {
+      setSubmitError('Passwords do not match.');
+      return;
+    }
     if (!isFormValid || !verifiedEmail || !oobCode) return;
 
     setLoading(true);

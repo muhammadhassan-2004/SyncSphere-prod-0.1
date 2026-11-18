@@ -571,10 +571,17 @@ authRouter.post("/reset-password", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "New password is required." });
     }
 
-    if (typeof newPassword !== "string" || newPassword.length < 8) {
+    if (
+      typeof newPassword !== "string" ||
+      newPassword.length < 8 ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
       return res.status(400).json({
         success: false,
-        error: "Password must be at least 8 characters long.",
+        error: "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.",
       });
     }
 

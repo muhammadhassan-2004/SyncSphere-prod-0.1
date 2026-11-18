@@ -58,6 +58,7 @@ export const CreateProjectStep3Page: React.FC = () => {
   const draftId = searchParams.get('draftId');
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Project context loaded from Step 1 & 2
   const [projectData, setProjectData] = useState<Project | null>(null);
@@ -144,6 +145,25 @@ To synthesize a high-precision executive brief for our matching engine, please s
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages, isAiTyping]);
+
+  // Dynamically auto-expand the chat textarea as text grows to display full text
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      // Auto expand smoothly to show full text (up to 260px scroll ceiling)
+      const newHeight = Math.min(Math.max(40, scrollHeight), 260);
+      textareaRef.current.style.height = `${newHeight}px`;
+      textareaRef.current.style.overflowY = scrollHeight > 260 ? 'auto' : 'hidden';
+    }
+  }, [inputText]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   // Save conversation & brief to Firestore
   const persistStep3Data = async (
@@ -234,6 +254,10 @@ To synthesize a high-precision executive brief for our matching engine, please s
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setInputText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '40px';
+      textareaRef.current.focus();
+    }
     setIsAiTyping(true);
 
     await persistStep3Data(updatedMessages, aiBrief, isBriefAttached);
@@ -505,21 +529,27 @@ To synthesize a high-precision executive brief for our matching engine, please s
           {/* CHAT INPUT BAR */}
           <form
             onSubmit={handleSendMessage}
-            className="p-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] flex items-center gap-2"
+            className="p-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] flex items-end gap-2"
           >
-            <Input
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Type your answer or provide additional technical context..."
-              disabled={isAiTyping}
-              className="flex-1 text-xs"
-            />
+            <div className="relative flex-1">
+              <textarea
+                ref={textareaRef}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                rows={1}
+                placeholder="Type your answer or provide additional technical context... (Enter to send, Shift+Enter for new line)"
+                disabled={isAiTyping}
+                className="w-full px-3.5 py-2.5 rounded-[10px] bg-[var(--color-surface-elevated)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent-cyan)] focus:ring-1 focus:ring-[var(--color-accent-cyan)] transition-[border-color,box-shadow] resize-none leading-relaxed block [scrollbar-width:thin]"
+                style={{ minHeight: '40px', maxHeight: '260px' }}
+              />
+            </div>
             <Button
               type="submit"
               variant="primary"
               size="md"
               disabled={!inputText.trim() || isAiTyping}
-              className="shrink-0 flex items-center gap-1.5"
+              className="shrink-0 h-[40px] px-4 flex items-center gap-1.5"
             >
               <span>Send</span>
               <Send className="w-3.5 h-3.5" />
