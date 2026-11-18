@@ -16,7 +16,6 @@ import {
   User,
   Shield,
   Bell,
-  Wallet,
   CheckCircle2,
   AlertTriangle,
   Lock,
@@ -29,28 +28,19 @@ import {
   X,
   Phone,
   Loader2,
-  Check,
-  Building2,
   Clock,
   DollarSign,
-  Briefcase,
-  Globe,
-  Sparkles,
   ShieldCheck,
   Save,
-  CreditCard,
-  FileText,
-  HelpCircle,
   Mail,
 } from 'lucide-react';
 
-type TabKey = 'account' | 'security' | 'notifications' | 'payout';
+type TabKey = 'account' | 'security' | 'notifications';
 
 const SETTINGS_TABS: { key: TabKey; label: string; icon: React.FC<{ className?: string }> }[] = [
   { key: 'account', label: 'Account & Profile', icon: User },
   { key: 'security', label: 'Security & Auth', icon: Shield },
   { key: 'notifications', label: 'Notifications', icon: Bell },
-  { key: 'payout', label: 'Payout & Financials', icon: Wallet },
 ];
 
 function getInitialSessions(): UserSession[] {
@@ -124,18 +114,6 @@ export const SymbioteSettingsPage: React.FC = () => {
     weeklyDigest: true,
   });
   const [savingNotifKey, setSavingNotifKey] = useState<string | null>(null);
-
-  // Payout Tab States
-  const [payoutMethod, setPayoutMethod] = useState<'stripe' | 'paypal' | 'bank'>('stripe');
-  const [bankAccountHolder, setBankAccountHolder] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [routingNumber, setRoutingNumber] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [paypalEmail, setPaypalEmail] = useState(firebaseUser?.email || '');
-  const [taxFormStatus, setTaxFormStatus] = useState<'Verified' | 'Pending'>('Pending');
-  const [autoPayoutThreshold, setAutoPayoutThreshold] = useState('$100');
-  const [payoutSchedule, setPayoutSchedule] = useState('Weekly (Every Friday)');
-  const [savingPayout, setSavingPayout] = useState(false);
 
   // Load and Subscribe to User Profile
   useEffect(() => {
@@ -325,20 +303,6 @@ export const SymbioteSettingsPage: React.FC = () => {
     setSessionToRevoke(null);
   };
 
-  // Handler: Save Payout Settings
-  const handleSavePayoutSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingPayout(true);
-    setTimeout(() => {
-      setSavingPayout(false);
-      showToast({
-        title: 'Payout Settings Saved',
-        description: 'Your financial preferences and payout instructions have been securely updated.',
-        type: 'success',
-      });
-    }, 600);
-  };
-
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -351,7 +315,7 @@ export const SymbioteSettingsPage: React.FC = () => {
             </h1>
           </div>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1 font-mono">
-            Manage account security, profile availability, real-time alert triggers, and payout financials.
+            Manage account security, profile availability, and real-time alert triggers.
           </p>
         </div>
 
@@ -780,7 +744,7 @@ export const SymbioteSettingsPage: React.FC = () => {
                 <span>SYMBIOTE Notification Preferences</span>
               </h2>
               <p className="text-xs text-[var(--color-text-secondary)] font-mono mt-1">
-                Configure real-time triggers for client invites, messages, milestone approvals, and payout alerts.
+                Configure real-time triggers for client invites, messages, and milestone approvals.
               </p>
             </div>
 
@@ -866,151 +830,6 @@ export const SymbioteSettingsPage: React.FC = () => {
           </Card>
         )}
 
-        {/* ================= PAYOUT & FINANCIALS TAB ================= */}
-        {activeTab === 'payout' && (
-          <form onSubmit={handleSavePayoutSettings} className="space-y-6">
-            <Card className="p-6 bg-[var(--color-surface)] border-[var(--color-border)] rounded-[16px] space-y-6 shadow-md">
-              <div className="border-b border-[var(--color-border)] pb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                    <Wallet className="w-5 h-5 text-amber-400" />
-                    <span>Payout Methods & Tax Compliance</span>
-                  </h2>
-                  <p className="text-xs text-[var(--color-text-secondary)] font-mono mt-1">
-                    Configure payout preferences, notification contact, and payout schedule settings.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold">
-                  <Lock className="w-4 h-4" />
-                  <span>Gateway Not Configured</span>
-                </div>
-              </div>
-
-              {/* NOTICE BANNER */}
-              <div className="p-4 rounded-[12px] bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-amber-400">
-                  <Lock className="w-4 h-4 shrink-0" />
-                  <span>Payment Gateway & Payout Processing Not Configured</span>
-                </div>
-                <p className="text-amber-200/80 leading-relaxed">
-                  No payment processor or Stripe Connect payout infrastructure has been connected to this environment. Active bank transfers, SWIFT routing, and automated W-9 IRS verification require external payment gateway integration. Raw financial numbers are disabled to protect data privacy.
-                </p>
-              </div>
-
-              {/* Payout Method Selector */}
-              <div className="space-y-3">
-                <label className="block text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold">
-                  Preferred Payout Channel (Preference)
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { id: 'stripe', name: 'Stripe Express / Direct Deposit', desc: 'Requires Stripe Connect Setup', icon: CreditCard },
-                    { id: 'bank', name: 'Direct Wire Transfer (ACH/SWIFT)', desc: 'Requires Bank Gateway Setup', icon: Building2 },
-                    { id: 'paypal', name: 'PayPal Digital Payouts', desc: 'Requires PayPal API Setup', icon: Wallet },
-                  ].map((m) => {
-                    const Icon = m.icon;
-                    const isSelected = payoutMethod === m.id;
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => setPayoutMethod(m.id as any)}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
-                          isSelected
-                            ? 'bg-[var(--color-accent-cyan)]/10 border-[var(--color-accent-cyan)] shadow-sm'
-                            : 'bg-[var(--color-background)] border-[var(--color-border)] hover:border-[var(--color-border)]/80'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <Icon className={`w-5 h-5 ${isSelected ? 'text-[var(--color-accent-cyan)]' : 'text-[var(--color-text-secondary)]'}`} />
-                          {isSelected && <Check className="w-4 h-4 text-[var(--color-accent-cyan)]" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[var(--color-text-primary)]">{m.name}</p>
-                          <p className="text-[10px] text-[var(--color-text-secondary)] font-mono mt-0.5">{m.desc}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Safe Preferences (Notification Email & Schedule) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                <div className="space-y-2 md:col-span-2">
-                  <label className="block text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold">
-                    Payout Notification Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={paypalEmail}
-                    onChange={(e) => setPaypalEmail(e.target.value)}
-                    placeholder="payouts@example.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] font-mono"
-                  />
-                </div>
-
-                {/* Auto Payout Schedule & Threshold */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold">
-                    Auto-Withdrawal Schedule
-                  </label>
-                  <select
-                    value={payoutSchedule}
-                    onChange={(e) => setPayoutSchedule(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] font-sans cursor-pointer"
-                  >
-                    <option value="Weekly (Every Friday)">Weekly (Every Friday)</option>
-                    <option value="Bi-Weekly (1st & 15th)">Bi-Weekly (1st & 15th of month)</option>
-                    <option value="Monthly (Last Day)">Monthly (Last day of month)</option>
-                    <option value="Manual Only">Manual Payout Trigger Only</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-xs font-mono uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold">
-                    Minimum Auto-Withdrawal Threshold
-                  </label>
-                  <select
-                    value={autoPayoutThreshold}
-                    onChange={(e) => setAutoPayoutThreshold(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-background)] border border-[var(--color-border)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent-cyan)] font-sans cursor-pointer"
-                  >
-                    <option value="$50">$50 Minimum</option>
-                    <option value="$100">$100 Minimum</option>
-                    <option value="$250">$250 Minimum</option>
-                    <option value="$500">$500 Minimum</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Save Payout Button */}
-              <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-4">
-                <span className="text-xs font-mono text-amber-400/80 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Direct deposit banking numbers disabled until gateway setup</span>
-                </span>
-                <Button
-                  type="submit"
-                  disabled={savingPayout}
-                  className="bg-slate-800 text-slate-300 border border-slate-700 font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
-                >
-                  {savingPayout ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving Preferences...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Save Payout Preferences</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </Card>
-          </form>
-        )}
       </div>
 
 
