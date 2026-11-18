@@ -1,7 +1,8 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Card } from '@/src/components/ui/card';
-import { Building2, Bell, Shield, CreditCard, ChevronRight } from 'lucide-react';
+import { Building2, Bell, Shield, ChevronRight } from 'lucide-react';
+// CreditCard reserved — Billing & Subscriptions tab on hold for client requirement
 
 export interface SettingsNavItem {
   id: string;
@@ -33,17 +34,14 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: <Shield className="w-4 h-4" />,
     description: 'Password, 2FA, & active sessions',
   },
-  {
-    id: 'billing',
-    label: 'Billing & Subscriptions',
-    path: '/client/settings/billing',
-    icon: <CreditCard className="w-4 h-4" />,
-    description: 'Payment methods, invoices, & plans',
-  },
 ];
+
+/** Billing & Subscriptions nav item is on hold for client requirement. */
+const HIDDEN_SETTINGS_NAV_IDS = new Set(['billing']);
 
 export const SettingsLeftNav: React.FC = () => {
   const location = useLocation();
+  const visibleItems = SETTINGS_NAV_ITEMS.filter((item) => !HIDDEN_SETTINGS_NAV_IDS.has(item.id));
 
   return (
     <Card className="p-3 bg-[var(--color-surface)] border-[var(--color-border)] rounded-[14px] space-y-1 shadow-md">
@@ -54,7 +52,7 @@ export const SettingsLeftNav: React.FC = () => {
       </div>
 
       <nav className="space-y-1">
-        {SETTINGS_NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             location.pathname === item.path ||
             (item.id === 'company-profile' && location.pathname === '/client/settings');

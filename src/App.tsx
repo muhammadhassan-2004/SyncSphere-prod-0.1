@@ -53,7 +53,8 @@ const ClientReviewsPage = lazyNamed(() => import('@/src/pages/client/ClientRevie
 const CompanyProfilePage = lazyNamed(() => import('@/src/pages/client/settings/CompanyProfilePage'), 'CompanyProfilePage');
 const NotificationsSettingsPage = lazyNamed(() => import('@/src/pages/client/settings/NotificationsSettingsPage'), 'NotificationsSettingsPage');
 const SecuritySettingsPage = lazyNamed(() => import('@/src/pages/client/settings/SecuritySettingsPage'), 'SecuritySettingsPage');
-const BillingSettingsPage = lazyNamed(() => import('@/src/pages/client/settings/BillingSettingsPage'), 'BillingSettingsPage');
+// On hold for client requirement — Billing & Subscriptions
+// const BillingSettingsPage = lazyNamed(() => import('@/src/pages/client/settings/BillingSettingsPage'), 'BillingSettingsPage');
 const NotificationsFeedPage = lazyNamed(() => import('@/src/pages/client/NotificationsFeedPage'), 'NotificationsFeedPage');
 const EditProfilePage = lazyNamed(() => import('@/src/pages/client/EditProfilePage'), 'EditProfilePage');
 
@@ -199,7 +200,9 @@ export default function App() {
               <Route path="settings/company-profile" element={<CompanyProfilePage />} />
               <Route path="settings/notifications" element={<NotificationsSettingsPage />} />
               <Route path="settings/security" element={<SecuritySettingsPage />} />
-              <Route path="settings/billing" element={<BillingSettingsPage />} />
+              {/* On hold for client requirement — Billing & Subscriptions */}
+              <Route path="settings/billing" element={<Navigate to="/client/settings/company-profile" replace />} />
+              {/* <Route path="settings/billing" element={<BillingSettingsPage />} /> */}
               <Route path="notifications" element={<NotificationsFeedPage />} />
               <Route path="profile/edit" element={<EditProfilePage />} />
               <Route path="profile" element={<EditProfilePage />} />
