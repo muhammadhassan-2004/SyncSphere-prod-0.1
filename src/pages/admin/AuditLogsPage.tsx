@@ -232,7 +232,7 @@ export function AuditLogsPage() {
   );
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto min-w-0 w-full">
       {/* Page Header */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -363,7 +363,7 @@ export function AuditLogsPage() {
 
       {/* Main Professional Audit Log Table (Clean 5-Column Grid) */}
       <Card className="overflow-hidden border border-[var(--color-border)]">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-white/5 border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
               <tr>

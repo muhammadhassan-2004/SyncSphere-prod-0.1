@@ -173,3 +173,14 @@
 div, header, aside, section, article {
   box-shadow: none;
 }
+
+/* Hide scrollbars for horizontal tab/filter strips while keeping scroll */
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

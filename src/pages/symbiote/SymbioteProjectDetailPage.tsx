@@ -508,7 +508,7 @@ export const SymbioteProjectDetailPage: React.FC = () => {
             </div>
 
             {/* 3 STAT CHIPS */}
-            <div className="grid grid-cols-3 gap-3 p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-center">
               <div>
                 <span className="text-[11px] uppercase tracking-wider text-[var(--color-text-secondary)] font-semibold block">
                   Payment Model

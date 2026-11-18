@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   Mail,
   Sparkles,
-  Cloud,
   Activity,
   Zap,
   Radio,
@@ -120,16 +119,6 @@ export function PlatformMonitoringPage() {
       uptime: 99.95,
       description: 'Google Workspace SSL pipeline for transactional emails',
       color: 'blue',
-    },
-    {
-      name: 'Media CDN (Cloudinary)',
-      category: 'Asset Delivery',
-      icon: Cloud,
-      status: 'operational',
-      latency: 'CDN Online',
-      uptime: 100.0,
-      description: 'Encrypted cloud file uploads, media storage & asset delivery',
-      color: 'emerald',
     },
   ];
 
@@ -296,7 +285,7 @@ export function PlatformMonitoringPage() {
         </div>
 
         {/* 5 Core Services Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {services.map((svc) => {
             const Icon = svc.icon;
             return (

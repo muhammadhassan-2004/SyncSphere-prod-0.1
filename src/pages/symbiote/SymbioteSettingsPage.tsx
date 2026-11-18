@@ -372,7 +372,7 @@ export const SymbioteSettingsPage: React.FC = () => {
       </header>
 
       {/* Navigation Tab Bar */}
-      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto pb-px">
+      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto no-scrollbar pb-px min-w-0">
         {SETTINGS_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;

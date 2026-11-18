@@ -344,7 +344,7 @@ export const SymbioteInvitationsPage: React.FC = () => {
       )}
 
       {/* FILTER TABS */}
-      <div className="flex items-center gap-2 border-b border-[var(--color-border)] pb-3 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-[var(--color-border)] pb-3 overflow-x-auto no-scrollbar min-w-0">
         <button
           onClick={() => setFilter('all')}
           className={`px-3.5 py-1.5 text-caption font-medium rounded-lg transition-colors ${

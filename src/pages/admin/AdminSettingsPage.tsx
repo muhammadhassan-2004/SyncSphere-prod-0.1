@@ -51,7 +51,7 @@ export function AdminSettingsPage() {
       </header>
 
       {/* Navigation Tab Bar */}
-      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto pb-px">
+      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto no-scrollbar pb-px min-w-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.key;

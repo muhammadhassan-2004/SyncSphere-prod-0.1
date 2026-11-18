@@ -598,10 +598,10 @@ export const FilesAndDocsPage: React.FC = () => {
 
       {/* UPLOAD DOCUMENT MODAL */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
           <form
             onSubmit={handleUploadSubmit}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-fadeIn"
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-fadeIn"
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">

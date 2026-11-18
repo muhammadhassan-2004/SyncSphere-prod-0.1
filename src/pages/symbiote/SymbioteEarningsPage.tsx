@@ -696,7 +696,7 @@ export const SymbioteEarningsPage: React.FC = () => {
             Loading transaction history...
           </div>
         ) : filteredTransactions.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left border-collapse text-caption">
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] uppercase text-[10px] tracking-wider font-semibold bg-[var(--color-background)]/50">

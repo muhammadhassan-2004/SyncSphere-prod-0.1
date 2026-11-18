@@ -264,7 +264,7 @@ export const ApplicationsPage: React.FC = () => {
       </div>
 
       {/* 2. 4 STAT CARDS (§4) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {/* TOTAL APPLICATIONS */}
         <Card className="p-5 bg-[var(--color-surface)] border-[var(--color-border)] space-y-2 min-w-0 overflow-hidden">
           <div className="flex items-center justify-between gap-2 text-xs font-mono text-[var(--color-text-secondary)]">
@@ -400,7 +400,7 @@ export const ApplicationsPage: React.FC = () => {
             <p>Subscribing to live application stream...</p>
           </div>
         ) : filteredApplications.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/60 text-[10px] font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">

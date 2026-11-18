@@ -577,7 +577,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
 
               {/* Inline Dropdown Popup */}
               {notifDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl z-50 overflow-hidden text-xs">
+                <div className="absolute right-0 mt-2 w-[min(24rem,calc(100vw-1.5rem))] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-2xl z-50 overflow-hidden text-xs">
                   {/* Header */}
                   <div className="p-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-background)]/50">
                     <div className="flex items-center gap-2">
@@ -688,7 +688,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
 
               {/* Dropdown Box */}
               {userDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[12px] p-1.5 space-y-1 z-50 text-xs shadow-xl animate-in fade-in slide-in-from-top-2">
+                <div className="absolute right-0 mt-2 w-[min(14rem,calc(100vw-1.5rem))] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[12px] p-1.5 space-y-1 z-50 text-xs shadow-xl animate-in fade-in slide-in-from-top-2">
                   <div className="px-3 py-2 border-b border-[var(--color-border)] mb-1">
                     <p className="font-semibold text-[var(--color-text-primary)] truncate">{userName}</p>
                     <p className="text-[10px] text-[var(--color-text-secondary)] truncate">{userEmail || `${role}@syncsphere.io`}</p>
@@ -777,10 +777,10 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
         {/* MAIN SCROLLABLE CONTENT OUTLET */}
         <main
           className={cn(
-            'flex-1 bg-[var(--color-background)] min-h-0',
+            'flex-1 bg-[var(--color-background)] min-h-0 min-w-0',
             isMessagesRoute
               ? 'overflow-hidden p-0 sm:p-3 md:p-4 lg:p-5 flex flex-col'
-              : 'overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10'
+              : 'overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8 lg:p-10'
           )}
         >
           {children || <Outlet />}

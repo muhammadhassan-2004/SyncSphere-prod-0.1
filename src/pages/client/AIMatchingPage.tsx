@@ -710,7 +710,7 @@ export const AIMatchingPage: React.FC = () => {
                         Neural Score Breakdown
                       </span>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* 1. SKILLS MATCH */}
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] font-mono">

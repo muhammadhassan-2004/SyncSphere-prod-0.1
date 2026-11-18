@@ -251,7 +251,7 @@ End of Statement
       {/* 2. TWO-COLUMN LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT NAV PANEL (4 COLS) */}
-        <div className="lg:col-span-4 sticky top-20">
+        <div className="lg:col-span-4 lg:sticky lg:top-20 min-w-0">
           <SettingsLeftNav />
         </div>
 
@@ -441,8 +441,8 @@ End of Statement
 
       {/* 3. STRIPE UPGRADE TO ENTERPRISE MODAL */}
       {isUpgradeModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="max-w-lg w-full bg-[var(--color-surface)] border-[var(--color-accent-cyan)]/40 p-6 space-y-6 rounded-[16px] shadow-2xl animate-scaleIn">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <Card className="max-w-lg w-full max-h-[90vh] overflow-y-auto bg-[var(--color-surface)] border-[var(--color-accent-cyan)]/40 p-4 sm:p-6 space-y-6 rounded-[16px] shadow-2xl animate-scaleIn">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-[12px] bg-gradient-to-r from-[var(--color-accent-cyan)]/20 to-blue-500/20 border border-[var(--color-accent-cyan)]/30 text-[var(--color-accent-cyan)]">
@@ -585,8 +585,8 @@ End of Statement
 
       {/* 4. INVOICE PREVIEW MODAL */}
       {previewInvoice && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="max-w-lg w-full bg-[var(--color-surface)] border-[var(--color-border)] p-6 space-y-5 rounded-[16px] shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <Card className="max-w-lg w-full max-h-[90vh] overflow-y-auto bg-[var(--color-surface)] border-[var(--color-border)] p-4 sm:p-6 space-y-5 rounded-[16px] shadow-2xl">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] pb-4">
               <div>
                 <h3 className="text-base font-bold font-mono text-[var(--color-text-primary)] flex items-center gap-2">

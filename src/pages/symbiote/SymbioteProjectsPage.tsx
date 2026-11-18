@@ -135,7 +135,7 @@ export const SymbioteProjectsPage: React.FC = () => {
       {/* DATA TABLE / EMPTY STATE */}
       {filteredProjects.length > 0 ? (
         <Card className="border border-[var(--color-border)] bg-[var(--color-surface)] rounded-[12px] overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/80 text-[11px] font-mono uppercase tracking-wider text-[var(--color-text-secondary)]">

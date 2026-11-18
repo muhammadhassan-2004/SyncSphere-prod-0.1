@@ -38,7 +38,7 @@ export const DashboardMockup: React.FC = () => {
       {/* Main Mockup Body */}
       <div className="p-5 space-y-5 bg-[var(--color-surface)]">
         {/* 3 Mini KPI Stat Blocks */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
           {/* Active Projects - Blue */}
           <Link
             to="/portal-select"

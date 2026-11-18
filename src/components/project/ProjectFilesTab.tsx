@@ -97,7 +97,11 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
     });
   }, [files, searchQuery, activeCategory]);
 
+  const isProjectLocked =
+    project.status === 'completed' || project.status === 'closed';
+
   const handleDeleteFile = async (fileId: string) => {
+    if (isProjectLocked) return;
     try {
       await deleteProjectFile(fileId);
     } catch (err) {
@@ -137,7 +141,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
           </p>
         </div>
 
-        {project.status !== 'completed' ? (
+        {!isProjectLocked ? (
           <Button
             variant="primary"
             size="sm"
@@ -230,8 +234,8 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                 ? "Upload requirements, specifications, contracts, or technical deliverables for this project."
                 : "No files match your search query or selected category filter."
             }
-            actionLabel={files.length === 0 ? "Upload Document" : undefined}
-            onAction={files.length === 0 ? () => setIsUploadModalOpen(true) : undefined}
+            actionLabel={files.length === 0 && !isProjectLocked ? "Upload Document" : undefined}
+            onAction={files.length === 0 && !isProjectLocked ? () => setIsUploadModalOpen(true) : undefined}
           />
         </div>
       ) : viewMode === 'grid' ? (
@@ -347,7 +351,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                       <Download className="w-3.5 h-3.5" />
                     </button>
 
-                    {file.id && (
+                    {file.id && !isProjectLocked && (
                       <button
                         onClick={() => handleDeleteFile(file.id!)}
                         className="p-1.5 rounded bg-[var(--color-background)] hover:bg-rose-500/20 text-[var(--color-text-secondary)] hover:text-rose-400 border border-[var(--color-border)] transition-colors cursor-pointer"
@@ -441,7 +445,7 @@ export const ProjectFilesTab: React.FC<ProjectFilesTabProps> = ({
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
-                        {file.id && (
+                        {file.id && !isProjectLocked && (
                           <button
                             onClick={() => handleDeleteFile(file.id!)}
                             className="p-1 rounded bg-[var(--color-background)] hover:bg-rose-500/20 text-[var(--color-text-secondary)] hover:text-rose-400 border border-[var(--color-border)] cursor-pointer"

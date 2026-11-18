@@ -635,8 +635,8 @@ export const TimeTrackingPage: React.FC = () => {
         </div>
 
         {/* TIME ENTRY TABLE */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono border-collapse">
+        <div className="overflow-x-auto max-w-full">
+          <table className="w-full min-w-[700px] text-left text-xs font-mono border-collapse">
             <thead>
               <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-3">Freelancer</th>
@@ -800,8 +800,8 @@ export const TimeTrackingPage: React.FC = () => {
 
       {/* 5. EDIT DESCRIPTION MODAL */}
       {editingEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <h3 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-[var(--color-accent-cyan)]" />

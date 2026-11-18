@@ -42,8 +42,8 @@ export function TableShell<T>({
   const hasActions = Boolean(renderActions);
 
   return (
-    <div className={cn('w-full border border-[var(--color-border)] rounded-[10px] overflow-hidden bg-[var(--color-surface)]', className)}>
-      <div className="overflow-x-auto">
+    <div className={cn('w-full min-w-0 border border-[var(--color-border)] rounded-[10px] overflow-hidden bg-[var(--color-surface)]', className)}>
+      <div className="overflow-x-auto max-w-full">
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-[var(--color-border)] bg-[var(--color-background)]/50 text-[var(--color-text-secondary)]">

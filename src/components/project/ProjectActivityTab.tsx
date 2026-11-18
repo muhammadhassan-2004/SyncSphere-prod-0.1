@@ -145,7 +145,7 @@ export const ProjectActivityTab: React.FC<ProjectActivityTabProps> = ({ projectI
         </div>
 
         {/* CATEGORY FILTER BUTTONS */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0 min-w-0">
           {(['all', 'task', 'milestone', 'file', 'team', 'invoice'] as const).map((cat) => {
             const count = cat === 'all'
               ? activities.length

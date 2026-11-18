@@ -18,10 +18,10 @@ export const ProfileStatsStrip: React.FC<ProfileStatsStripProps> = ({
 
   return (
     <div
-      className={`grid gap-3 ${
+      className={`grid gap-3 min-w-0 ${
         hasProjectContext
-          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-          : 'grid-cols-2 sm:grid-cols-4'
+          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+          : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
       }`}
     >
       {/* AI MATCH SCORE HIGHLIGHT CARD (ONLY PRESENT IF PROJECT ID IS PASSED) */}

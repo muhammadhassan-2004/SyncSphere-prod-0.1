@@ -222,7 +222,7 @@ export const CompanyProfilePage: React.FC = () => {
       {/* 2. TWO-COLUMN LAYOUT: [LEFT NAV] | [RIGHT CONTENT PANEL] */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT NAV PANEL (4 COLS) */}
-        <div className="lg:col-span-4 sticky top-20">
+        <div className="lg:col-span-4 lg:sticky lg:top-20 min-w-0">
           <SettingsLeftNav />
         </div>
 

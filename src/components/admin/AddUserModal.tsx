@@ -137,8 +137,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-      <Card className="w-full max-w-lg bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl p-0 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs">
+      <Card className="w-full max-w-lg max-h-[90vh] bg-[var(--color-surface)] border-[var(--color-border)] shadow-2xl p-0 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-background)]/50">
           <div className="flex items-center gap-3">
@@ -174,7 +174,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
               Account Role *
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setRole('client')}

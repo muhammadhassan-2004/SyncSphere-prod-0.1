@@ -31,6 +31,17 @@ export function sanitizePayload<T extends Record<string, any>>(obj: T): Record<s
   return clean;
 }
 
+/** Throws when the project is completed/closed and should no longer accept workspace mutations. */
+export async function assertProjectAllowsWrites(projectId: string): Promise<void> {
+  if (!projectId) return;
+  const snap = await getDoc(doc(db, 'projects', projectId));
+  if (!snap.exists()) return;
+  const status = String(snap.data()?.status || '').toLowerCase();
+  if (status === 'completed' || status === 'closed') {
+    throw new Error('This project is completed or closed and cannot be modified.');
+  }
+}
+
 export async function getWorkspaceTasks(projectId: string): Promise<WorkspaceTask[]> {
   try {
     const colRef = collection(db, 'workspaces', projectId, 'tasks');
@@ -330,6 +341,7 @@ export async function completeEntireProjectManually(projectId: string): Promise<
 }
 
 export async function createTask(projectId: string, task: Omit<WorkspaceTask, 'id' | 'projectId'>): Promise<string> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const colRef = collection(db, 'workspaces', projectId, 'tasks');
     const cleanData = sanitizePayload({
@@ -374,6 +386,7 @@ export async function updateTaskStatus(
   taskId: string,
   status: WorkspaceTask['status']
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
     const taskSnap = await getDoc(docRef);
@@ -398,6 +411,7 @@ export async function submitTaskForReview(
   taskId: string,
   notes?: string
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
     const taskSnap = await getDoc(docRef);
@@ -461,6 +475,7 @@ export async function approveTaskByClient(
   taskId: string,
   clientUid?: string
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   // 1. Immediately persist locally across navigation and offline/demo modes
   persistTaskStatusOverride(taskId, 'completed');
 
@@ -556,6 +571,7 @@ export async function requestTaskChanges(
   taskId: string,
   feedbackNotes?: string
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
     const taskSnap = await getDoc(docRef);
@@ -598,6 +614,7 @@ export async function updateTask(
   taskId: string,
   updates: Partial<WorkspaceTask>
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
     const cleanUpdates = sanitizePayload({
@@ -615,6 +632,7 @@ export async function deleteTask(
   projectId: string,
   taskId: string
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'tasks', taskId);
     const { deleteDoc } = await import('firebase/firestore');
@@ -630,6 +648,7 @@ export async function addTaskComment(
   taskId: string,
   commentData: Omit<TaskComment, 'id' | 'createdAt'>
 ): Promise<TaskComment> {
+  await assertProjectAllowsWrites(projectId);
   const newComment: TaskComment = {
     id: `comm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     ...commentData,
@@ -755,6 +774,7 @@ export async function createMilestone(
   projectId: string,
   milestone: Omit<WorkspaceMilestone, 'id' | 'projectId'>
 ): Promise<string> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const colRef = collection(db, 'workspaces', projectId, 'milestones');
     const docRef = await addDoc(colRef, milestone);
@@ -779,6 +799,7 @@ export async function toggleMilestone(
   milestoneId: string,
   completed: boolean
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const docRef = doc(db, 'workspaces', projectId, 'milestones', milestoneId);
     const msSnap = await getDoc(docRef);
@@ -831,6 +852,7 @@ export async function submitMilestoneForReview(
     specialistName: string;
   }
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const msRef = doc(db, 'workspaces', projectId, 'milestones', milestoneId);
     const msSnap = await getDoc(msRef);
@@ -916,6 +938,7 @@ export async function approveMilestoneByClient(
   milestoneId: string,
   clientUid?: string
 ): Promise<void> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const msRef = doc(db, 'workspaces', projectId, 'milestones', milestoneId);
     const msSnap = await getDoc(msRef);
@@ -1007,6 +1030,7 @@ export async function createWorkspaceUpdate(
   projectId: string,
   update: Omit<WorkspaceUpdate, 'id' | 'projectId'>
 ): Promise<string> {
+  await assertProjectAllowsWrites(projectId);
   try {
     const colRef = collection(db, 'workspaces', projectId, 'updates');
     const docRef = await addDoc(colRef, {

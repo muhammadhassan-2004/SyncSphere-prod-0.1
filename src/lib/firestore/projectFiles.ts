@@ -119,14 +119,23 @@ export async function createProjectFile(
 
     // Issue #37 Fix: Ensure clientId is always accurately populated
     let finalClientId = fileData.clientId;
-    if ((!finalClientId || finalClientId === '') && fileData.projectId) {
+    if (fileData.projectId) {
       try {
         const projSnap = await getDoc(doc(db, 'projects', fileData.projectId));
         if (projSnap.exists()) {
           const pd = projSnap.data();
-          finalClientId = pd.clientId || pd.ownerId || '';
+          const status = String(pd.status || '').toLowerCase();
+          if (status === 'completed' || status === 'closed') {
+            throw new Error('This project is completed or closed and cannot be modified.');
+          }
+          if (!finalClientId || finalClientId === '') {
+            finalClientId = pd.clientId || pd.ownerId || '';
+          }
         }
       } catch (pErr) {
+        if (pErr instanceof Error && pErr.message.includes('completed or closed')) {
+          throw pErr;
+        }
         console.warn('[projectFiles] Failed to hydrate clientId from project:', pErr);
       }
     }
@@ -177,6 +186,19 @@ export async function createProjectFile(
 export async function deleteProjectFile(fileId: string): Promise<void> {
   try {
     const docRef = doc(db, PROJECT_FILES_COLLECTION, fileId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const projectId = snap.data()?.projectId;
+      if (projectId) {
+        const projSnap = await getDoc(doc(db, 'projects', projectId));
+        if (projSnap.exists()) {
+          const status = String(projSnap.data()?.status || '').toLowerCase();
+          if (status === 'completed' || status === 'closed') {
+            throw new Error('This project is completed or closed and cannot be modified.');
+          }
+        }
+      }
+    }
     await deleteDoc(docRef);
   } catch (error) {
     handleFirestoreError(

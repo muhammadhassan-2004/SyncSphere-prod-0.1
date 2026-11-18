@@ -415,8 +415,8 @@ export const InvoiceManagementPage: React.FC = () => {
 
       {/* MARKETPLACE INVOICE ORIGIN NOTE MODAL */}
       {showCreateInfoModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2 text-[var(--color-accent-cyan)] font-bold text-sm">
                 <ShieldCheck className="w-5 h-5" />
@@ -590,7 +590,7 @@ export const InvoiceManagementPage: React.FC = () => {
           </div>
 
           {/* INVOICE TABLE */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left text-xs font-mono border-collapse">
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)] uppercase text-[10px] tracking-wider">
@@ -915,8 +915,8 @@ export const InvoiceManagementPage: React.FC = () => {
 
       {/* STRIPE DIRECT PAYMENT MODAL */}
       {showPayModal && activeInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-fadeIn relative">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-fadeIn relative">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-[var(--color-accent-cyan)]" />
@@ -1092,8 +1092,8 @@ export const InvoiceManagementPage: React.FC = () => {
 
       {/* DIRECT OUT-OF-PLATFORM TRANSFER MODAL */}
       {showDirectTransferModal && activeInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-fadeIn relative">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[16px] max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-fadeIn relative">
             <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
