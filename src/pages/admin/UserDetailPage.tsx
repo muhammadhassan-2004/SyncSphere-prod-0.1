@@ -60,10 +60,11 @@ export function UserDetailPage() {
 
   useEffect(() => {
     if (!userId || !target) return;
-    const role = target.role === 'symbiote' ? 'symbiote' : 'client';
+    const activityRole: 'client' | 'symbiote' =
+      target.role === 'symbiote' || target.role === 'freelancer' ? 'symbiote' : 'client';
     if (target.role !== 'admin') {
-      getProjectHistory(userId, role).then(setHistory).catch((err) => console.error(err));
-      getActivitySummary(userId, role).then(setActivity).catch((err) => console.error(err));
+      getProjectHistory(userId, activityRole).then(setHistory).catch((err) => console.error(err));
+      getActivitySummary(userId, activityRole).then(setActivity).catch((err) => console.error(err));
     }
 
     setActivityLoading(true);
@@ -285,11 +286,43 @@ export function UserDetailPage() {
             <span>Profile Information</span>
           </h3>
           <dl className="space-y-3 text-sm">
-            <Row label="Full Name" value={name} />
+            <Row label="Full Name" value={target.fullName || name} />
             <Row label="Email" value={email} />
-            <Row label="Phone" value={target.phoneNumber || target.phone} />
+            <Row label="Phone" value={target.phoneNumber || target.phone || target.mfaPhoneNumber} />
             <Row label="Location" value={target.location || target.country} />
-            <Row label="Headline" value={target.title || target.headline} />
+            <Row
+              label={role === 'client' ? 'Company' : 'Headline'}
+              value={
+                role === 'client'
+                  ? target.companyName || target.companyProfile?.companyName || target.headline
+                  : target.title || target.jobTitle || target.headline
+              }
+            />
+            {role === 'symbiote' && (
+              <>
+                <Row
+                  label="Hourly Rate"
+                  value={
+                    target.hourlyRate != null && Number(target.hourlyRate) > 0
+                      ? `$${Number(target.hourlyRate).toLocaleString()}/hr`
+                      : null
+                  }
+                />
+                <Row
+                  label="Skills"
+                  value={
+                    Array.isArray(target.skills) && target.skills.length > 0
+                      ? target.skills.join(', ')
+                      : null
+                  }
+                />
+                <Row label="Availability" value={target.availability} />
+              </>
+            )}
+            {role === 'client' && (
+              <Row label="Industry" value={target.industry || target.companyProfile?.industry} />
+            )}
+            <Row label="Timezone" value={target.timeZone || target.timezone} />
           </dl>
         </Card>
 
@@ -299,11 +332,46 @@ export function UserDetailPage() {
             <span>Account Information</span>
           </h3>
           <dl className="space-y-3 text-sm">
-            <Row label="Role" value={role === 'client' ? 'Client' : role === 'symbiote' ? 'Freelancer' : 'Admin'} />
+            <Row
+              label="Role"
+              value={role === 'client' ? 'Client' : role === 'symbiote' ? 'Freelancer' : 'Admin'}
+            />
             <Row label="Status" value={status} />
-            <Row label="Verified" value={target.verified ? 'Yes' : 'No'} />
-            <Row label="2FA" value={target.twoFactorEnabled ? 'Enabled' : 'Disabled'} />
-            <Row label="Plan" value={target.plan || 'Free'} />
+            <Row
+              label="Email Verified"
+              value={
+                target.emailVerified === true || target.verified === true
+                  ? 'Yes'
+                  : target.onboardingCompleted === true
+                    ? 'Yes (onboarded)'
+                    : 'No'
+              }
+            />
+            <Row
+              label="2FA"
+              value={
+                target.mfaEnabled === true || target.twoFactorEnabled === true
+                  ? 'Enabled'
+                  : 'Disabled'
+              }
+            />
+            <Row
+              label="Plan"
+              value={
+                target.billingInfo?.planName ||
+                target.planName ||
+                target.plan ||
+                'Free'
+              }
+            />
+            <Row
+              label="Auth Provider"
+              value={
+                isGoogleUser
+                  ? 'Google'
+                  : target.authProvider || target.providerId || 'Email'
+              }
+            />
           </dl>
         </Card>
 
@@ -328,10 +396,32 @@ export function UserDetailPage() {
                 <Row label="Proposals Sent" value={String(activity.proposalsSentCount)} />
               )}
               {activity.applicationsReceivedCount !== null && (
-                <Row label="Applications Received" value={String(activity.applicationsReceivedCount)} />
+                <Row
+                  label="Applications Received"
+                  value={String(activity.applicationsReceivedCount)}
+                />
               )}
-              <Row label="Total Earned" value="Not tracked yet" />
-              <Row label="Avg Rating" value="Not tracked yet" />
+              <Row
+                label={role === 'client' ? 'Total Spent' : 'Total Earned'}
+                value={
+                  activity.totalEarned != null
+                    ? `$${Number(activity.totalEarned).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                    : '$0.00'
+                }
+              />
+              <Row
+                label="Avg Rating"
+                value={
+                  activity.avgRating != null
+                    ? `${activity.avgRating}${
+                        activity.reviewsCount != null ? ` (${activity.reviewsCount} reviews)` : ''
+                      }`
+                    : 'No reviews yet'
+                }
+              />
             </dl>
           )}
         </Card>
@@ -370,8 +460,12 @@ export function UserDetailPage() {
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {history.map((h) => (
                     <tr key={h.id}>
-                      <td className="py-2.5 font-medium text-[var(--color-text-primary)] pr-2 max-w-[200px] truncate">
-                        <Link to="/admin/projects" className="hover:underline">
+                      <td className="py-2.5 font-medium text-[var(--color-text-primary)] pr-2 align-top">
+                        <Link
+                          to="/admin/projects"
+                          className="hover:underline break-words whitespace-normal leading-snug"
+                          title={h.title}
+                        >
                           {h.title}
                         </Link>
                       </td>
@@ -522,11 +616,15 @@ export function UserDetailPage() {
 }
 
 function Row({ label, value }: { label: string; value?: string | null }) {
+  const display = value?.trim() ? value : '—';
   return (
-    <div className="flex justify-between items-center text-xs sm:text-sm">
-      <dt className="text-[var(--color-text-secondary)] font-medium">{label}</dt>
-      <dd className="text-[var(--color-text-primary)] font-mono text-right truncate max-w-[180px]">
-        {value || '—'}
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:items-start text-xs sm:text-sm">
+      <dt className="text-[var(--color-text-secondary)] font-medium shrink-0 sm:pr-3">{label}</dt>
+      <dd
+        className="text-[var(--color-text-primary)] font-mono sm:text-right break-words whitespace-normal min-w-0 max-w-full sm:max-w-[65%] leading-snug"
+        title={display !== '—' ? display : undefined}
+      >
+        {display}
       </dd>
     </div>
   );

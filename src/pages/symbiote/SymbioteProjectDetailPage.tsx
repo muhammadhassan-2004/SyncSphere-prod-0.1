@@ -320,19 +320,30 @@ export const SymbioteProjectDetailPage: React.FC = () => {
           ? `${userProfile.firstName} ${userProfile.lastName || ''}`.trim()
           : firebaseUser?.displayName || 'Symbiote Specialist');
 
+      const specialistHourlyRate =
+        Number((userProfile as any)?.hourlyRate) > 0
+          ? Number((userProfile as any).hourlyRate)
+          : undefined;
+      const specialistExperience =
+        (userProfile as any)?.experience ||
+        (userProfile as any)?.experienceLevel ||
+        (userProfile as any)?.yearsOfExperience ||
+        '';
+
       const appDocData: Omit<Application, 'id'> = {
         projectId: projectId,
         projectTitle: project.title,
         symbioteId: uid,
         symbioteName: symbioteName,
-        symbioteTitle: userProfile?.title || 'Specialist Engineer',
+        symbioteTitle: userProfile?.title || userProfile?.jobTitle || 'Specialist Engineer',
         symbioteAvatarUrl: userProfile?.avatarUrl || (userProfile as any)?.photoURL || firebaseUser?.photoURL || '',
         symbioteAvatarInitials: userProfile?.avatarInitials || symbioteName.slice(0, 2).toUpperCase() || 'SP',
         clientId: project.ownerId || project.clientId || '',
         status: isDraft ? 'draft' : 'pending',
         appliedAt: new Date().toISOString(),
-        proposedRate: project.budget || project.maxBudget || project.minBudget || 0,
-        rate: project.budget || project.maxBudget || project.minBudget || 0,
+        proposedRate: specialistHourlyRate ?? 0,
+        rate: specialistHourlyRate ?? 0,
+        experience: specialistExperience || undefined,
         estimatedDuration: estWeeks || project.duration || '4 Weeks',
         coverLetter: coverLetter.trim(),
         coverNote: coverLetter.trim(),

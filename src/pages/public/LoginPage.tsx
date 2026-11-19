@@ -35,6 +35,11 @@ import { FieldError, validators } from '@/src/lib/validation/formValidators';
 import { auth, db } from '@/src/lib/firebase';
 import { useAuth, UserRole } from '@/src/context/AuthContext';
 import { getUserProfile } from '@/src/lib/firestore/users';
+import {
+  INACTIVE_ACCOUNT_MESSAGE,
+  consumeInactiveAccountFlag,
+  isUserAccountInactive,
+} from '@/src/lib/auth/accountStatus';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -54,7 +59,7 @@ export const LoginPage: React.FC = () => {
 
   // 1. Auto-redirect if user already has an active valid auth token / session with completed onboarding
   useEffect(() => {
-    if (firebaseUser && currentRole && userProfile?.role) {
+    if (firebaseUser && currentRole && userProfile?.role && !isUserAccountInactive(userProfile.status)) {
       if (userProfile.onboardingCompleted === false) {
         navigate(`/onboarding?role=${currentRole}`, { replace: true });
         return;
@@ -70,6 +75,12 @@ export const LoginPage: React.FC = () => {
 
   // 2. Load remembered email/preference on mount (passwords never persisted to storage)
   useEffect(() => {
+    // Show inactive-account message when kicked mid-session or redirected from a protected route
+    const fromState = (location.state as { accountInactive?: boolean })?.accountInactive === true;
+    if (fromState || consumeInactiveAccountFlag()) {
+      setError(INACTIVE_ACCOUNT_MESSAGE);
+    }
+
     try {
       // Purge any legacy plaintext/base64 passwords stored in previous versions
       localStorage.removeItem('syncsphere_remember_password');
@@ -188,6 +199,13 @@ export const LoginPage: React.FC = () => {
         if (profileData?.role) {
           const rawRole = profileData.role;
           userRole = rawRole === 'freelancer' ? 'symbiote' : (rawRole as UserRole);
+        }
+
+        // Block inactive / suspended / disabled accounts at login
+        if (isUserAccountInactive(profileData?.status)) {
+          await auth.signOut();
+          setError(INACTIVE_ACCOUNT_MESSAGE);
+          return;
         }
 
         // Update lastActiveAt on user doc
@@ -333,6 +351,13 @@ export const LoginPage: React.FC = () => {
       const userData = userSnap.exists() ? userSnap.data() : null;
 
       if (userData && userData.role) {
+        // Block inactive / suspended / disabled accounts at Google login
+        if (isUserAccountInactive(userData.status)) {
+          await auth.signOut();
+          setError(INACTIVE_ACCOUNT_MESSAGE);
+          return;
+        }
+
         const rawRole = userData.role;
         const userRole: UserRole =
           rawRole === 'freelancer' ? 'symbiote' : rawRole === 'client' || rawRole === 'symbiote' || rawRole === 'admin' ? rawRole : 'client';

@@ -5,35 +5,51 @@ import { PlatformOperationsTab } from '@/src/components/admin/settings/PlatformO
 import { SecurityPolicyTab } from '@/src/components/admin/settings/SecurityPolicyTab';
 import { Settings, User, Sliders, ShieldCheck } from 'lucide-react';
 
-const tabs = [
+const ALL_TABS = [
   { key: 'adminProfile', label: 'My Admin Profile', icon: User, component: AdminProfileTab },
-  { key: 'operations', label: 'Platform & Marketplace', icon: Sliders, component: PlatformOperationsTab },
+  // On hold for client requirement — restore when Platform & Marketplace is approved
+  {
+    key: 'operations',
+    label: 'Platform & Marketplace',
+    icon: Sliders,
+    component: PlatformOperationsTab,
+    hidden: true,
+  },
   { key: 'security', label: 'Security Policy', icon: ShieldCheck, component: SecurityPolicyTab },
 ] as const;
 
-type TabKey = typeof tabs[number]['key'];
+const tabs = ALL_TABS.filter((t) => !('hidden' in t && t.hidden));
+
+type VisibleTabKey = (typeof tabs)[number]['key'];
 
 export function AdminSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
-  
-  // Safe tab resolver: fallback safely to 'adminProfile' if tab param is invalid, unknown, or legacy
-  const resolvedTab: TabKey = tabs.some((t) => t.key === rawTab) ? (rawTab as TabKey) : 'adminProfile';
-  const [active, setActive] = useState<TabKey>(resolvedTab);
 
-  // Sync state if URL query param changes externally
+  // Safe tab resolver: ignore hidden tabs (e.g. operations) and unknown values
+  const resolvedTab: VisibleTabKey = tabs.some((t) => t.key === rawTab)
+    ? (rawTab as VisibleTabKey)
+    : 'adminProfile';
+  const [active, setActive] = useState<VisibleTabKey>(resolvedTab);
+
+  // Sync state if URL query param changes externally; redirect hidden tab URLs
   useEffect(() => {
-    if (rawTab && tabs.some((t) => t.key === rawTab)) {
-      setActive(rawTab as TabKey);
+    if (rawTab === 'operations') {
+      setSearchParams({ tab: 'adminProfile' }, { replace: true });
+      setActive('adminProfile');
+      return;
     }
-  }, [rawTab]);
+    if (rawTab && tabs.some((t) => t.key === rawTab)) {
+      setActive(rawTab as VisibleTabKey);
+    }
+  }, [rawTab, setSearchParams]);
 
-  const handleTabChange = (key: TabKey) => {
+  const handleTabChange = (key: VisibleTabKey) => {
     setActive(key);
     setSearchParams({ tab: key });
   };
 
-  // Safe component resolver with default fallback to AdminProfileTab to prevent runtime undefined crashes
+  // Safe component resolver with default fallback to AdminProfileTab
   const ActiveComponent = tabs.find((t) => t.key === active)?.component || AdminProfileTab;
 
   return (
@@ -45,7 +61,7 @@ export function AdminSettingsPage() {
             <span>Admin Settings</span>
           </h1>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-            Official administrative identity, platform & marketplace parameters, and security policies.
+            Official administrative identity and security policies.
           </p>
         </div>
       </header>

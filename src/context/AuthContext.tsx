@@ -4,6 +4,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/src/lib/firebase';
 import { UserProfile } from '@/src/types/firestore';
 import { subscribeToUserProfile } from '@/src/lib/firestore/users';
+import { isUserAccountInactive, markInactiveAccountFlag } from '@/src/lib/auth/accountStatus';
 
 export type UserRole = 'client' | 'symbiote' | 'admin' | null;
 
@@ -133,6 +134,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
               const userRef = doc(db, 'users', user.uid);
               const userSnap = await getDoc(userRef);
+
+              // Do not refresh presence for inactive accounts (login/Auth gate handles sign-out)
+              if (userSnap.exists() && isUserAccountInactive(userSnap.data()?.status)) {
+                return;
+              }
+
               if (!userSnap.exists() || !userSnap.data()?.createdAt) {
                 basicData.createdAt = new Date().toISOString();
               }
@@ -184,6 +191,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user.uid,
             (profile) => {
               if (!isMounted) return;
+
+              // Kick inactive / suspended / disabled accounts out of the platform
+              if (profile && isUserAccountInactive(profile.status)) {
+                if (heartbeatTimer) {
+                  clearInterval(heartbeatTimer);
+                  heartbeatTimer = null;
+                }
+                markInactiveAccountFlag();
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(SESSION_STORAGE_KEY);
+                localStorage.removeItem('syncsphere_demo_mode');
+                setFirebaseUser(null);
+                setUserProfileState(null);
+                setCurrentRoleState(null);
+                setLoading(false);
+                void auth.signOut().catch((e) => console.warn('SignOut after inactive status:', e));
+                return;
+              }
+
               if (profile && profile.role) {
                 const rawRole = profile.role;
                 const matchedRole: UserRole =

@@ -1,5 +1,5 @@
-import { collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { db, auth } from '@/src/lib/firebase';
 import { jsPDF } from 'jspdf';
 
 export type ReportCategory = 'users' | 'projects' | 'revenue' | 'activity';
@@ -10,70 +10,124 @@ export interface ReportDefinition {
   category: ReportCategory;
   title: string;
   description: string;
-  available: boolean; // false = data source doesn't exist yet, don't let them "generate" a fake report
+  available: boolean;
+  /** Whether the Date Window Filter applies to this report */
+  dateFilterable?: boolean;
 }
 
 export const reportDefinitions: ReportDefinition[] = [
-  { id: 'user-registration', category: 'users', title: 'User Registration Report', description: 'New user signups over time, broken down by role.', available: true },
-  { id: 'user-status', category: 'users', title: 'User Status Report', description: 'Current breakdown of active, suspended, and disabled accounts.', available: true },
-  { id: 'project-status', category: 'projects', title: 'Project Status Report', description: 'All platform projects grouped by current status.', available: true },
-  { id: 'project-category', category: 'projects', title: 'Project Category Report', description: 'Project volume broken down by category.', available: true },
-  { id: 'revenue-summary', category: 'revenue', title: 'Revenue Summary Report', description: 'Gross invoice volume, platform fees (5%), and net payouts across all transactions.', available: true },
-  { id: 'activity-audit', category: 'activity', title: 'Admin Activity Report', description: 'Audit log export for a selected date range.', available: true },
+  {
+    id: 'user-registration',
+    category: 'users',
+    title: 'User Registration Report',
+    description: 'New user signups over time, broken down by role.',
+    available: true,
+    dateFilterable: true,
+  },
+  {
+    id: 'user-status',
+    category: 'users',
+    title: 'User Status Report',
+    description: 'Current breakdown of active, suspended, and disabled accounts.',
+    available: true,
+    dateFilterable: false,
+  },
+  {
+    id: 'project-status',
+    category: 'projects',
+    title: 'Project Status Report',
+    description: 'All platform projects grouped by current status.',
+    available: true,
+    dateFilterable: false,
+  },
+  {
+    id: 'project-category',
+    category: 'projects',
+    title: 'Project Category Report',
+    description: 'Project volume broken down by category.',
+    available: true,
+    dateFilterable: false,
+  },
+  {
+    id: 'revenue-summary',
+    category: 'revenue',
+    title: 'Revenue Summary Report',
+    description: 'Gross invoice volume, platform fees (5%), and net payouts across all transactions.',
+    available: true,
+    dateFilterable: true,
+  },
+  {
+    id: 'activity-audit',
+    category: 'activity',
+    title: 'Admin Activity Report',
+    description: 'Audit log export for a selected date range.',
+    available: true,
+    dateFilterable: true,
+  },
 ];
 
-export interface ReportRow { [key: string]: string | number }
+export interface ReportRow {
+  [key: string]: string | number;
+}
+
+function parseReportDate(raw: unknown): number {
+  if (!raw) return 0;
+  if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+    return (raw as { toDate: () => Date }).toDate().getTime();
+  }
+  if (typeof (raw as { toMillis?: () => number })?.toMillis === 'function') {
+    return (raw as { toMillis: () => number }).toMillis();
+  }
+  const d = new Date(raw as string | number);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+/**
+ * Inclusive local-day bounds for <input type="date"> values.
+ * Avoids UTC midnight clipping that drops same-day records.
+ */
+export function reportRangeBounds(from?: Date, to?: Date): { fromMs: number; toMs: number } {
+  const fromMs = from
+    ? new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0).getTime()
+    : 0;
+  const toMs = to
+    ? new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999).getTime()
+    : Number.POSITIVE_INFINITY;
+  return { fromMs, toMs };
+}
+
+/** Parse YYYY-MM-DD from date input into a local Date (not UTC). */
+export function parseDateInput(value: string): Date | undefined {
+  if (!value) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!m) {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? undefined : d;
+  }
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
 
 export async function generateUserRegistrationReport(from?: Date, to?: Date): Promise<ReportRow[]> {
   try {
-    const constraints = [];
-    if (from) constraints.push(where('createdAt', '>=', Timestamp.fromDate(from)));
-    if (to) constraints.push(where('createdAt', '<=', Timestamp.fromDate(to)));
-    
-    let snap;
-    try {
-      const q = query(collection(db, 'users'), ...constraints, orderBy('createdAt', 'desc'));
-      snap = await getDocs(q);
-    } catch {
-      snap = await getDocs(collection(db, 'users'));
-    }
+    const snap = await getDocs(collection(db, 'users'));
+    const { fromMs, toMs } = reportRangeBounds(from, to);
 
-    let docs = snap.docs;
-    // In-memory date filter fallback if simple getDocs was used
-    if (from || to) {
-      const fromMs = from ? from.getTime() : 0;
-      const toMs = to ? to.getTime() : Infinity;
-      docs = docs.filter((d) => {
+    const rows = snap.docs
+      .map((d) => {
         const data = d.data();
-        const created = data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt ? new Date(data.createdAt).getTime() : 0;
-        return created >= fromMs && created <= toMs;
-      });
-    }
+        const createdMs = parseReportDate(data.createdAt);
+        return {
+          _createdMs: createdMs,
+          'User ID': d.id,
+          Name: data.displayName ?? data.fullName ?? '—',
+          Email: data.email ?? '—',
+          Role: data.role ?? '—',
+          Registered: createdMs ? new Date(createdMs).toLocaleDateString() : '—',
+        };
+      })
+      .filter((r) => r._createdMs > 0 && r._createdMs >= fromMs && r._createdMs <= toMs);
 
-    const rows = docs.map((d) => {
-      const data = d.data();
-      let regDate = '—';
-      let createdMs = 0;
-      if (data.createdAt?.toDate) {
-        regDate = data.createdAt.toDate().toLocaleDateString();
-        createdMs = data.createdAt.toDate().getTime();
-      } else if (data.createdAt) {
-        regDate = new Date(data.createdAt).toLocaleDateString();
-        createdMs = new Date(data.createdAt).getTime();
-      }
-      return {
-        _createdMs: createdMs,
-        'User ID': d.id,
-        'Name': data.displayName ?? data.fullName ?? '—',
-        'Email': data.email ?? '—',
-        'Role': data.role ?? '—',
-        'Registered': regDate,
-      };
-    });
-
-    // In-memory sort by registration date descending
     rows.sort((a, b) => b._createdMs - a._createdMs);
-
     return rows.map(({ _createdMs, ...rest }) => rest);
   } catch (err) {
     console.error('Failed to generate user registration report:', err);
@@ -137,34 +191,29 @@ export async function generateProjectCategoryReport(): Promise<ReportRow[]> {
 export async function generateRevenueSummaryReport(from?: Date, to?: Date): Promise<ReportRow[]> {
   try {
     const snap = await getDocs(collection(db, 'invoices'));
-    let docs = snap.docs;
+    const { fromMs, toMs } = reportRangeBounds(from, to);
 
-    if (from || to) {
-      const fromMs = from ? from.getTime() : 0;
-      const toMs = to ? to.getTime() : Infinity;
-      docs = docs.filter((d) => {
+    return snap.docs
+      .map((d) => {
         const data = d.data();
-        const created = data.createdAt ? new Date(data.createdAt).getTime() : 0;
-        return created >= fromMs && created <= toMs;
-      });
-    }
-
-    return docs.map((d) => {
-      const data = d.data();
-      const amount = Number(data.amount) || 0;
-      const platformFee = Math.round(amount * 0.05 * 100) / 100;
-      return {
-        'Invoice ID': data.invoiceNumber || d.id,
-        'Date': data.createdAt ? new Date(data.createdAt).toLocaleDateString() : '—',
-        'Project': data.projectName || data.projectId || 'General Scope',
-        'Client ID': data.clientId || '—',
-        'Specialist': data.symbioteName || data.symbioteId || '—',
-        'Total Amount ($)': amount.toFixed(2),
-        'Platform Fee (5%) ($)': platformFee.toFixed(2),
-        'Net Specialist Payout ($)': (amount - platformFee).toFixed(2),
-        'Payment Status': (data.status || 'pending').toUpperCase(),
-      };
-    });
+        const createdMs = parseReportDate(data.paidAt || data.issuedDate || data.createdAt);
+        const amount = Number(data.amount) || 0;
+        const platformFee = Math.round(amount * 0.05 * 100) / 100;
+        return {
+          _createdMs: createdMs,
+          'Invoice ID': data.invoiceNumber || d.id,
+          Date: createdMs ? new Date(createdMs).toLocaleDateString() : '—',
+          Project: data.projectName || data.projectId || 'General Scope',
+          'Client ID': data.clientId || '—',
+          Specialist: data.symbioteName || data.symbioteId || '—',
+          'Total Amount ($)': amount.toFixed(2),
+          'Platform Fee (5%) ($)': platformFee.toFixed(2),
+          'Net Specialist Payout ($)': (amount - platformFee).toFixed(2),
+          'Payment Status': (data.status || 'pending').toUpperCase(),
+        };
+      })
+      .filter((r) => (!from && !to) || (r._createdMs >= fromMs && r._createdMs <= toMs))
+      .map(({ _createdMs, ...rest }) => rest);
   } catch (err) {
     console.error('Failed to generate revenue summary report:', err);
     return [];
@@ -173,57 +222,57 @@ export async function generateRevenueSummaryReport(from?: Date, to?: Date): Prom
 
 export async function generateActivityReport(from?: Date, to?: Date): Promise<ReportRow[]> {
   try {
-    const constraints = [];
-    if (from) constraints.push(where('timestamp', '>=', Timestamp.fromDate(from)));
-    if (to) constraints.push(where('timestamp', '<=', Timestamp.fromDate(to)));
-    
-    let snap;
+    const { fromMs, toMs } = reportRangeBounds(from, to);
+
     try {
-      const q = query(collection(db, 'audit_logs'), ...constraints, orderBy('timestamp', 'desc'));
-      snap = await getDocs(q);
-    } catch {
-      snap = await getDocs(collection(db, 'audit_logs'));
-    }
-
-    let docs = snap.docs;
-    // In-memory date filter fallback if simple getDocs was used
-    if (from || to) {
-      const fromMs = from ? from.getTime() : 0;
-      const toMs = to ? to.getTime() : Infinity;
-      docs = docs.filter((d) => {
-        const data = d.data();
-        const ts = data.timestamp?.toMillis ? data.timestamp.toMillis() : data.timestamp?.toDate ? data.timestamp.toDate().getTime() : data.timestamp ? new Date(data.timestamp).getTime() : 0;
-        return ts >= fromMs && ts <= toMs;
-      });
-    }
-
-    const rows = docs.map((d) => {
-      const data = d.data();
-      let ts = '—';
-      let tsMs = 0;
-      if (data.timestamp?.toDate) {
-        ts = data.timestamp.toDate().toLocaleString();
-        tsMs = data.timestamp.toDate().getTime();
-      } else if (data.timestamp?.toMillis) {
-        tsMs = data.timestamp.toMillis();
-        ts = new Date(tsMs).toLocaleString();
-      } else if (data.timestamp) {
-        tsMs = new Date(data.timestamp).getTime();
-        ts = new Date(data.timestamp).toLocaleString();
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        const params = new URLSearchParams({ limit: '250' });
+        if (from) params.set('startDate', `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`);
+        if (to) params.set('endDate', `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`);
+        const res = await fetch(`/api/admin/audit-logs?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body?.success && Array.isArray(body.rows)) {
+          return body.rows
+            .map((r: any) => {
+              const tsMs = r.timestamp ? new Date(r.timestamp).getTime() : 0;
+              return {
+                _tsMs: tsMs,
+                Timestamp: tsMs ? new Date(tsMs).toLocaleString() : '—',
+                User: r.userEmail ?? r.userId ?? '—',
+                Action: r.action ?? '—',
+                Module: r.module ?? '—',
+                Result: r.result ?? '—',
+              };
+            })
+            .filter((r: any) => r._tsMs >= fromMs && r._tsMs <= toMs)
+            .sort((a: any, b: any) => b._tsMs - a._tsMs)
+            .map(({ _tsMs, ...rest }: any) => rest);
+        }
       }
-      return {
-        _tsMs: tsMs,
-        'Timestamp': ts,
-        'User': data.userEmail ?? data.userId ?? data.actorEmail ?? '—',
-        'Action': data.action ?? '—',
-        'Module': data.module ?? '—',
-        'Result': data.result ?? '—',
-      };
-    });
+    } catch (apiErr) {
+      console.warn('Activity report API path failed, using client fallback:', apiErr);
+    }
 
-    // In-memory sort by timestamp descending
+    const snap = await getDocs(collection(db, 'audit_logs'));
+    const rows = snap.docs
+      .map((d) => {
+        const data = d.data();
+        const tsMs = parseReportDate(data.timestamp);
+        return {
+          _tsMs: tsMs,
+          Timestamp: tsMs ? new Date(tsMs).toLocaleString() : '—',
+          User: data.userEmail ?? data.userId ?? data.actorEmail ?? '—',
+          Action: data.action ?? '—',
+          Module: data.module ?? '—',
+          Result: data.result ?? '—',
+        };
+      })
+      .filter((r) => r._tsMs >= fromMs && r._tsMs <= toMs);
+
     rows.sort((a, b) => b._tsMs - a._tsMs);
-
     return rows.map(({ _tsMs, ...rest }) => rest);
   } catch (err) {
     console.error('Failed to generate activity report:', err);
@@ -234,7 +283,9 @@ export async function generateActivityReport(from?: Date, to?: Date): Promise<Re
 export function reportRowsToCsv(rows: ReportRow[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0]);
-  const lines = rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','));
+  const lines = rows.map((r) =>
+    headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')
+  );
   return [headers.join(','), ...lines].join('\n');
 }
 
@@ -253,33 +304,33 @@ export function exportReportToPdf(title: string, category: string, rows: ReportR
   const margin = 14;
   const printableWidth = pageWidth - margin * 2;
 
-  // Header Banner
-  doc.setFillColor(15, 23, 42); // Dark slate (#0f172a)
+  doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, pageWidth, 26, 'F');
 
-  // Cyan Accent Strip
-  doc.setFillColor(34, 211, 238); // Cyan (#22d3ee)
+  doc.setFillColor(34, 211, 238);
   doc.rect(0, 26, pageWidth, 1.5, 'F');
 
-  // Title & Branding
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.setTextColor(34, 211, 238); // Cyan
+  doc.setTextColor(34, 211, 238);
   doc.text('SYNCHSPHERE COMPLIANCE & REPORTING', margin, 11);
 
   doc.setFontSize(10);
   doc.setTextColor(255, 255, 255);
   doc.text(title.toUpperCase(), margin, 19);
 
-  // Metadata on top-right
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(148, 163, 184); // Slate 400
+  doc.setTextColor(148, 163, 184);
   const dateStr = new Date().toLocaleString();
   doc.text(`Generated: ${dateStr}`, pageWidth - margin, 11, { align: 'right' });
-  doc.text(`Category: ${category.toUpperCase()} • Total Records: ${rows.length}`, pageWidth - margin, 19, { align: 'right' });
+  doc.text(
+    `Category: ${category.toUpperCase()} • Total Records: ${rows.length}`,
+    pageWidth - margin,
+    19,
+    { align: 'right' }
+  );
 
-  // If no rows
   if (rows.length === 0 || headers.length === 0) {
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
@@ -287,34 +338,30 @@ export function exportReportToPdf(title: string, category: string, rows: ReportR
     return doc;
   }
 
-  // Calculate column widths
   const colWidth = printableWidth / headers.length;
   let y = 38;
 
-  // Draw Table Headers
   const drawTableHeader = (currentY: number) => {
-    doc.setFillColor(241, 245, 249); // slate-100
+    doc.setFillColor(241, 245, 249);
     doc.rect(margin, currentY, printableWidth, 8, 'F');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(30, 41, 59); // slate-800
+    doc.setTextColor(30, 41, 59);
 
     headers.forEach((h, i) => {
       const colX = margin + i * colWidth + 2;
       doc.text(h, colX, currentY + 5.5);
     });
 
-    doc.setDrawColor(203, 213, 225); // slate-300
+    doc.setDrawColor(203, 213, 225);
     doc.line(margin, currentY + 8, margin + printableWidth, currentY + 8);
   };
 
   drawTableHeader(y);
   y += 8;
 
-  // Draw Rows
   rows.forEach((row, rowIndex) => {
-    // Check if new page needed
     if (y + 7 > pageHeight - 16) {
       doc.addPage();
       y = 18;
@@ -322,32 +369,28 @@ export function exportReportToPdf(title: string, category: string, rows: ReportR
       y += 8;
     }
 
-    // Alternating background
     if (rowIndex % 2 === 1) {
-      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setFillColor(248, 250, 252);
       doc.rect(margin, y, printableWidth, 6.5, 'F');
     }
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.setTextColor(51, 65, 85); // slate-700
+    doc.setTextColor(51, 65, 85);
 
     headers.forEach((h, i) => {
       const colX = margin + i * colWidth + 2;
       const rawVal = String(row[h] ?? '—');
-      // Truncate text nicely to fit column width
       const maxChars = Math.max(6, Math.floor(colWidth / 2.1));
       const displayVal = rawVal.length > maxChars ? rawVal.substring(0, maxChars - 2) + '…' : rawVal;
       doc.text(displayVal, colX, y + 4.5);
     });
 
-    // Row bottom border
     doc.setDrawColor(241, 245, 249);
     doc.line(margin, y + 6.5, margin + printableWidth, y + 6.5);
     y += 6.5;
   });
 
-  // Footer on each page
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
@@ -364,4 +407,3 @@ export function exportReportToPdf(title: string, category: string, rows: ReportR
 
   return doc;
 }
-

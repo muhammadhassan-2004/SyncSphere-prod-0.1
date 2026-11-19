@@ -297,7 +297,211 @@ adminRouter.get("/audit-logs", requireAdminAuth, async (req: Request, res: Respo
   }
 });
 
-// 5. Admin Delete Project & Associated Artifacts
+// 5. Per-user activity stream (audit + applications + invoices + time entries)
+adminRouter.get("/users/:userId/activity", requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const adminApp = getFirebaseAdmin();
+    if (!adminApp) {
+      return res.status(500).json({ success: false, error: "Firebase Admin SDK not initialized." });
+    }
+
+    const firestoreAdmin = getAdminFirestore(adminApp);
+    const userId = String(req.params.userId || "").trim();
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "userId is required." });
+    }
+
+    const userEmail = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    const limitCount = Math.min(Math.max(parseInt(String(req.query.limit || "30"), 10) || 30, 1), 100);
+
+    const toIso = (raw: any): string => {
+      if (!raw) return new Date(0).toISOString();
+      if (typeof raw?.toDate === "function") return raw.toDate().toISOString();
+      if (raw instanceof Date) return raw.toISOString();
+      if (typeof raw === "string" || typeof raw === "number") {
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? new Date(0).toISOString() : d.toISOString();
+      }
+      return new Date(0).toISOString();
+    };
+
+    type ActivityRow = {
+      id: string;
+      action: string;
+      module: string;
+      details?: string;
+      result: "success" | "failure" | "warning";
+      timestamp: string;
+      actorEmail?: string;
+      isActor: boolean;
+    };
+
+    const rows: ActivityRow[] = [];
+
+    // Audit logs (admin actions targeting or performed by this user)
+    try {
+      const auditSnap = await firestoreAdmin.collection("audit_logs").limit(250).get();
+      auditSnap.forEach((d) => {
+        const data = d.data() || {};
+        const docUserId = data.userId || data.actorId;
+        const docUserEmail = String(data.userEmail || data.actorEmail || "").toLowerCase().trim();
+        const docTargetId = data.targetId;
+        const docTargetEmail = String(data.targetUserEmail || data.targetEmail || "").toLowerCase().trim();
+        const details = String(data.details || "");
+        const isActor = docUserId === userId || (userEmail && docUserEmail === userEmail);
+        const isTarget =
+          docTargetId === userId ||
+          (userEmail && (docTargetEmail === userEmail || details.toLowerCase().includes(userEmail)));
+        if (!isActor && !isTarget) return;
+        rows.push({
+          id: `audit_${d.id}`,
+          action: data.action || "SYSTEM_EVENT",
+          module: data.module || "Audit",
+          details: details || undefined,
+          result: data.result === "failure" ? "failure" : data.result === "warning" ? "warning" : "success",
+          timestamp: toIso(data.timestamp),
+          actorEmail: data.userEmail || data.actorEmail,
+          isActor: Boolean(isActor),
+        });
+      });
+    } catch (err) {
+      console.warn("[User Activity] audit_logs read failed:", err);
+    }
+
+    // Applications submitted by this specialist
+    try {
+      const appSnap = await firestoreAdmin
+        .collection("applications")
+        .where("symbioteId", "==", userId)
+        .limit(50)
+        .get();
+      appSnap.forEach((d) => {
+        const data = d.data() || {};
+        rows.push({
+          id: `app_${d.id}`,
+          action: "PROPOSAL_SUBMITTED",
+          module: "Applications",
+          details: `Proposal status: ${data.status || "pending"}${data.projectTitle ? ` · ${data.projectTitle}` : data.projectId ? ` · project ${data.projectId}` : ""}`,
+          result: "success",
+          timestamp: toIso(data.createdAt || data.updatedAt),
+          isActor: true,
+        });
+      });
+    } catch (err) {
+      console.warn("[User Activity] applications read failed:", err);
+    }
+
+    // Applications received on this client's projects (by clientId on application)
+    try {
+      const clientAppSnap = await firestoreAdmin
+        .collection("applications")
+        .where("clientId", "==", userId)
+        .limit(50)
+        .get();
+      clientAppSnap.forEach((d) => {
+        const data = d.data() || {};
+        rows.push({
+          id: `capp_${d.id}`,
+          action: "APPLICATION_RECEIVED",
+          module: "Applications",
+          details: `Application ${data.status || "pending"} from specialist${data.symbioteName ? ` ${data.symbioteName}` : ""}`,
+          result: "success",
+          timestamp: toIso(data.createdAt || data.updatedAt),
+          isActor: false,
+        });
+      });
+    } catch (err) {
+      console.warn("[User Activity] client applications read failed:", err);
+    }
+
+    // Time entries logged by specialist
+    try {
+      const timeSnap = await firestoreAdmin
+        .collection("time_entries")
+        .where("symbioteId", "==", userId)
+        .limit(50)
+        .get();
+      timeSnap.forEach((d) => {
+        const data = d.data() || {};
+        const hours = data.hours ?? data.durationHours ?? data.totalHours;
+        rows.push({
+          id: `time_${d.id}`,
+          action: "TIME_LOGGED",
+          module: "Time Tracking",
+          details: `${hours != null ? `${hours}h logged` : "Time entry recorded"}${data.projectTitle ? ` · ${data.projectTitle}` : data.projectId ? ` · project ${data.projectId}` : ""}${data.description ? ` — ${data.description}` : ""}`,
+          result: "success",
+          timestamp: toIso(data.date || data.createdAt || data.updatedAt),
+          isActor: true,
+        });
+      });
+    } catch (err) {
+      console.warn("[User Activity] time_entries read failed:", err);
+    }
+
+    // Invoices as specialist or client
+    for (const field of ["symbioteId", "clientId"] as const) {
+      try {
+        const invSnap = await firestoreAdmin
+          .collection("invoices")
+          .where(field, "==", userId)
+          .limit(50)
+          .get();
+        invSnap.forEach((d) => {
+          const data = d.data() || {};
+          const amount = Number(data.amount) || 0;
+          rows.push({
+            id: `inv_${field}_${d.id}`,
+            action: field === "symbioteId" ? "INVOICE_ISSUED" : "INVOICE_RECEIVED",
+            module: "Invoices",
+            details: `Invoice ${data.status || "draft"} · $${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${data.projectTitle ? ` · ${data.projectTitle}` : ""}`,
+            result: String(data.status || "").toLowerCase() === "paid" ? "success" : "warning",
+            timestamp: toIso(data.paidAt || data.issuedDate || data.createdAt || data.updatedAt),
+            isActor: field === "symbioteId",
+          });
+        });
+      } catch (err) {
+        console.warn(`[User Activity] invoices by ${field} failed:`, err);
+      }
+    }
+
+    // Reviews received (toUserId and legacy symbioteId)
+    try {
+      const [byToUser, bySymbiote] = await Promise.all([
+        firestoreAdmin.collection("reviews").where("toUserId", "==", userId).limit(30).get(),
+        firestoreAdmin.collection("reviews").where("symbioteId", "==", userId).limit(30).get(),
+      ]);
+      const seenReviews = new Set<string>();
+      [...byToUser.docs, ...bySymbiote.docs].forEach((d) => {
+        if (seenReviews.has(d.id)) return;
+        seenReviews.add(d.id);
+        const data = d.data() || {};
+        const score = data.ratings?.overall ?? data.rating;
+        rows.push({
+          id: `rev_${d.id}`,
+          action: "REVIEW_RECEIVED",
+          module: "Reviews",
+          details: typeof score === "number" ? `Rated ${score}/5` : "New review received",
+          result: "success",
+          timestamp: toIso(data.createdAt || data.updatedAt),
+          isActor: false,
+        });
+      });
+    } catch (err) {
+      console.warn("[User Activity] reviews read failed:", err);
+    }
+
+    rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return res.json({ success: true, rows: rows.slice(0, limitCount) });
+  } catch (error: any) {
+    console.error("API GET /api/admin/users/:userId/activity error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Failed to load user activity.",
+    });
+  }
+});
+
+// 6. Admin Delete Project & Associated Artifacts
 adminRouter.delete("/projects/:projectId", requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;

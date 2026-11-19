@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card } from '@/src/components/ui/card';
 import {
   reportDefinitions,
@@ -13,6 +13,7 @@ import {
   generateActivityReport,
   reportRowsToCsv,
   exportReportToPdf,
+  parseDateInput,
 } from '@/src/lib/firestore/adminReports';
 import { Download, Eye, Lock, FileText, Calendar, AlertTriangle, Layers, Users, FolderKanban, DollarSign, Activity } from 'lucide-react';
 
@@ -43,14 +44,42 @@ export function ReportsCenterPage() {
 
   const visibleReports = reportDefinitions.filter((r) => r.category === activeCategory);
 
+  // Re-apply date filter to open preview when From/To changes
+  useEffect(() => {
+    if (!preview?.reportId) return;
+    const def = reportDefinitions.find((r) => r.id === preview.reportId);
+    if (!def?.dateFilterable) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const gen = generators[preview.reportId];
+        if (!gen) return;
+        const from = parseDateInput(dateFrom);
+        const to = parseDateInput(dateTo);
+        if (from && to && from.getTime() > to.getTime()) return;
+        const rows = await gen(from, to);
+        if (!cancelled) setPreview({ reportId: preview.reportId, rows });
+      } catch {
+        /* keep existing preview on transient errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when dates change
+  }, [dateFrom, dateTo]);
+
   const runReport = async (reportId: string, mode: 'preview' | 'export') => {
     const gen = generators[reportId];
     if (!gen) return;
     setLoadingId(reportId);
     setError(null);
     try {
-      const from = dateFrom ? new Date(dateFrom) : undefined;
-      const to = dateTo ? new Date(dateTo) : undefined;
+      const from = parseDateInput(dateFrom);
+      const to = parseDateInput(dateTo);
+      if (from && to && from.getTime() > to.getTime()) {
+        throw new Error('From date must be on or before To date.');
+      }
       const rows = await gen(from, to);
 
       if (mode === 'preview') {
@@ -201,6 +230,10 @@ export function ReportsCenterPage() {
                 </button>
               )}
             </div>
+            <p className="w-full text-[10px] text-[var(--color-text-tertiary)] font-mono">
+              Applies to Registration, Revenue, and Activity reports. Set dates, then click Preview / Export
+              {preview ? ' — open preview auto-refreshes when dates change' : ''}.
+            </p>
           </Card>
 
           {/* Report Definitions List */}
