@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/src/context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { isUserAccountInactive } from '@/src/lib/auth/accountStatus';
 
 export function RequireAdmin() {
   const { authenticatedUser, userProfile, currentRole, loading } = useAuth();
@@ -19,6 +20,10 @@ export function RequireAdmin() {
 
   const activeUser = authenticatedUser || userProfile;
   const activeRole = activeUser?.role === 'freelancer' ? 'symbiote' : (activeUser?.role || currentRole);
+
+  if (isUserAccountInactive(activeUser?.status ?? userProfile?.status)) {
+    return <Navigate to="/login" state={{ accountInactive: true }} replace />;
+  }
 
   if (!activeUser || !activeRole || activeRole !== 'admin') {
     return <Navigate to="/login" replace />;

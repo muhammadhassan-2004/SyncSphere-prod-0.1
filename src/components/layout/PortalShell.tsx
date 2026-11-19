@@ -224,7 +224,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
     ],
     admin: [
       { label: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-      { label: 'User Management', path: '/admin/users', icon: <Users className="w-4 h-4" /> },
+      { label: 'Users Management', path: '/admin/users', icon: <Users className="w-4 h-4" /> },
       { label: 'Project Oversight', path: '/admin/projects', icon: <ShieldAlert className="w-4 h-4" /> },
       { label: 'Platform Monitoring', path: '/admin/monitoring', icon: <Activity className="w-4 h-4" /> },
       { label: 'Audit Logs', path: '/admin/audit-logs', icon: <FileSearch className="w-4 h-4" /> },

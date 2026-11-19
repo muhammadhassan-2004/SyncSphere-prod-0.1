@@ -1,11 +1,15 @@
-import { collection, query, where, orderBy, getDocs, getCountFromServer, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 
 export type TimeRange = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export interface AnalyticsStats {
+  /** All-time registered users (not affected by period filter). */
   totalUsers: number;
-  activeUsers: number | null; // null = needs a "last active" tracking field that may not exist yet
+  /** Users whose createdAt falls inside the selected period. */
+  newUsers: number;
+  /** Users whose lastActiveAt falls inside the selected period. */
+  activeUsers: number;
   projectsCreated: number;
   projectsCompleted: number;
   platformRevenueCents: number; // 5% fee on settled invoices
@@ -14,51 +18,69 @@ export interface AnalyticsStats {
 function rangeStartDate(range: TimeRange): Date {
   const now = new Date();
   switch (range) {
-    case 'daily': return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    case 'weekly': { const d = new Date(now); d.setDate(d.getDate() - 7); return d; }
-    case 'monthly': { const d = new Date(now); d.setMonth(d.getMonth() - 1); return d; }
-    case 'yearly': { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
+    case 'daily':
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    case 'weekly': {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return d;
+    }
+    case 'monthly': {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    }
+    case 'yearly': {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - 1);
+      return d;
+    }
   }
 }
 
+function parseFlexibleDate(raw: unknown): Date | null {
+  if (!raw) return null;
+  if (raw instanceof Timestamp) return raw.toDate();
+  if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+    return (raw as { toDate: () => Date }).toDate();
+  }
+  const d = new Date(raw as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStats> {
+  const empty: AnalyticsStats = {
+    totalUsers: 0,
+    newUsers: 0,
+    activeUsers: 0,
+    projectsCreated: 0,
+    projectsCompleted: 0,
+    platformRevenueCents: 0,
+  };
+
   try {
-    const startDate = rangeStartDate(range);
-    const startMs = startDate.getTime();
+    const startMs = rangeStartDate(range).getTime();
     const usersCol = collection(db, 'users');
     const projectsCol = collection(db, 'projects');
 
-    let totalUsersCount = 0;
-    try {
-      const totalCountSnap = await getCountFromServer(usersCol);
-      totalUsersCount = totalCountSnap.data().count;
-    } catch {
-      const allUsers = await getDocs(usersCol);
-      totalUsersCount = allUsers.docs.length;
-    }
-
+    const usersSnap = await getDocs(usersCol);
+    let newUsersCount = 0;
     let activeUsersCount = 0;
-    try {
-      const allUsersSnap = await getDocs(usersCol);
-      allUsersSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        const lastActive = data.lastActiveAt || data.updatedAt || data.createdAt;
-        if (!lastActive) return;
-        let d: Date;
-        if (lastActive instanceof Timestamp) {
-          d = lastActive.toDate();
-        } else if (typeof lastActive?.toDate === 'function') {
-          d = lastActive.toDate();
-        } else {
-          d = new Date(lastActive);
-        }
-        if (!isNaN(d.getTime()) && d.getTime() >= startMs) {
-          activeUsersCount++;
-        }
-      });
-    } catch (memErr) {
-      console.warn('In-memory active user calculation failed:', memErr);
-    }
+
+    usersSnap.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+
+      const created = parseFlexibleDate(data.createdAt);
+      if (created && created.getTime() >= startMs) {
+        newUsersCount++;
+      }
+
+      // Active = real session activity only. Do not fall back to createdAt/updatedAt.
+      const lastActive = parseFlexibleDate(data.lastActiveAt);
+      if (lastActive && lastActive.getTime() >= startMs) {
+        activeUsersCount++;
+      }
+    });
 
     let projectsCreatedCount = 0;
     let projectsCompletedCount = 0;
@@ -66,48 +88,19 @@ export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStat
     try {
       const allProjectsSnap = await getDocs(projectsCol);
       allProjectsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-
-        // Extract createdAt timestamp safely (supporting ISO strings, Timestamps, and numbers)
-        let createdDate: Date | null = null;
-        if (data.createdAt) {
-          if (data.createdAt instanceof Timestamp) {
-            createdDate = data.createdAt.toDate();
-          } else if (typeof data.createdAt?.toDate === 'function') {
-            createdDate = data.createdAt.toDate();
-          } else {
-            createdDate = new Date(data.createdAt);
-          }
-        }
-
-        if (createdDate && !isNaN(createdDate.getTime())) {
-          if (createdDate.getTime() >= startMs) {
-            projectsCreatedCount++;
-          }
-        } else {
-          // Fallback: If createdAt is missing or unparseable, count it so real projects aren't omitted
+        const data = docSnap.data() || {};
+        const createdDate = parseFlexibleDate(data.createdAt);
+        if (createdDate && createdDate.getTime() >= startMs) {
           projectsCreatedCount++;
         }
 
-        // Check if project is completed
-        const rawStatus = (data.status || '').toLowerCase();
+        const rawStatus = String(data.status || '').toLowerCase();
         const isCompleted = ['completed', 'finished', 'closed'].includes(rawStatus);
+        if (!isCompleted) return;
 
-        if (isCompleted) {
-          let updatedDate: Date | null = null;
-          const rawUpdated = data.updatedAt || data.completedAt || data.createdAt;
-          if (rawUpdated) {
-            if (rawUpdated instanceof Timestamp) {
-              updatedDate = rawUpdated.toDate();
-            } else if (typeof rawUpdated?.toDate === 'function') {
-              updatedDate = rawUpdated.toDate();
-            } else {
-              updatedDate = new Date(rawUpdated);
-            }
-          }
-          if (!updatedDate || isNaN(updatedDate.getTime()) || updatedDate.getTime() >= startMs) {
-            projectsCompletedCount++;
-          }
+        const completedDate = parseFlexibleDate(data.completedAt || data.updatedAt);
+        if (completedDate && completedDate.getTime() >= startMs) {
+          projectsCompletedCount++;
         }
       });
     } catch (projErr) {
@@ -119,34 +112,24 @@ export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStat
       const invoicesCol = collection(db, 'invoices');
       const paidInvoicesSnap = await getDocs(query(invoicesCol, where('status', '==', 'paid')));
       paidInvoicesSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        const rawPaid = data.paidAt || data.updatedAt || data.createdAt;
-        let paidDate: Date | null = null;
-        if (rawPaid) {
-          if (rawPaid instanceof Timestamp) {
-            paidDate = rawPaid.toDate();
-          } else if (typeof rawPaid?.toDate === 'function') {
-            paidDate = rawPaid.toDate();
-          } else {
-            paidDate = new Date(rawPaid);
-          }
-        }
+        const data = docSnap.data() || {};
+        const paidDate = parseFlexibleDate(data.paidAt || data.updatedAt);
+        if (!paidDate || paidDate.getTime() < startMs) return;
 
-        // Include if payment falls within time range (or if paidDate missing/unparseable, include in all-time/general tally)
-        if (!paidDate || isNaN(paidDate.getTime()) || paidDate.getTime() >= startMs) {
-          const invAmount = Number(data.amount) || (Number(data.amountCents) ? Number(data.amountCents) / 100 : 0);
-          const feeCents = data.paymentDetails?.fee
-            ? Math.round(data.paymentDetails.fee * 100)
-            : Math.round(invAmount * 0.05 * 100);
-          platformRevenueCents += feeCents;
-        }
+        const invAmount =
+          Number(data.amount) || (Number(data.amountCents) ? Number(data.amountCents) / 100 : 0);
+        const feeCents = data.paymentDetails?.fee
+          ? Math.round(data.paymentDetails.fee * 100)
+          : Math.round(invAmount * 0.05 * 100);
+        platformRevenueCents += feeCents;
       });
     } catch (invErr) {
       console.warn('Invoices revenue aggregation failed for analytics:', invErr);
     }
 
     return {
-      totalUsers: totalUsersCount,
+      totalUsers: usersSnap.size,
+      newUsers: newUsersCount,
       activeUsers: activeUsersCount,
       projectsCreated: projectsCreatedCount,
       projectsCompleted: projectsCompletedCount,
@@ -154,65 +137,48 @@ export async function getAnalyticsStats(range: TimeRange): Promise<AnalyticsStat
     };
   } catch (err) {
     console.warn('Failed to fetch analytics stats:', err);
-    return {
-      totalUsers: 0,
-      activeUsers: 0,
-      projectsCreated: 0,
-      projectsCompleted: 0,
-      platformRevenueCents: 0,
-    };
+    return empty;
   }
 }
 
-// User engagement (weekly) — real signups per day of week, last 7 days, as a genuine proxy.
-// NOTE: true "engagement" (logins/activity) needs lastActiveAt tracking, which doesn't exist yet.
-// This is explicitly signup-activity, not login-activity — labeled honestly in the UI, not renamed to hide the gap.
-export interface DailySignups { day: string; count: number }
+// User engagement (weekly) — real signups per day of week, last 7 days.
+export interface DailySignups {
+  day: string;
+  count: number;
+}
 
 export async function getWeeklySignups(): Promise<DailySignups[]> {
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const empty = () => dayLabels.map((day) => ({ day, count: 0 }));
+
   try {
     const now = new Date();
-    const start = new Date(now); start.setDate(start.getDate() - 6);
-    const q = query(
-      collection(db, 'users'),
-      where('createdAt', '>=', Timestamp.fromDate(start)),
-      orderBy('createdAt', 'asc')
-    );
-    let snap;
-    try {
-      snap = await getDocs(q);
-    } catch {
-      snap = await getDocs(collection(db, 'users'));
-    }
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - 6);
+    const startMs = start.getTime();
 
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const buckets = new Map(days.map((d) => [d, 0]));
+    // createdAt is stored as ISO strings for most users — Timestamp inequality returns 0 matches.
+    const snap = await getDocs(collection(db, 'users'));
+    const buckets = new Map(dayLabels.map((d) => [d, 0]));
+
     snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      const rawCreatedAt = data.createdAt;
-      if (!rawCreatedAt) return;
-      let d: Date;
-      if (rawCreatedAt instanceof Timestamp) {
-        d = rawCreatedAt.toDate();
-      } else if (typeof rawCreatedAt?.toDate === 'function') {
-        d = rawCreatedAt.toDate();
-      } else {
-        d = new Date(rawCreatedAt);
-      }
-      if (isNaN(d.getTime())) return;
-      const jsDay = d.getDay(); // 0=Sun
-      const label = days[(jsDay + 6) % 7]; // shift so Mon=0
+      const d = parseFlexibleDate(docSnap.data()?.createdAt);
+      if (!d || d.getTime() < startMs) return;
+      const label = dayLabels[(d.getDay() + 6) % 7];
       buckets.set(label, (buckets.get(label) ?? 0) + 1);
     });
-    return days.map((d) => ({ day: d, count: buckets.get(d) ?? 0 }));
+
+    return dayLabels.map((day) => ({ day, count: buckets.get(day) ?? 0 }));
   } catch (err) {
     console.warn('Failed to fetch weekly signups:', err);
-    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({ day, count: 0 }));
+    return empty();
   }
 }
 
-// Project category breakdown — real, from the `category` field already used in Project Oversight
-export interface CategorySlice { category: string; count: number }
+export interface CategorySlice {
+  category: string;
+  count: number;
+}
 
 export async function getProjectCategoryBreakdown(): Promise<CategorySlice[]> {
   try {

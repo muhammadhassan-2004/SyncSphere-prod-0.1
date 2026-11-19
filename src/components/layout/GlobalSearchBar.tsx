@@ -142,7 +142,7 @@ export const GlobalSearchBar: React.FC = () => {
     } else if (isAdmin) {
       items.push(
         { title: 'Admin Overview', subtitle: 'System-wide platform KPI dashboard', route: '/admin', icon: <ShieldCheck className="w-3.5 h-3.5" />, keywords: ['admin', 'dashboard'] },
-        { title: 'User Management', subtitle: 'Manage client and symbiote accounts', route: '/admin/users', icon: <User className="w-3.5 h-3.5" />, keywords: ['users', 'accounts', 'suspend'] },
+        { title: 'Users Management', subtitle: 'Manage client and symbiote accounts', route: '/admin/users', icon: <User className="w-3.5 h-3.5" />, keywords: ['users', 'accounts', 'suspend'] },
         { title: 'Project Oversight', subtitle: 'Platform-wide projects & milestone tracking', route: '/admin/projects', icon: <Briefcase className="w-3.5 h-3.5" />, keywords: ['projects', 'moderation'] },
         { title: 'Audit Logs & Compliance', subtitle: 'Immutable security telemetry and event stream', route: '/admin/audit-logs', icon: <ShieldCheck className="w-3.5 h-3.5" />, keywords: ['audit', 'logs', 'security'] },
         { title: 'Platform Monitoring', subtitle: 'Live latency, APM and database status', route: '/admin/monitoring', icon: <Zap className="w-3.5 h-3.5" />, keywords: ['monitoring', 'telemetry', 'health'] }

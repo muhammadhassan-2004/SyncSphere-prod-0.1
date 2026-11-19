@@ -237,7 +237,7 @@ export function UserManagementPage() {
     <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">User Management</h1>
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Users Management</h1>
           <p className="text-sm text-[var(--color-text-secondary)]">
             Showing {rows.length} platform user accounts {hasMore ? '(more available)' : ''}
           </p>

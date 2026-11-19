@@ -153,7 +153,12 @@ export async function getProjectsPage(
 
     // Resolve owner & professional user profiles from Firestore
     const ownerIds = Array.from(
-      new Set(snap.docs.map((d) => d.data().ownerId || d.data().clientId).filter(Boolean))
+      new Set(
+        snap.docs.flatMap((d) => {
+          const data = d.data();
+          return [data.ownerId, data.clientId, data.clientUid, data.creatorId].filter(Boolean);
+        })
+      )
     ) as string[];
 
     const proIds = Array.from(
@@ -163,6 +168,11 @@ export async function getProjectsPage(
           const ids: string[] = [];
           if (data.assignedSymbioteId) ids.push(data.assignedSymbioteId);
           if (data.symbioteId) ids.push(data.symbioteId);
+          if (Array.isArray(data.teamMemberUids)) {
+            data.teamMemberUids.forEach((uid: string) => {
+              if (uid) ids.push(uid);
+            });
+          }
           if (Array.isArray(data.teamMembers)) {
             data.teamMembers.forEach((m: any) => {
               if (m?.uid) ids.push(m.uid);
@@ -248,11 +258,26 @@ export async function getProjectsPage(
       if (Array.isArray(data.teamMembers) && data.teamMembers.length > 0) {
         data.teamMembers.forEach((m: any) => {
           const profile = m?.uid ? userProfileMap.get(m.uid) : null;
+          const rawName = m.displayName || m.name || profile?.name;
           professionals.push({
             uid: m?.uid,
-            name: m.displayName || m.name || profile?.name || 'Pro',
+            name:
+              rawName && !['pro', 'freelancer', 'specialist', 'user'].includes(String(rawName).toLowerCase())
+                ? rawName
+                : profile?.name || rawName || 'Freelancer',
             avatarUrl: m.avatarUrl || profile?.avatarUrl,
             role: m.role || 'Team Member',
+          });
+        });
+      } else if (Array.isArray(data.teamMemberUids) && data.teamMemberUids.length > 0) {
+        data.teamMemberUids.forEach((uid: string) => {
+          if (!uid) return;
+          const profile = userProfileMap.get(uid);
+          professionals.push({
+            uid,
+            name: profile?.name || 'Freelancer',
+            avatarUrl: profile?.avatarUrl,
+            role: 'Team Member',
           });
         });
       } else if (data.assignedSymbioteId || data.symbioteId) {
@@ -308,16 +333,40 @@ export async function getProjectsPage(
 
       const professionalNames = professionals.map((p) => p.name);
 
-      const ownerUid = data.ownerId || data.clientId;
+      const ownerUid = data.ownerId || data.clientId || data.clientUid || data.creatorId;
       const ownerProfile = ownerUid ? userProfileMap.get(ownerUid) : null;
+      const isPlaceholderName = (n?: string | null) => {
+        if (!n || !String(n).trim()) return true;
+        const t = String(n).trim().toLowerCase();
+        return (
+          t === 'client' ||
+          t === 'user' ||
+          t === 'owner' ||
+          t === 'unknown' ||
+          t === 'n/a' ||
+          t === '—' ||
+          t === '-'
+        );
+      };
+      // Client Name column = person name from user profile / project owner fields.
+      // Do not prefer companyName (that belongs on company profile, not this column).
+      const clientCandidates = [
+        ownerProfile?.name,
+        data.ownerName,
+        data.createdByName,
+        data.clientName,
+        data.clientEmail,
+        data.ownerEmail,
+      ];
       const businessOwnerName =
-        data.companyName ||
-        data.clientName ||
-        data.ownerName ||
-        data.createdByName ||
-        ownerProfile?.companyName ||
-        ownerProfile?.name ||
-        'Client';
+        clientCandidates.find(
+          (n) =>
+            !isPlaceholderName(n) &&
+            String(n).trim().toLowerCase() !== String(ownerProfile?.companyName || '').trim().toLowerCase() &&
+            String(n).trim().toLowerCase() !== String(data.companyName || '').trim().toLowerCase()
+        ) ||
+        clientCandidates.find((n) => !isPlaceholderName(n)) ||
+        (ownerUid ? `Client ${String(ownerUid).slice(0, 6)}` : 'Unknown Client');
 
       const budgetDisplay = formatProjectBudget(data);
       const numericBudget =

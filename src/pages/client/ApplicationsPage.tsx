@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
@@ -16,9 +17,16 @@ import {
   getUserConversations,
 } from '@/src/lib/firestore/conversations';
 import { createNotification } from '@/src/lib/firestore/notifications';
+import { db } from '@/src/lib/firebase';
 import { Zap, Users, UserCheck, Clock, CheckCircle2, FileText, Search, Download, Eye, MessageSquare, XCircle, Sparkles, UserX } from 'lucide-react';
 import { EmptyState } from '@/src/components/ui/EmptyState';
 import { ResponsiveStatValue } from '@/src/components/ui/ResponsiveStatValue';
+
+type SpecialistProfileExtras = {
+  experience?: string;
+  hourlyRate?: number;
+  title?: string;
+};
 
 export const ApplicationsPage: React.FC = () => {
   const { firebaseUser, userProfile } = useAuth();
@@ -29,6 +37,7 @@ export const ApplicationsPage: React.FC = () => {
   const [applications, setApplications] = useState<Application[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [specialistExtras, setSpecialistExtras] = useState<Record<string, SpecialistProfileExtras>>({});
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -67,20 +76,83 @@ export const ApplicationsPage: React.FC = () => {
     return () => unsub();
   }, [clientId]);
 
-  // Enriched applications with project fallbacks
+  // Backfill experience / hourly rate from specialist profiles when missing on the application doc
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        applications
+          .map((a) => a.symbioteId)
+          .filter((id): id is string => Boolean(id && !specialistExtras[id]))
+      )
+    );
+    if (ids.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const updates: Record<string, SpecialistProfileExtras> = {};
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const snap = await getDoc(doc(db, 'users', id));
+            if (!snap.exists()) return;
+            const d = snap.data() || {};
+            updates[id] = {
+              experience:
+                d.experience ||
+                d.experienceLevel ||
+                d.yearsOfExperience ||
+                undefined,
+              hourlyRate:
+                typeof d.hourlyRate === 'number' && d.hourlyRate > 0
+                  ? d.hourlyRate
+                  : undefined,
+              title: d.title || d.jobTitle || undefined,
+            };
+          } catch {
+            /* ignore per-user lookup failures */
+          }
+        })
+      );
+      if (!cancelled && Object.keys(updates).length > 0) {
+        setSpecialistExtras((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applications, specialistExtras]);
+
+  // Enriched applications with project + specialist profile fallbacks
   const enrichedApplications = useMemo(() => {
     return applications.map((app) => {
       const matchedProject = projects.find((p) => p.id === app.projectId);
+      const extras = specialistExtras[app.symbioteId] || {};
+      const experience =
+        app.experience ||
+        extras.experience ||
+        '';
+      const profileRate = extras.hourlyRate;
+      const storedRate = Number(app.rate || app.proposedRate || 0);
+      // Prefer profile hourly rate when stored rate looks like a project budget (> $500/hr)
+      const displayRate =
+        profileRate && profileRate > 0
+          ? profileRate
+          : storedRate > 0 && storedRate <= 500
+            ? storedRate
+            : profileRate || storedRate || 0;
 
       return {
         ...app,
         symbioteName: app.symbioteName || 'Specialist Candidate',
-        symbioteTitle: app.symbioteTitle || 'AI Specialist',
+        symbioteTitle: app.symbioteTitle || extras.title || 'AI Specialist',
         symbioteAvatarInitials: app.symbioteAvatarInitials || 'AI',
         projectTitle: app.projectTitle || matchedProject?.title || 'AI Development Brief',
+        experience,
+        rate: displayRate,
       };
     });
-  }, [applications, projects]);
+  }, [applications, projects, specialistExtras]);
 
   // LIVE COMPUTED STATS CARDS
   const stats = useMemo(() => {
@@ -459,12 +531,12 @@ export const ApplicationsPage: React.FC = () => {
 
                       {/* EXPERIENCE LEVEL */}
                       <td className="py-4 px-4 font-mono text-[var(--color-text-secondary)]">
-                        {app.experience}
+                        {app.experience?.trim() ? app.experience : '—'}
                       </td>
 
                       {/* RATE */}
                       <td className="py-4 px-4 font-mono font-bold text-[var(--color-text-primary)]">
-                        ${app.rate}/hr
+                        {app.rate && Number(app.rate) > 0 ? `$${Number(app.rate).toLocaleString()}/hr` : '—'}
                       </td>
 
                       {/* APPLIED DATE */}

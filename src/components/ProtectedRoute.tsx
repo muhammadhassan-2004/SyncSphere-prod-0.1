@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { isUserAccountInactive } from '@/src/lib/auth/accountStatus';
 
 interface ProtectedRouteProps {
   requiredRole: 'client' | 'symbiote' | 'admin';
@@ -27,6 +28,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole, ch
   // Determine user's effective role and user object
   const activeUser = authenticatedUser || userProfile;
   const activeRole = activeUser?.role === 'freelancer' ? 'symbiote' : (activeUser?.role || currentRole);
+
+  // Block inactive / suspended / disabled accounts from any protected portal
+  if (isUserAccountInactive(activeUser?.status ?? userProfile?.status)) {
+    return <Navigate to="/login" state={{ accountInactive: true }} replace />;
+  }
 
   // Strictly check for role matching requiredRole (e.g. authenticatedUser.role === 'symbiote')
   // Redirects to /login if role is missing or incorrect

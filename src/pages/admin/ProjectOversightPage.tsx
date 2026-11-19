@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Download, FolderKanban, AlertCircle, Eye, X, Calendar, User, DollarSign, Tag, Clock, Layers, Trash2 } from 'lucide-react';
+import { Search, Download, FolderKanban, AlertCircle, Eye, X, Calendar, User, DollarSign, Tag, Clock, Layers, Trash2, Hash, Briefcase, MapPin, Gauge, Building2, Mail } from 'lucide-react';
 import { Card } from '@/src/components/ui/card';
 import { Badge } from '@/src/components/ui/badge';
 import { Avatar } from '@/src/components/ui/avatar';
@@ -44,6 +44,32 @@ const formatStatusLabel = (s: ProjectOversightStatus) => {
       return s;
   }
 };
+
+function formatMaybeDate(raw: unknown): string | null {
+  if (!raw) return null;
+  try {
+    if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+      return (raw as { toDate: () => Date }).toDate().toLocaleDateString();
+    }
+    const d = new Date(raw as string | number);
+    return isNaN(d.getTime()) ? null : d.toLocaleDateString();
+  } catch {
+    return null;
+  }
+}
+
+function formatMaybeDateTime(raw: unknown): string | null {
+  if (!raw) return null;
+  try {
+    if (typeof (raw as { toDate?: () => Date })?.toDate === 'function') {
+      return (raw as { toDate: () => Date }).toDate().toLocaleString();
+    }
+    const d = new Date(raw as string | number);
+    return isNaN(d.getTime()) ? null : d.toLocaleString();
+  } catch {
+    return null;
+  }
+}
 
 export function ProjectOversightPage() {
   const [activeTab, setActiveTab] = useState<ProjectOversightStatus | undefined>(undefined);
@@ -112,7 +138,7 @@ export function ProjectOversightPage() {
   }, [rows]);
 
   const exportCsv = () => {
-    const header = ['Project ID', 'Name', 'Client', 'Freelancers', 'Budget', 'Status', 'Category', 'Created'];
+    const header = ['Project ID', 'Name', 'Client Name', 'Freelancers', 'Budget', 'Status', 'Category', 'Created'];
     const lines = rows.map((r) =>
       [
         r.projectIdLabel,
@@ -247,7 +273,7 @@ export function ProjectOversightPage() {
               <tr>
                 <th className="p-3.5 font-medium">Project ID</th>
                 <th className="p-3.5 font-medium">Project Name</th>
-                <th className="p-3.5 font-medium">Client</th>
+                <th className="p-3.5 font-medium">Client Name</th>
                 <th className="p-3.5 font-medium">Freelancers</th>
                 <th className="p-3.5 font-medium">Total Spent</th>
                 <th className="p-3.5 font-medium">Status</th>
@@ -287,11 +313,50 @@ export function ProjectOversightPage() {
                       {p.name}
                     </button>
                   </td>
-                  <td className="p-3.5 text-[var(--color-text-secondary)] font-medium">
-                    {p.businessOwnerName}
+                  <td className="p-3.5 text-[var(--color-text-primary)] font-medium max-w-[160px]">
+                    <span className="block break-words whitespace-normal leading-snug" title={p.businessOwnerName}>
+                      {p.businessOwnerName}
+                    </span>
                   </td>
                   <td className="p-3.5">
-                    <AvatarStack items={p.professionals} names={p.professionalNames} />
+                    {p.professionals && p.professionals.length > 0 ? (
+                      <div className="flex flex-col gap-1.5 min-w-[140px]">
+                        {p.professionals.slice(0, 3).map((pro, idx) => (
+                          <div key={pro.uid || `${pro.name}-${idx}`} className="flex items-center gap-2 min-w-0">
+                            <Avatar
+                              name={pro.name}
+                              src={pro.avatarUrl}
+                              size="xs"
+                              className="w-6 h-6 text-[9px] shrink-0"
+                            />
+                            <span
+                              className="text-xs text-[var(--color-text-primary)] font-medium break-words whitespace-normal leading-snug"
+                              title={pro.name}
+                            >
+                              {pro.name}
+                            </span>
+                          </div>
+                        ))}
+                        {p.professionals.length > 3 && (
+                          <span className="text-[10px] text-[var(--color-text-tertiary)] font-mono pl-8">
+                            +{p.professionals.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    ) : p.professionalNames.length > 0 ? (
+                      <div className="flex flex-col gap-1.5 min-w-[140px]">
+                        {p.professionalNames.slice(0, 3).map((name, idx) => (
+                          <div key={`${name}-${idx}`} className="flex items-center gap-2 min-w-0">
+                            <Avatar name={name} size="xs" className="w-6 h-6 text-[9px] shrink-0" />
+                            <span className="text-xs text-[var(--color-text-primary)] font-medium break-words whitespace-normal leading-snug">
+                              {name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[var(--color-text-tertiary)] text-xs italic">Unassigned</span>
+                    )}
                   </td>
                   <td className="p-3.5 font-mono">
                     {p.previousBudget != null && p.previousBudget !== p.budget && (
@@ -383,33 +448,144 @@ export function ProjectOversightPage() {
 
             {/* Modal Body */}
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {(() => {
+                const raw = selectedProject.rawProject || {};
+                const statusLower = String(selectedProject.status || '').toLowerCase();
+                const isDone = statusLower === 'completed' || statusLower === 'closed';
+                const progressPct = isDone
+                  ? 100
+                  : Math.min(
+                      100,
+                      Math.max(0, Number(raw.progressPct ?? raw.progressPercent ?? raw.progress ?? 0) || 0)
+                    );
+                const budgetType = raw.budgetType || raw.budget?.type || null;
+                const minBudget = raw.minBudget ?? raw.budget?.min;
+                const maxBudget = raw.maxBudget ?? raw.budget?.max ?? raw.budget?.total;
+                const companyName = raw.companyName || raw.companyProfile?.companyName;
+                const clientEmail = raw.clientEmail || raw.ownerEmail;
+                const startDate = formatMaybeDate(raw.startDate);
+                const endDate = formatMaybeDate(raw.endDate || raw.deadline);
+                const completedAt = formatMaybeDateTime(raw.completedAt);
+                const updatedAt = formatMaybeDateTime(raw.updatedAt);
+                const duration = raw.duration || raw.timeline || null;
+
+                return (
+                  <>
               {/* Key Metrics Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
                   <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
-                    <User className="w-3.5 h-3.5 text-cyan-400" /> Client
+                    <Hash className="w-3.5 h-3.5 text-cyan-400" /> Project ID
                   </div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
-                    {selectedProject.businessOwnerName}
+                  <div className="text-sm font-semibold text-cyan-300 font-mono break-all">
+                    {selectedProject.projectIdLabel}
+                  </div>
+                  <div className="text-[10px] text-[var(--color-text-tertiary)] font-mono break-all">
+                    {selectedProject.id}
                   </div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
                   <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Financial Settlement
+                    <User className="w-3.5 h-3.5 text-cyan-400" /> Client Name
                   </div>
-                  <div className="text-sm font-bold text-cyan-400">
-                    {selectedProject.budgetDisplay}
+                  <div className="text-sm font-semibold text-[var(--color-text-primary)] break-words">
+                    {selectedProject.businessOwnerName}
+                  </div>
+                  {clientEmail && (
+                    <div className="text-[10px] text-[var(--color-text-tertiary)] font-mono break-all flex items-center gap-1">
+                      <Mail className="w-3 h-3 shrink-0" /> {clientEmail}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
+                    <Building2 className="w-3.5 h-3.5 text-amber-400" /> Company
+                  </div>
+                  <div className="text-sm font-semibold text-[var(--color-text-primary)] break-words">
+                    {companyName || '—'}
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1 col-span-2 sm:col-span-1">
+                <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Budget / Spent
+                  </div>
+                  <div className="text-sm font-bold text-cyan-400">
+                    {selectedProject.budgetDisplay || '—'}
+                  </div>
+                  {(budgetType || minBudget != null || maxBudget != null) && (
+                    <div className="text-[10px] text-[var(--color-text-tertiary)] font-mono">
+                      {budgetType ? String(budgetType) : 'budget'}
+                      {minBudget != null || maxBudget != null
+                        ? ` · $${Number(minBudget ?? maxBudget).toLocaleString()}${
+                            maxBudget != null && minBudget != null && maxBudget !== minBudget
+                              ? `–$${Number(maxBudget).toLocaleString()}`
+                              : ''
+                          }`
+                        : ''}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
+                    <Gauge className="w-3.5 h-3.5 text-emerald-400" /> Progress
+                  </div>
+                  <div className="text-sm font-bold text-emerald-400 font-mono">{progressPct}%</div>
+                  <div className="w-full h-1.5 rounded-full bg-black/50 overflow-hidden border border-[var(--color-border)]">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-black/40 border border-[var(--color-border)] space-y-1">
                   <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] font-medium">
                     <Tag className="w-3.5 h-3.5 text-purple-400" /> Category
                   </div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                    {selectedProject.category || 'General'}
+                    {selectedProject.category || raw.industry || 'General'}
                   </div>
+                </div>
+              </div>
+
+              {/* Project Specs */}
+              <div className="space-y-2">
+                <h3 className="text-xs uppercase tracking-wider font-mono text-[var(--color-text-secondary)] font-bold">
+                  Project Specs
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  {[
+                    { icon: Briefcase, label: 'Type', value: raw.projectType || null },
+                    { icon: Layers, label: 'Experience', value: raw.experienceLevel || null },
+                    { icon: MapPin, label: 'Work Mode', value: raw.workMode || null },
+                    { icon: Clock, label: 'Duration', value: duration },
+                    { icon: Calendar, label: 'Start', value: startDate },
+                    { icon: Calendar, label: 'Deadline', value: endDate },
+                    { icon: Tag, label: 'Priority', value: raw.priority || null },
+                    { icon: Eye, label: 'Visibility', value: raw.visibility || null },
+                    { icon: Gauge, label: 'Health', value: raw.healthStatus || null },
+                  ]
+                    .filter((row) => row.value)
+                    .map((row) => {
+                      const Icon = row.icon;
+                      return (
+                        <div
+                          key={row.label}
+                          className="p-2.5 rounded-lg bg-black/30 border border-[var(--color-border)] space-y-0.5"
+                        >
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)] font-mono">
+                            <Icon className="w-3 h-3" /> {row.label}
+                          </div>
+                          <div className="text-[var(--color-text-primary)] font-semibold break-words">
+                            {String(row.value)}
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
 
@@ -419,7 +595,7 @@ export function ProjectOversightPage() {
                   Project Description
                 </h3>
                 <div className="p-4 rounded-lg bg-black/30 border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto">
-                  {selectedProject.rawProject?.description || selectedProject.rawProject?.brief || 'No description provided for this project.'}
+                  {raw.description || raw.brief || 'No description provided for this project.'}
                 </div>
               </div>
 
@@ -489,16 +665,19 @@ export function ProjectOversightPage() {
               </div>
 
               {/* Timestamps */}
-              <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)] pt-2 border-t border-[var(--color-border)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-tertiary)] pt-2 border-t border-[var(--color-border)]">
                 <span>
                   Created:{' '}
                   {selectedProject.createdAt
                     ? selectedProject.createdAt.toDate().toLocaleString()
-                    : selectedProject.rawProject?.createdAt
-                    ? new Date(selectedProject.rawProject.createdAt).toLocaleString()
-                    : '—'}
+                    : formatMaybeDateTime(raw.createdAt) || '—'}
                 </span>
+                {updatedAt && <span>Updated: {updatedAt}</span>}
+                {completedAt && <span className="text-emerald-400/80">Completed: {completedAt}</span>}
               </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}

@@ -144,11 +144,12 @@ export function AnalyticsReportingPage() {
       {/* 5 KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
-          label="Total Users"
-          value={stats?.totalUsers}
+          label="New Users"
+          value={stats?.newUsers}
           loading={loading}
           icon={Users}
           accent="blue"
+          note={stats ? `All-time: ${stats.totalUsers}` : undefined}
         />
         <StatCard
           label="Active Users"
@@ -156,7 +157,7 @@ export function AnalyticsReportingPage() {
           loading={loading}
           icon={UserCheck}
           accent="green"
-          note="Active in selected period"
+          note="lastActiveAt in selected period"
         />
         <StatCard
           label="Projects Created"

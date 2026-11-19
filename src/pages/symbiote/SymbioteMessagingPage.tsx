@@ -1048,18 +1048,30 @@ export const SymbioteMessagingPage: React.FC = () => {
                 </div>
 
                 {/* PROGRESS % BAR */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-caption font-semibold">
-                    <span className="text-[var(--color-text-secondary)]">Progress</span>
-                    <span className="text-emerald-400 font-mono">{activeProject.progress || 60}%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-[var(--color-surface)] overflow-hidden border border-[var(--color-border)]">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
-                      style={{ width: `${activeProject.progress || 60}%` }}
-                    />
-                  </div>
-                </div>
+                {(() => {
+                  const status = String(activeProject.status || '').toLowerCase();
+                  const isDone = status === 'completed' || status === 'closed' || status === 'finished';
+                  const rawPct = Number(
+                    (activeProject as any).progressPct ?? (activeProject as any).progress ?? 0
+                  );
+                  const progressPct = isDone
+                    ? 100
+                    : Math.min(100, Math.max(0, Number.isFinite(rawPct) ? rawPct : 0));
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-caption font-semibold">
+                        <span className="text-[var(--color-text-secondary)]">Progress</span>
+                        <span className="text-emerald-400 font-mono">{progressPct}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-[var(--color-surface)] overflow-hidden border border-[var(--color-border)]">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* DUE DATE & BUDGET */}
                 <div className="grid grid-cols-2 gap-2 text-caption pt-1 border-t border-[var(--color-border)]">
