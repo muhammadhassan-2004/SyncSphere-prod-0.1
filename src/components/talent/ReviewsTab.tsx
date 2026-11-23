@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/src/components/ui/card';
 import { SymbioteProfile } from '@/src/data/symbiotes';
 import { Review } from '@/src/types/firestore';
-import { getReviewsForUser } from '@/src/lib/firestore/reviews';
+import { subscribeToUserReviews } from '@/src/lib/firestore/reviews';
 import { EmptyStateBlock } from '@/src/components/widgets/EmptyStateBlock';
 import { Star, ThumbsUp, User } from 'lucide-react';
 
@@ -15,28 +15,17 @@ export const ReviewsTab: React.FC<ReviewsTabProps> = ({ symbiote }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
-    async function fetchReviews() {
-      setLoading(true);
-      try {
-        const firestoreReviews = await getReviewsForUser(symbiote.uid);
-        if (isMounted) {
-          setReviews(firestoreReviews || []);
-        }
-      } catch (err) {
-        console.error('Error loading reviews:', err);
-        if (isMounted) {
-          setReviews([]);
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+    if (!symbiote.uid) {
+      setReviews([]);
+      setLoading(false);
+      return;
     }
-
-    fetchReviews();
-    return () => {
-      isMounted = false;
-    };
+    setLoading(true);
+    const unsub = subscribeToUserReviews(symbiote.uid, (firestoreReviews) => {
+      setReviews(firestoreReviews || []);
+      setLoading(false);
+    });
+    return () => unsub();
   }, [symbiote.uid]);
 
   if (loading) {

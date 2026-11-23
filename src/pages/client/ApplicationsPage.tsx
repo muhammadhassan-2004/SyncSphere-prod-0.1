@@ -604,19 +604,16 @@ export const ApplicationsPage: React.FC = () => {
                             <MessageSquare className="w-4 h-4" />
                           </button>
 
-                          {/* 3. REJECT */}
-                          <button
-                            onClick={() => handleReject(app)}
-                            disabled={app.status === 'rejected'}
-                            title="Reject Candidate"
-                            className={`p-2 rounded-[6px] border border-transparent hover:border-[var(--color-border)] transition-colors cursor-pointer ${
-                              app.status === 'rejected'
-                                ? 'text-rose-500 cursor-default opacity-50'
-                                : 'text-[var(--color-text-secondary)] hover:text-rose-400 hover:bg-[var(--color-background)]'
-                            }`}
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
+                          {/* 3. REJECT — hidden after hire or reject (C-09) */}
+                          {app.status !== 'hired' && app.status !== 'rejected' && (
+                            <button
+                              onClick={() => handleReject(app)}
+                              title="Reject Candidate"
+                              className="p-2 rounded-[6px] border border-transparent hover:border-[var(--color-border)] transition-colors cursor-pointer text-[var(--color-text-secondary)] hover:text-rose-400 hover:bg-[var(--color-background)]"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

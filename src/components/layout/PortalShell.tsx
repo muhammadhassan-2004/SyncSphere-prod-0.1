@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/context/AuthContext';
-import { cn } from '@/src/lib/utils';
+import { cn, resolveUserDisplayName } from '@/src/lib/utils';
 import { Input } from '@/src/components/ui/input';
 import { Avatar } from '@/src/components/ui/avatar';
 import { StatusPill } from '@/src/components/ui/badge';
@@ -182,16 +182,16 @@ export const PortalShell: React.FC<PortalShellProps> = ({ role, children }) => {
     },
   }[role];
 
-  // Derive User Display Info (Guarantees identical user name across sidebar user card & topbar avatar)
-  const userName =
-    userProfile?.displayName ||
-    (userProfile?.firstName
-      ? `${userProfile.firstName} ${userProfile.lastName || ''}`.trim()
-      : null) ||
-    (role === 'client' && userProfile?.companyName ? userProfile.companyName : null) ||
-    firebaseUser?.displayName ||
-    (firebaseUser?.email ? firebaseUser.email.split('@')[0] : null) ||
-    (role === 'client' ? 'Client User' : role === 'symbiote' ? 'Symbiote User' : 'Admin User');
+  // Derive User Display Info — prefer first/last name; never show email local-part when a real name exists
+  const userName = resolveUserDisplayName({
+    firstName: userProfile?.firstName,
+    lastName: userProfile?.lastName,
+    displayName: userProfile?.displayName || firebaseUser?.displayName,
+    fullName: (userProfile as { fullName?: string } | null)?.fullName,
+    companyName: role === 'client' ? userProfile?.companyName : undefined,
+    email: userProfile?.email || firebaseUser?.email,
+    fallback: role === 'client' ? 'Client User' : role === 'symbiote' ? 'Symbiote User' : 'Admin User',
+  });
 
   const userEmail = userProfile?.email || firebaseUser?.email || '';
 

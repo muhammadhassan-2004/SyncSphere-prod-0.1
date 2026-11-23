@@ -4,6 +4,7 @@ import { Button } from '@/src/components/ui/button';
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog';
 import { SyncSphereLogo } from '@/src/components/ui/SyncSphereLogo';
 import { useAuth } from '@/src/context/AuthContext';
+import { resolveUserDisplayName } from '@/src/lib/utils';
 import {
   Menu,
   X,
@@ -62,7 +63,14 @@ export const PublicNavbar: React.FC = () => {
     },
   }[effectiveRole];
 
-  const displayName = activeUser?.displayName || firebaseUser?.displayName || activeUser?.email?.split('@')[0] || firebaseUser?.email?.split('@')[0] || 'User';
+  const displayName = resolveUserDisplayName({
+    firstName: activeUser?.firstName,
+    lastName: activeUser?.lastName,
+    displayName: activeUser?.displayName || firebaseUser?.displayName,
+    fullName: (activeUser as { fullName?: string } | null)?.fullName,
+    email: activeUser?.email || firebaseUser?.email,
+    fallback: 'User',
+  });
   const displayEmail = activeUser?.email || firebaseUser?.email || '';
 
   const handleNavClick = (sectionId: string) => {

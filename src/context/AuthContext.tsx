@@ -57,10 +57,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (sessionRaw) {
         const parsed = JSON.parse(sessionRaw);
         if (parsed.role) {
+          const composed = `${parsed.firstName || ''} ${parsed.lastName || ''}`.trim();
           return {
             uid: parsed.uid || 'cached-user',
             email: parsed.email || '',
-            displayName: parsed.displayName || 'User',
+            displayName: composed || parsed.displayName || 'User',
+            firstName: parsed.firstName || '',
+            lastName: parsed.lastName || '',
             role: parsed.role,
             avatarUrl: parsed.avatarUrl,
             emailVerified: parsed.emailVerified,
@@ -107,21 +110,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Record active login/session timestamp and ensure basic user metadata exists
           const touchActive = async () => {
             try {
-              const nameParts = (user.displayName || '').trim().split(' ').filter(Boolean);
-              const gFirstName = nameParts[0] || (user.email ? user.email.split('@')[0] : 'User');
-              const gLastName = nameParts.slice(1).join(' ') || '';
-              const gFullName = user.displayName || `${gFirstName} ${gLastName}`.trim() || 'User';
+              const userRef = doc(db, 'users', user.uid);
+              const userSnap = await getDoc(userRef);
+
+              // Do not refresh presence for inactive accounts (login/Auth gate handles sign-out)
+              if (userSnap.exists() && isUserAccountInactive(userSnap.data()?.status)) {
+                return;
+              }
+
+              const existing = userSnap.exists() ? userSnap.data() : null;
+              const emailLocal = user.email ? user.email.split('@')[0] : '';
+              const authNameParts = (user.displayName || '').trim().split(/\s+/).filter(Boolean);
+              const authFullName = (user.displayName || '').trim();
+
+              // Never overwrite a real profile name with the email local-part on refresh/heartbeat.
+              // Only seed displayName/fullName when the Firestore doc is missing those fields.
+              const existingFirst = String(existing?.firstName || '').trim();
+              const existingLast = String(existing?.lastName || '').trim();
+              const existingDisplay = String(existing?.displayName || existing?.fullName || '').trim();
+              const composedFromProfile = `${existingFirst} ${existingLast}`.trim();
+              const hasRealProfileName =
+                Boolean(composedFromProfile) ||
+                (Boolean(existingDisplay) &&
+                  existingDisplay.toLowerCase() !== emailLocal.toLowerCase());
 
               const basicData: Record<string, any> = {
                 uid: user.uid,
                 email: (user.email || '').toLowerCase(),
-                displayName: gFullName,
-                fullName: gFullName,
                 lastActiveAt: serverTimestamp(),
                 updatedAt: new Date().toISOString(),
                 isOnline: true,
               };
-              if (user.photoURL) {
+
+              if (!hasRealProfileName) {
+                // New/ghost accounts only — seed from Auth displayName, else leave unset
+                // (PortalShell falls back to firstName/lastName or a role label).
+                if (authFullName && authFullName.toLowerCase() !== emailLocal.toLowerCase()) {
+                  basicData.displayName = authFullName;
+                  basicData.fullName = authFullName;
+                  if (!existingFirst && authNameParts[0]) basicData.firstName = authNameParts[0];
+                  if (!existingLast && authNameParts.length > 1) {
+                    basicData.lastName = authNameParts.slice(1).join(' ');
+                  }
+                }
+              } else if (
+                composedFromProfile &&
+                (!existingDisplay || existingDisplay.toLowerCase() === emailLocal.toLowerCase())
+              ) {
+                // Self-heal: profile has first/last but displayName is still the email prefix
+                basicData.displayName = composedFromProfile;
+                basicData.fullName = composedFromProfile;
+              }
+
+              if (user.photoURL && !existing?.avatarUrl) {
                 basicData.avatarUrl = user.photoURL;
               }
 
@@ -132,15 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
 
               // Ensure createdAt is always present so user is never omitted from timestamp-sorted queries
-              const userRef = doc(db, 'users', user.uid);
-              const userSnap = await getDoc(userRef);
-
-              // Do not refresh presence for inactive accounts (login/Auth gate handles sign-out)
-              if (userSnap.exists() && isUserAccountInactive(userSnap.data()?.status)) {
-                return;
-              }
-
-              if (!userSnap.exists() || !userSnap.data()?.createdAt) {
+              if (!userSnap.exists() || !existing?.createdAt) {
                 basicData.createdAt = new Date().toISOString();
               }
 
@@ -148,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               // If verified in Firebase Auth, OR in Firestore, OR if onboarding was completed, OR cached session is verified, retain true
               let isAlreadyVerified =
                 user.emailVerified === true ||
-                (userSnap.exists() && (userSnap.data()?.emailVerified === true || userSnap.data()?.onboardingCompleted === true));
+                (existing && (existing.emailVerified === true || existing.onboardingCompleted === true));
 
               if (!isAlreadyVerified) {
                 try {
@@ -247,13 +280,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUserProfileState(normalizedProfile);
                 setCurrentRoleState(matchedRole);
                 if (matchedRole) {
+                  const resolvedDisplayName =
+                    `${profile.firstName || ''} ${profile.lastName || ''}`.trim() ||
+                    profile.displayName ||
+                    profile.fullName ||
+                    user.displayName ||
+                    'User';
                   localStorage.setItem(STORAGE_KEY, matchedRole);
                   localStorage.setItem(
                     SESSION_STORAGE_KEY,
                     JSON.stringify({
                       uid: user.uid,
                       email: profile.email || user.email || '',
-                      displayName: profile.displayName || user.displayName || 'User',
+                      displayName: resolvedDisplayName,
+                      firstName: profile.firstName || '',
+                      lastName: profile.lastName || '',
                       role: matchedRole,
                       avatarUrl: profile.avatarUrl,
                       emailVerified: isProfileEmailVerified,

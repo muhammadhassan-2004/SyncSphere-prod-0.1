@@ -11,8 +11,15 @@ import {
   subscribeToUserProfile,
   updateUserProfile,
 } from '@/src/lib/firestore/users';
+import { subscribeToProjectsBySymbiote } from '@/src/lib/firestore/projects';
+import {
+  computeReviewAggregate,
+  subscribeToUserReviews,
+  syncOwnReviewAggregates,
+} from '@/src/lib/firestore/reviews';
 import { uploadAvatarFile } from '@/src/lib/firebase';
 import { SymbioteProfile } from '@/src/data/symbiotes';
+import { Review } from '@/src/types/firestore';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
@@ -89,6 +96,7 @@ export const SymbioteProfilePage: React.FC = () => {
   const [rating, setRating] = useState<number>(0);
   const [reviewsCount, setReviewsCount] = useState<number>(0);
   const [completedProjects, setCompletedProjects] = useState<number>(0);
+  const [liveReviews, setLiveReviews] = useState<Review[]>([]);
 
   // Lists
   const [skills, setSkills] = useState<string[]>([]);
@@ -166,17 +174,61 @@ export const SymbioteProfilePage: React.FC = () => {
     return () => unsub();
   }, [uid]);
 
+  // Live reviews + self-heal aggregates so tab count matches ReviewsTab content (F-07 / F-09)
+  useEffect(() => {
+    if (!uid) {
+      setLiveReviews([]);
+      return;
+    }
+    const unsub = subscribeToUserReviews(uid, (revs) => {
+      setLiveReviews(revs || []);
+      const aggregate = computeReviewAggregate(revs || []);
+      setRating(aggregate.rating);
+      setReviewsCount(aggregate.reviewsCount);
+      syncOwnReviewAggregates(uid).catch(() => {});
+    });
+    return () => unsub();
+  }, [uid]);
+
+  // Live completed-project count from assigned projects (F-08)
+  const lastSyncedCompletedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = subscribeToProjectsBySymbiote(uid, (projects) => {
+      const completedCount = (projects || []).filter(
+        (p) => p.status === 'completed' || p.status === 'closed'
+      ).length;
+      setCompletedProjects(completedCount);
+      if (lastSyncedCompletedRef.current !== completedCount) {
+        lastSyncedCompletedRef.current = completedCount;
+        updateUserProfile(uid, { completedProjects: completedCount } as any).catch(() => {});
+      }
+    });
+    return () => unsub();
+  }, [uid]);
+
   // Derived SymbioteProfile object matching ProfessionalProfilePage.tsx schema
+  const liveReviewAggregate = useMemo(
+    () => computeReviewAggregate(liveReviews),
+    [liveReviews]
+  );
+
   const symbioteForPreview: SymbioteProfile = useMemo(() => {
     const parsedRate = parseFloat(hourlyRate) || 0;
+    const effectiveRating =
+      liveReviewAggregate.reviewsCount > 0 ? liveReviewAggregate.rating : rating ?? 0;
+    const effectiveReviewsCount =
+      liveReviewAggregate.reviewsCount > 0
+        ? liveReviewAggregate.reviewsCount
+        : reviewsCount || 0;
     return {
       uid,
       displayName: displayName.trim() || 'Symbiote Specialist',
       title: jobTitle.trim() || 'AI Engineering Specialist',
       avatarInitials: (displayName || 'SP').slice(0, 2).toUpperCase(),
       avatarUrl: avatarUrl || '',
-      rating: rating ?? 0,
-      reviewsCount: reviewsCount || 0,
+      rating: effectiveRating,
+      reviewsCount: effectiveReviewsCount,
       hourlyRate: parsedRate,
       skills: skills || [],
       experience: (experienceLevel as any) || 'Senior',
@@ -192,7 +244,7 @@ export const SymbioteProfilePage: React.FC = () => {
       certifications: certifications || [],
     };
   }, [
-    uid, displayName, jobTitle, avatarUrl, rating, reviewsCount,
+    uid, displayName, jobTitle, avatarUrl, rating, reviewsCount, liveReviewAggregate,
     hourlyRate, skills, experienceLevel, availability, location, timeZone,
     bio, firebaseUser?.email, completedProjects, topAchievements,
     experiences, portfolio, certifications
