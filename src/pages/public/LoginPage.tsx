@@ -226,12 +226,20 @@ export const LoginPage: React.FC = () => {
       localStorage.removeItem('syncsphere_demo_mode');
       localStorage.removeItem('syncsphere_mock_role');
       localStorage.removeItem('syncsphere_user_session');
+      const resolvedDisplayName =
+        `${profileData?.firstName || ''} ${profileData?.lastName || ''}`.trim() ||
+        profileData?.displayName ||
+        profileData?.fullName ||
+        user.displayName ||
+        'User';
       localStorage.setItem(
         'syncsphere_user_session',
         JSON.stringify({
           uid: user.uid,
           email: user.email || cleanEmail,
-          displayName: profileData?.displayName || user.displayName || cleanEmail.split('@')[0],
+          displayName: resolvedDisplayName,
+          firstName: profileData?.firstName || '',
+          lastName: profileData?.lastName || '',
           role: userRole,
           avatarUrl: profileData?.avatarUrl,
         })

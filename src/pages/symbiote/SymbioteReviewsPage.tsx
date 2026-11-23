@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/src/context/AuthContext';
 import { Review } from '@/src/types/firestore';
-import { subscribeToUserReviews, markReviewHelpful } from '@/src/lib/firestore/reviews';
+import {
+  subscribeToUserReviews,
+  markReviewHelpful,
+  syncOwnReviewAggregates,
+} from '@/src/lib/firestore/reviews';
 import { Card } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { Avatar } from '@/src/components/ui/avatar';
@@ -33,6 +37,7 @@ export const SymbioteReviewsPage: React.FC = () => {
     const unsub = subscribeToUserReviews(uid, (revList) => {
       setReviews(revList || []);
       setLoading(false);
+      syncOwnReviewAggregates(uid).catch(() => {});
     });
 
     return () => unsub();

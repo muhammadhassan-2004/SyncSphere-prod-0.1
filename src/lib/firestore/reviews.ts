@@ -1,5 +1,6 @@
 import {
   getDocs,
+  getDoc,
   collection,
   query,
   where,
@@ -7,11 +8,71 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  setDoc,
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '@/src/lib/firebase';
 import { Review } from '@/src/types/firestore';
 
 const REVIEWS_COLLECTION = 'reviews';
+
+/** Overall score for a review (supports legacy `rating` and nested `ratings.overall`). */
+export function getReviewOverallScore(review: Review): number {
+  if (typeof review.ratings?.overall === 'number' && review.ratings.overall > 0) {
+    return review.ratings.overall;
+  }
+  const legacy = (review as { rating?: number }).rating;
+  if (typeof legacy === 'number' && legacy > 0) return legacy;
+  return 0;
+}
+
+/** Exclude declined / opt-out review stubs from public counts and averages. */
+export function filterActiveReviews(reviews: Review[]): Review[] {
+  return (reviews || []).filter((r) => !r.declined && getReviewOverallScore(r) > 0);
+}
+
+export function computeReviewAggregate(reviews: Review[]): { rating: number; reviewsCount: number } {
+  const active = filterActiveReviews(reviews);
+  if (active.length === 0) return { rating: 0, reviewsCount: 0 };
+  const sum = active.reduce((acc, r) => acc + getReviewOverallScore(r), 0);
+  return {
+    rating: Number((sum / active.length).toFixed(1)),
+    reviewsCount: active.length,
+  };
+}
+
+/**
+ * Specialist re-syncs their own users/{uid} rating + reviewsCount from live reviews.
+ * Clients cannot write another user's doc under Firestore rules — only the owner can.
+ * Skips the write when aggregates are already up to date (avoids listener loops).
+ */
+export async function syncOwnReviewAggregates(userId: string): Promise<{ rating: number; reviewsCount: number }> {
+  const aggregate = computeReviewAggregate(await getReviewsForUser(userId));
+  const currentUid = auth.currentUser?.uid;
+  if (!currentUid || currentUid !== userId) return aggregate;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    const existing = snap.exists() ? snap.data() : {};
+    const existingRating = typeof existing.rating === 'number' ? existing.rating : 0;
+    const existingCount = typeof existing.reviewsCount === 'number' ? existing.reviewsCount : 0;
+    if (existingRating === aggregate.rating && existingCount === aggregate.reviewsCount) {
+      return aggregate;
+    }
+    await setDoc(
+      userRef,
+      {
+        rating: aggregate.rating,
+        reviewsCount: aggregate.reviewsCount,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('Could not persist own review aggregates:', err);
+  }
+  return aggregate;
+}
 
 export async function createReview(review: Omit<Review, 'id'>): Promise<string> {
   const currentUid = auth.currentUser?.uid || review.fromUserId || review.clientId || '';
@@ -33,31 +94,11 @@ export async function createReview(review: Omit<Review, 'id'>): Promise<string> 
       createdAt: review.createdAt || new Date().toISOString(),
     });
 
-    // Atomically recalculate and persist freelancer's public profile rating aggregate
+    // Best-effort aggregate sync (only succeeds when the signed-in user owns the target user doc)
     const targetUserId = symbioteId || toUserId;
-    if (targetUserId) {
+    if (targetUserId && !review.declined) {
       try {
-        const [q1Snap, q2Snap] = await Promise.all([
-          getDocs(query(colRef, where('toUserId', '==', targetUserId))),
-          getDocs(query(colRef, where('symbioteId', '==', targetUserId))),
-        ]);
-        const map = new Map<string, Review>();
-        q1Snap.docs.forEach(d => map.set(d.id, d.data() as Review));
-        q2Snap.docs.forEach(d => map.set(d.id, d.data() as Review));
-        const allReviews = Array.from(map.values());
-        if (allReviews.length > 0) {
-          const totalRatingSum = allReviews.reduce((sum, r) => {
-            const score = r.ratings?.overall ?? (typeof (r as any).rating === 'number' ? (r as any).rating : 5);
-            return sum + score;
-          }, 0);
-          const avgRating = +(totalRatingSum / allReviews.length).toFixed(1);
-          const userDocRef = doc(db, 'users', targetUserId);
-          await updateDoc(userDocRef, {
-            rating: avgRating,
-            reviewsCount: allReviews.length,
-            updatedAt: new Date().toISOString(),
-          });
-        }
+        await syncOwnReviewAggregates(targetUserId);
       } catch (userRatingErr) {
         console.warn('Could not sync user profile rating aggregate:', userRatingErr);
       }
@@ -102,7 +143,7 @@ export async function getReviewsForUser(userId: string): Promise<Review[]> {
     snap2.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Review));
     snap3.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Review));
     snap4.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Review));
-    const reviews = Array.from(map.values());
+    const reviews = filterActiveReviews(Array.from(map.values()));
     reviews.sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -130,7 +171,7 @@ export function subscribeToUserReviews(
     const map = new Map<string, Review>();
     docs1.forEach(d => map.set(d.id, d));
     docs2.forEach(d => map.set(d.id, d));
-    const all = Array.from(map.values()).sort((a, b) => {
+    const all = filterActiveReviews(Array.from(map.values())).sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return dateB - dateA;

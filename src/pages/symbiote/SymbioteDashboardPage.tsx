@@ -13,6 +13,11 @@ import {
   subscribeToUserReviews,
   updateInvitationStatus,
 } from '@/src/lib/firestore';
+import {
+  computeReviewAggregate,
+  syncOwnReviewAggregates,
+} from '@/src/lib/firestore/reviews';
+import { updateUserProfile } from '@/src/lib/firestore/users';
 import { Project, Invitation, Application, Invoice, Review } from '@/src/types/firestore';
 import { ResponsiveStatValue } from '@/src/components/ui/ResponsiveStatValue';
 import {
@@ -94,9 +99,10 @@ export const SymbioteDashboardPage: React.FC = () => {
       setInvoices(invs);
     });
 
-    // 5. Reviews listener
+    // 5. Reviews listener — also self-heal profile aggregates (F-07 / F-09)
     const unsubReviews = subscribeToUserReviews(uid, (revs) => {
       setReviews(revs);
+      syncOwnReviewAggregates(uid).catch(() => {});
     });
 
     return () => {
@@ -107,6 +113,18 @@ export const SymbioteDashboardPage: React.FC = () => {
       unsubReviews();
     };
   }, [uid]);
+
+  // Keep completedProjects on own profile in sync with assigned completed projects (F-08)
+  useEffect(() => {
+    if (!uid || loading) return;
+    const completedCount = projects.filter(
+      (p) => p.status === 'completed' || p.status === 'closed'
+    ).length;
+    const stored = userProfile?.completedProjects ?? 0;
+    if (completedCount !== stored) {
+      updateUserProfile(uid, { completedProjects: completedCount } as any).catch(() => {});
+    }
+  }, [uid, loading, projects, userProfile?.completedProjects]);
 
   // Handle Invitation Accept/Decline
   const handleInvitationResponse = async (invId: string, status: 'accepted' | 'declined') => {
@@ -146,13 +164,18 @@ export const SymbioteDashboardPage: React.FC = () => {
     0
   );
 
-  // Stat 6: Average Rating (From user reviews or userProfile)
+  // Stat 6: Average Rating — use ratings.overall (F-07); decline stubs already filtered
+  const reviewAggregate = computeReviewAggregate(reviews);
   const calculatedRating =
-    reviews.length > 0
-      ? (reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1)
+    reviewAggregate.reviewsCount > 0
+      ? reviewAggregate.rating.toFixed(1)
       : userProfile?.rating
       ? userProfile.rating.toFixed(1)
       : '0.0';
+  const displayedReviewCount =
+    reviewAggregate.reviewsCount > 0
+      ? reviewAggregate.reviewsCount
+      : userProfile?.reviewsCount || 0;
 
   // --- MONTHLY EARNINGS CHART DATA (Real Firestore Invoices Aggregation) ---
   const getMonthlyEarningsChartData = () => {
@@ -375,7 +398,7 @@ export const SymbioteDashboardPage: React.FC = () => {
               <Star className="w-5 h-5 fill-amber-400 text-amber-400 shrink-0 inline" />
             </div>
             <p className="text-caption text-[var(--color-text-secondary)] mt-2 font-medium truncate">
-              Based on {reviews.length} client review{reviews.length === 1 ? '' : 's'}
+              Based on {displayedReviewCount} client review{displayedReviewCount === 1 ? '' : 's'}
             </p>
           </div>
         </Card>

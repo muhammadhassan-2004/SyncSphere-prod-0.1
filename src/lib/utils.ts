@@ -54,3 +54,29 @@ export function formatProjectRef(id?: string): string {
   const code = clean.length >= 6 ? clean.slice(0, 6) : clean.padEnd(6, '0');
   return `PRJ-${code}`;
 }
+
+/**
+ * Resolve a human display name for header/sidebar.
+ * Prefers firstName + lastName over displayName when displayName looks like an email local-part.
+ */
+export function resolveUserDisplayName(input: {
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  fullName?: string | null;
+  companyName?: string | null;
+  email?: string | null;
+  fallback?: string;
+}): string {
+  const emailLocal = (input.email || '').split('@')[0]?.trim().toLowerCase() || '';
+  const composed = `${input.firstName || ''} ${input.lastName || ''}`.trim();
+  const display = (input.displayName || input.fullName || '').trim();
+  const displayLooksLikeEmailLocal =
+    Boolean(emailLocal) && display.toLowerCase() === emailLocal;
+
+  if (composed) return composed;
+  if (display && !displayLooksLikeEmailLocal) return display;
+  if (input.companyName?.trim()) return input.companyName.trim();
+  if (display) return display;
+  return input.fallback || 'User';
+}
